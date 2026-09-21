@@ -1,0 +1,10 @@
+{
+  "name": "@curb/verify-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "for tz in UTC Asia/Hong_Kong America/Los_Angeles Pacific/Kiritimati; do echo \"--- TZ=$tz\"; TZ=$tz node --test --experimental-strip-types 'src/**/*.test.ts' || exit 1; done",
+    "test:once": "node --test --experimental-strip-types 'src/**/*.test.ts'",
+    "check": "tsc --noEmit"
+  }
+}

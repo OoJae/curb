@@ -14,3 +14,6 @@ curb-secrets/
 
 # foundry dry-run noise; the real broadcast records are kept as deploy evidence
 broadcast/*/*/dry-run/
+
+# a symlink named node_modules is a file to git, so the trailing-slash rule above misses it
+node_modules

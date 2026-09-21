@@ -117,6 +117,39 @@ contract DepthProbeTest is Test {
         }
     }
 
+    /// The same curve over the REGISTERED MarketClock cohort, which is not the same set as above.
+    ///
+    /// `test_depth_curve` was written for W0, before the cohort was fixed. It measures wQQQx and
+    /// wTSLAx, which are not registered in MarketClock and have no Scorecard price source, and it
+    /// misses wSHEINx, wXIAOx and wMEITx, which are registered. Anything quoting "the measured
+    /// depth curve" for the Hong Kong names needs this test, not that one -- that one has exactly
+    /// one Hong Kong data point.
+    ///
+    /// The `equityIsToken0` flag below is ignored: `_ctx` detects the equity leg at runtime by
+    /// elimination against the known stables, which is the only safe way when three of these list
+    /// the stable first.
+    function test_cohort_depth_curve() public {
+        delete pools;
+        pools.push(Pool("wTCENTx/USDG", 0xC89d8b547ceA7CdeAa7474E7a90B6baD01fE992f, true));
+        pools.push(Pool("wSHEINx/USDG", 0xF1ef85ce4691E94a32064b59E766c42183B44497, false));
+        pools.push(Pool("wXIAOx/USDC", 0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417, true));
+        pools.push(Pool("wMEITx/USDG", 0x54E89e9acaFb073e7fd8471312E753A661b470C7, false));
+        pools.push(Pool("wNVDAx/USDG", 0x2a2B11730C2b6d99a58034A869dd810D7300a7b2, false));
+        pools.push(Pool("wAAPLx/USDG", 0xc44bd9c8589026D28D1632d7b86b2Efb6cDc8fd2, false));
+
+        uint256[6] memory sizes = [uint256(1_000), 5_000, 10_000, 25_000, 50_000, 100_000];
+        for (uint p = 0; p < pools.length; p++) {
+            Ctx memory c = _ctx(p);
+            (,,, uint16 cardinality,,,) = IUniV3Pool(pools[p].addr).slot0();
+            console2.log("=====================================");
+            console2.log("pool      :", pools[p].name);
+            console2.log("equity px :", c.eqPx);
+            console2.log("liquidity :", IUniV3Pool(pools[p].addr).liquidity());
+            console2.log("oracle    :", cardinality);
+            for (uint i = 0; i < sizes.length; i++) _probe(p, c, sizes[i]);
+        }
+    }
+
     function mulDiv(uint256 a, uint256 b, uint256 d) internal pure returns (uint256) {
         unchecked { return (a / d) * b + ((a % d) * b) / d; }
     }
