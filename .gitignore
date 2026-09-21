@@ -1,0 +1,16 @@
+# build
+out/
+cache/
+broadcast/*/31337/
+node_modules/
+
+# secrets -- never commit
+.env
+.env.*
+!.env.example
+*.password
+*keystore*
+curb-secrets/
+
+# foundry dry-run noise; the real broadcast records are kept as deploy evidence
+broadcast/*/*/dry-run/

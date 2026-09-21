@@ -1,0 +1,20 @@
+{
+  "name": "@curb/keeper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "for tz in UTC Asia/Hong_Kong America/Los_Angeles Pacific/Kiritimati; do echo \"--- TZ=$tz\"; TZ=$tz node --test --experimental-strip-types 'src/**/*.test.ts' || exit 1; done",
+    "test:once": "node --test --experimental-strip-types 'src/**/*.test.ts'",
+    "start": "node --experimental-strip-types src/main.ts",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@openzeppelin/merkle-tree": "1.0.8",
+    "canonicalize": "5.0.0",
+    "ethers": "6.17.0"
+  }
+}

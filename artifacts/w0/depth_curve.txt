@@ -1,0 +1,149 @@
+No files changed, compilation skipped
+
+Ran 1 test for test/fork/DepthProbe.t.sol:DepthProbeTest
+[PASS] test_depth_curve() (gas: 18673080)
+Logs:
+  =====================================
+  pool      : wTCENTx/USDG
+  equity px : 54962143394899875295
+  liquidity : 318574944462991899
+    size USD    : 1000
+      filled bps: 10000
+      proceeds  : 999
+      impact bps: 9
+    size USD    : 5000
+      filled bps: 10000
+      proceeds  : 4986
+      impact bps: 26
+    size USD    : 10000
+      filled bps: 10000
+      proceeds  : 9952
+      impact bps: 47
+    size USD    : 25000
+      filled bps: 10000
+      proceeds  : 24715
+      impact bps: 113
+    size USD    : 50000
+      filled bps: 10000
+      proceeds  : 48593
+      impact bps: 281
+    size USD    : 100000
+      filled bps: 6164
+      proceeds  : 58284
+      impact bps: 545
+  =====================================
+  pool      : wNVDAx/USDG
+  equity px : 219597460172422088892
+  liquidity : 953243809767508685
+    size USD    : 1000
+      filled bps: 10000
+      proceeds  : 999
+      impact bps: 5
+    size USD    : 5000
+      filled bps: 10000
+      proceeds  : 4995
+      impact bps: 8
+    size USD    : 10000
+      filled bps: 10000
+      proceeds  : 9986
+      impact bps: 13
+    size USD    : 25000
+      filled bps: 10000
+      proceeds  : 24905
+      impact bps: 37
+    size USD    : 50000
+      filled bps: 10000
+      proceeds  : 49556
+      impact bps: 88
+    size USD    : 100000
+      filled bps: 10000
+      proceeds  : 98032
+      impact bps: 196
+  =====================================
+  pool      : wAAPLx/USDG
+  equity px : 334502396149172561472
+  liquidity : 41567429028020347
+    size USD    : 1000
+      filled bps: 10000
+      proceeds  : 998
+      impact bps: 17
+    size USD    : 5000
+      filled bps: 10000
+      proceeds  : 4976
+      impact bps: 47
+    size USD    : 10000
+      filled bps: 10000
+      proceeds  : 9917
+      impact bps: 82
+    size USD    : 25000
+      filled bps: 10000
+      proceeds  : 24536
+      impact bps: 185
+    size USD    : 50000
+      filled bps: 10000
+      proceeds  : 48251
+      impact bps: 349
+    size USD    : 100000
+      filled bps: 10000
+      proceeds  : 93060
+      impact bps: 693
+  =====================================
+  pool      : wQQQx/USDC
+  equity px : 718209133545087500976
+  liquidity : 388180606622758163
+    size USD    : 1000
+      filled bps: 10000
+      proceeds  : 999
+      impact bps: 5
+    size USD    : 5000
+      filled bps: 10000
+      proceeds  : 4995
+      impact bps: 9
+    size USD    : 10000
+      filled bps: 10000
+      proceeds  : 9985
+      impact bps: 14
+    size USD    : 25000
+      filled bps: 10000
+      proceeds  : 24927
+      impact bps: 28
+    size USD    : 50000
+      filled bps: 10000
+      proceeds  : 49735
+      impact bps: 52
+    size USD    : 100000
+      filled bps: 10000
+      proceeds  : 98996
+      impact bps: 100
+  =====================================
+  pool      : USDC/wTSLAx
+  equity px : 365158391010755841801
+  liquidity : 416674867710634814
+    size USD    : 1000
+      filled bps: 10000
+      proceeds  : 999
+      impact bps: 6
+    size USD    : 5000
+      filled bps: 10000
+      proceeds  : 4991
+      impact bps: 16
+    size USD    : 10000
+      filled bps: 10000
+      proceeds  : 9966
+      impact bps: 33
+    size USD    : 25000
+      filled bps: 10000
+      proceeds  : 24779
+      impact bps: 88
+    size USD    : 50000
+      filled bps: 10000
+      proceeds  : 49096
+      impact bps: 180
+    size USD    : 100000
+      filled bps: 10000
+      proceeds  : 96142
+      impact bps: 385
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 535.56s (531.91s CPU time)
+
+Ran 1 test suite in 535.57s (535.56s CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

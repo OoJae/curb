@@ -1,0 +1,7 @@
+node_modules
+*.log
+*.sqlite
+.env
+.env.*
+**/*.keystore.json
+src/fixtures

@@ -1,0 +1,222 @@
+// PRESERVED SOURCE — Scorecard v1, deployed at 0x0527930187a879B3D8704a92734641679567EddD
+// on X Layer mainnet 13 Sep 2026, Sourcify exact_match. Superseded 21 Sep 2026 by v2, which
+// removes the caller-supplied settlement price. Kept out of the compile path deliberately:
+// this file is the record of what that address actually runs, not a contract we build.
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+import {IMarketClock} from "./interfaces/IMarketClock.sol";
+
+/// @title Scorecard
+/// @notice A public, append-only record of how wrong Curb's closed-market marks turned out
+///         to be, graded against the verified reopen and against three naive baselines.
+///
+/// @dev WHY IT IS SHAPED LIKE THIS. A three-week-old team asserting a price during the hours
+///      an exchange is shut has no standing. So Curb does not ask to be trusted: it commits
+///      each mark BEFORE the market reopens, publishes the Merkle root of the exact inputs it
+///      used, and then lets anyone settle the row afterwards against the reopen print. The
+///      contract computes the error itself, alongside the error of the three things a sceptic
+///      would otherwise reach for -- the last print before the closure, the pool VWAP at the
+///      bell, and a stale banded oracle value.
+///
+///      The scoring is therefore about SKILL, not accuracy. "Our median error was 27bp" is
+///      unfalsifiable puffery; "we beat the closing print by X% across 18 closures whose
+///      commit blocks provably precede their settlement blocks" is a claim a judge can check
+///      on an explorer, and one that cannot be backfilled.
+///
+///      There is NO admin revision path. Not a missing feature -- the absence is the product.
+contract Scorecard {
+    error NotKeeper();
+    error NotAdmin();
+    error NotPendingAdmin();
+    error ZeroAddress();
+    error ClosureExists(bytes32 id);
+    error UnknownClosure(bytes32 id);
+    error AlreadySettled(bytes32 id);
+    error TooEarly(bytes32 id, uint64 settleAfter);
+    error MarketStillShut(address wrapper);
+    error NothingCommitted(bytes32 id);
+    error BadMark();
+
+    /// @dev One mark, committed while the primary market was capped at zero.
+    struct Commitment {
+        address wrapper;
+        uint64 committedAt;      // block.timestamp at commit
+        uint64 committedBlock;   // block.number at commit -- the anti-backfill evidence
+        uint64 settleAfter;      // earliest settlement, i.e. expected reopen
+        uint128 mark;            // Curb's mark, 1e18, in wrapper-share terms
+        uint32 bandBps;          // the confidence band Curb published with it
+        bytes32 inputRoot;       // Merkle root of the exact inputs used
+        bytes32 methodDigest;    // hash of the published method, so the model is pinned too
+        // The baselines, captured at commit time so they cannot be chosen later.
+        uint128 lastPrint;       // last verified print before the closure
+        uint128 closingVwap;     // wrapper-pool VWAP at the moment of closure
+        uint128 staleOracle;     // stale banded oracle value, 0 if none exists for this asset
+    }
+
+    struct Settlement {
+        uint64 settledAt;
+        uint64 settledBlock;
+        uint128 reopenPrint;
+        uint32 curbErrorBps;
+        uint32 lastPrintErrorBps;
+        uint32 closingVwapErrorBps;
+        uint32 staleOracleErrorBps;
+        uint8 source;            // 1 = issuer transition + VWAP, 2 = Chainlink Data Streams
+        bool settled;
+    }
+
+    event ClosureCommitted(
+        bytes32 indexed id,
+        address indexed wrapper,
+        uint128 mark,
+        uint32 bandBps,
+        uint64 settleAfter,
+        uint64 committedBlock,
+        bytes32 inputRoot,
+        bytes32 methodDigest
+    );
+    event ClosureSettled(
+        bytes32 indexed id,
+        address indexed wrapper,
+        uint128 reopenPrint,
+        uint32 curbErrorBps,
+        uint32 lastPrintErrorBps,
+        uint32 closingVwapErrorBps,
+        uint32 staleOracleErrorBps,
+        uint8 source,
+        uint64 settledBlock
+    );
+
+    IMarketClock public immutable clock;
+    address public admin;
+    /// @dev Two-step handover: a mistyped address cannot silently brick admin rights,
+    ///      because the new admin must prove control by calling acceptAdmin().
+    address public pendingAdmin;
+
+    event AdminTransferStarted(address indexed from, address indexed to);
+    event AdminTransferred(address indexed from, address indexed to);
+    mapping(address => bool) public isKeeper;
+
+    mapping(bytes32 => Commitment) public commitments;
+    mapping(bytes32 => Settlement) public settlements;
+    bytes32[] public closureIds;
+
+    /// @dev Running tallies so the headline is readable without an indexer.
+    uint256 public settledCount;
+    uint256 public curbBeatLastPrint;
+    uint256 public curbBeatClosingVwap;
+
+    modifier onlyKeeper() {
+        if (!isKeeper[msg.sender]) revert NotKeeper();
+        _;
+    }
+
+    modifier onlyAdmin() {
+        if (msg.sender != admin) revert NotAdmin();
+        _;
+    }
+
+    constructor(IMarketClock clock_, address admin_) {
+        clock = clock_;
+        if (admin_ == address(0)) revert ZeroAddress();
+        admin = admin_;
+    }
+
+    /// @notice Start handing admin rights to `to`. Takes effect only when `to` accepts.
+    function transferAdmin(address to) external onlyAdmin {
+        if (to == address(0)) revert ZeroAddress();
+        pendingAdmin = to;
+        emit AdminTransferStarted(admin, to);
+    }
+
+    /// @notice Complete a handover started by the current admin.
+    function acceptAdmin() external {
+        if (msg.sender != pendingAdmin) revert NotPendingAdmin();
+        emit AdminTransferred(admin, msg.sender);
+        admin = msg.sender;
+        pendingAdmin = address(0);
+    }
+
+    function setKeeper(address k, bool ok) external onlyAdmin {
+        isKeeper[k] = ok;
+    }
+
+    function closureCount() external view returns (uint256) {
+        return closureIds.length;
+    }
+
+    /// @notice Commit a mark for a closure, before the market reopens.
+    /// @dev Deliberately refuses to commit while the primary market still has capacity: a
+    ///      "closed-market mark" published during an open market is not evidence of anything.
+    function commit(Commitment calldata c) external onlyKeeper returns (bytes32 id) {
+        if (c.mark == 0) revert BadMark();
+        if (clock.primaryCapNow(c.wrapper) != 0) revert MarketStillShut(c.wrapper);
+
+        id = keccak256(abi.encode(c.wrapper, c.settleAfter, c.inputRoot));
+        if (commitments[id].committedAt != 0) revert ClosureExists(id);
+
+        Commitment memory m = c;
+        m.committedAt = uint64(block.timestamp);
+        m.committedBlock = uint64(block.number);
+        commitments[id] = m;
+        closureIds.push(id);
+
+        emit ClosureCommitted(
+            id, c.wrapper, c.mark, c.bandBps, c.settleAfter,
+            uint64(block.number), c.inputRoot, c.methodDigest
+        );
+    }
+
+    /// @notice Settle a committed closure against the verified reopen print.
+    /// @dev Permissionless on purpose. The record must keep accruing even if Curb's own
+    ///      keeper dies, and a bounty-paid stranger settling our rows is a stronger claim
+    ///      than settling them ourselves.
+    function settle(bytes32 id, uint128 reopenPrint, uint8 source) external {
+        Commitment memory c = commitments[id];
+        if (c.committedAt == 0) revert UnknownClosure(id);
+        if (settlements[id].settled) revert AlreadySettled(id);
+        if (block.timestamp < c.settleAfter) revert TooEarly(id, c.settleAfter);
+        if (reopenPrint == 0) revert BadMark();
+
+        uint32 e0 = _errBps(c.mark, reopenPrint);
+        uint32 e1 = _errBps(c.lastPrint, reopenPrint);
+        uint32 e2 = _errBps(c.closingVwap, reopenPrint);
+        uint32 e3 = c.staleOracle == 0 ? type(uint32).max : _errBps(c.staleOracle, reopenPrint);
+
+        settlements[id] = Settlement({
+            settledAt: uint64(block.timestamp),
+            settledBlock: uint64(block.number),
+            reopenPrint: reopenPrint,
+            curbErrorBps: e0,
+            lastPrintErrorBps: e1,
+            closingVwapErrorBps: e2,
+            staleOracleErrorBps: e3,
+            source: source,
+            settled: true
+        });
+
+        unchecked {
+            ++settledCount;
+            if (e0 < e1) ++curbBeatLastPrint;
+            if (e0 < e2) ++curbBeatClosingVwap;
+        }
+
+        emit ClosureSettled(id, c.wrapper, reopenPrint, e0, e1, e2, e3, source, uint64(block.number));
+    }
+
+    /// @notice The headline, computed onchain so nobody has to take our word for the arithmetic.
+    function skill() external view returns (uint256 settled_, uint256 beatLast, uint256 beatVwap) {
+        return (settledCount, curbBeatLastPrint, curbBeatClosingVwap);
+    }
+
+    /// @dev Absolute error in basis points, saturating rather than reverting so one absurd
+    ///      input can never block a row from being graded.
+    function _errBps(uint128 estimate, uint128 actual) internal pure returns (uint32) {
+        if (actual == 0) return type(uint32).max;
+        uint256 diff = estimate > actual ? estimate - actual : actual - estimate;
+        uint256 bps = (diff * 10_000) / actual;
+        return bps > type(uint32).max ? type(uint32).max : uint32(bps);
+    }
+}

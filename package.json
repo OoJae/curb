@@ -1,0 +1,8 @@
+{
+  "name": "curb",
+  "private": true,
+  "description": "Curb: the market that trades when the exchange is shut. Infrastructure config lives in .railway/railway.ts.",
+  "devDependencies": {
+    "railway": "3.11.0"
+  }
+}
