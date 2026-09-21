@@ -80,9 +80,26 @@ simultaneously. wQQQx absorbs $100k for 100bp; wAAPLx costs 693bp for the same s
 
 **wTCENTx is the only pool that cannot fill a $100k order at all.** It stops at roughly $58,300 of
 proceeds, so the entire sellable depth of wrapped Tencent on X Layer is about **$58k** — against
-$3.48M of daily volume through that pool, with 98.9% of the token's supply sitting inside it.
-That is also the asset whose primary market is shut 83.6% of the week. It is therefore the correct
-demo asset: the thinnest book, the longest closure, and the largest concentration.
+$3.48M of daily volume through that pool. That is also the asset whose primary market is shut
+83.6% of the week: the thinnest book against the longest closure.
+
+**Erratum, 21 Sept 2026 — the concentration figure moved, and the superlative moved with it.**
+This section originally read "98.9% of the token's supply sitting inside it", measured on 13 Sept.
+Re-measured on chain today, wTCENTx is **86.01%** (1,659.19 of 1,929.07). It is no longer the most
+concentrated asset in the cohort. Today's readings:
+
+| asset | supply | in its pool | concentration |
+|---|---|---|---|
+| **wSHEINx** | 5,351.22 | 5,301.94 | **99.08%** |
+| wXIAOx | 37,945.44 | 34,836.92 | 91.81% |
+| wTCENTx | 1,929.07 | 1,659.19 | 86.01% |
+| wMEITx | 9,755.46 | 7,989.48 | 81.90% |
+
+Concentration is a **live quantity that moves with every mint and burn**, so it is quoted with its
+measurement date or not at all. wTCENTx stays the demo asset on the strength of the depth curve and
+the closure length, which is what the beat actually rests on — not on being the most concentrated.
+Note the irony in the new leader: wSHEINx is the most concentrated asset in the cohort *and* the one
+Curb refuses to price, because its only live pool has an observation cardinality of 1.
 
 **Decision.** ReopenNote notional is capped **per asset** at the size that fills under **50bp**,
 never at a fraction of headline liquidity:
