@@ -493,3 +493,39 @@ would quietly claim a baseline it never saw. One fewer row is the correct answer
 commit that actually mined would become a second row for the same closure, double-counted by
 `skill()` forever. The round is therefore built once and retried byte for byte; a retry either lands
 the same row or is refused with `ClosureExists`, which is itself proof the first one mined.
+
+---
+
+## D-11 — The first three Scorecard rows, and what they say about `curb.scorecard.mark/1` (22 Sept 2026)
+
+**The pipeline worked exactly as designed.** At the 22 Sept Hong Kong lunch cut the keeper saw
+capacity go to zero at 03:55:09Z for wTCENTx, wXIAOx and wMEITx, predicted the reopen at 05:00:00Z
+by walking the venue schedule, committed all three marks at 04:50:14–40Z on the 600-second lead
+(blocks 71,283,582 / 594 / 604), and settled them at 05:05:16–25Z, reopen + `SETTLE_DELAY`
+(blocks 71,284,480 / 484 / 489). The contract read the settlement price from the pool itself. The US
+names' five-minute boundary gaps (23:55Z, 07:55Z, 13:25Z) were correctly skipped by `MIN_CLOSURE_S`.
+
+**And all three are ties.** `skill()` = (3 settled, 0 beat the last print, 0 beat the closing VWAP).
+
+| asset | mark | last print | reopen print | Curb error | last-print error | VWAP error |
+|---|---|---|---|---|---|---|
+| wTCENTx | 58.243190 | 58.243190 | 58.237919 | 0bp | 0bp | 0bp |
+| wXIAOx | 3.541073 | 3.541073 | 3.538410 | 7bp | 7bp | 7bp |
+| wMEITx | 9.402172 | 9.402172 | 9.398584 | 3bp | 3bp | 3bp |
+
+**The cause is plain and it is in the committed evidence:** all three bundles carry the flags
+`no-drift` and `no-closing-vwap`. **Not one swap occurred in any of the three pools during the
+55-minute recess, nor in the 15 minutes before the cut.** The method had no information to move on,
+so the mark equalled the last print by construction, and `skill()` counts strict wins only.
+
+This is the risk the W2 plan named in advance — "a pool may be silent through a closure, which makes
+the mark equal the last print; honest, but it ties rather than beats" — and it is now measured rather
+than hypothetical. It is also the right outcome: a method that moved its mark with no evidence would
+be exactly what the Scorecard exists to expose.
+
+**What happens next, decided now so it is not decided under pressure.** One recess is not enough to
+change a method. The next rows are the ~17½-hour overnight closure (cut 07:55Z, reopen 01:30Z on
+23 Sept), which is where drift should appear if it appears anywhere. If the recess stays silent across
+several days, the lunch closure will never be winnable under `mark/1`, and the method gains a
+cross-market term as `curb.scorecard.mark/2` — with old rows keeping the method that produced them,
+exactly as the attestor's derivation methods are versioned. **No row is ever re-marked.**

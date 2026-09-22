@@ -123,6 +123,38 @@ they trade every ~25 seconds.
 - Every pinned pool independently re-checked for token side, non-zero liquidity and cardinality
   before the script ran.
 
+## The archive — `archive.curb.markets`, 22 Sept 2026
+
+Domain `curb.markets` registered at Cloudflare Registrar (registry Identity Digital); RDAP returned
+404 on 21 Sept and 200 on 22 Sept. Zone delegated to `ezra`/`penny.ns.cloudflare.com`.
+
+R2 bucket **`curb-archive`**, Asia-Pacific, Standard class (the free tier covers Standard only).
+S3 endpoint `https://e38cb9baf5a71676deda49343e9d53d3.r2.cloudflarestorage.com/curb-archive`.
+The account id in that hostname is not a secret; it appears in every dashboard URL.
+
+| setting | value | verified from outside |
+|---|---|---|
+| custom domain | `archive.curb.markets`, Active | `curl -I` → **404 from the bucket** (not NXDOMAIN, not 522), `cf-ray …-SIN` |
+| public r2.dev URL | **disabled** | — |
+| bucket lock `lock-rounds` | prefix `rounds/`, **indefinite** | read back from a fresh page load |
+| bucket lock `lock-marks` | prefix `marks/`, **indefinite** | read back from a fresh page load |
+| bucket lock `lock-witness` | prefix `witness/` (covers `witness/tx/`), **indefinite** | read back from a fresh page load |
+| `index/` | deliberately **unlocked** — rebuildable convenience, rewritten | — |
+| CORS | `*` may `GET`/`HEAD`; max-age 86400 | preflight `GET` → 204 with `allow-origin: *`; preflight `PUT` → **403** |
+
+**What the lock does and does not protect against.** A lock rule blocks both deletion *and*
+overwriting of any object under its prefix. The rule itself can be removed by the account owner, so
+this is not protection against the owner; it is protection against a leaked **object-level** API
+token, which has no permission to change bucket configuration. That is the threat model: a
+compromised host must not be able to rewrite the record.
+
+**Cache headers are set per object, not by a zone rule.** Evidence objects are immutable and get
+`public, max-age=31536000, immutable`; the index is rewritten and must not. A zone-wide cache rule
+on the hostname would make the index immutable too, so the publisher sets `Cache-Control` on each PUT.
+
+**Not yet done, deliberately:** the three R2 API tokens (host A, host B, keeper) are created when the
+publisher exists, so the secrets go straight to where they are used instead of sitting unused.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
