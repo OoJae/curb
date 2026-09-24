@@ -84,7 +84,7 @@ export function mastheadHTML(page: PageId): string {
         </dl>
         <div class="chip-pop__actions">
           <button type="button" class="btn btn--quiet chip-pop__preview" data-chip-preview aria-pressed="false">Preview paper hours</button>
-          <a class="link-arrow" href="/clock">Read the clock ${arrowHTML('int')}</a>
+          <a class="link-arrow" href="/clock">Read the clock${arrowHTML('int')}</a>
         </div>
       </div>
     </div>
@@ -103,14 +103,14 @@ export function footerHTML(page: PageId): string {
   <div class="wrap">
     <figure class="footer-ledger__week">
       <div class="slotstrip footer-ledger__strip" data-footer-strip aria-hidden="true"></div>
-      <figcaption class="footer-ledger__caption" data-footer-week>This week in Hong Kong, five minutes to a mark: ivory while the exchange is open, amber while it is shut and wTCENTx still trades.</figcaption>
+      <figcaption class="footer-ledger__caption">This week in Hong Kong, one mark per five minutes: ivory while the exchange is open, amber while it is shut and wTCENTx still trades. <span data-footer-amber>1,696</span> of <span data-footer-total>2,016</span> marks are amber<span data-footer-source> (published timetable, before holidays)</span>.</figcaption>
     </figure>
     <dl class="ledger footer-ledger__rows">
       <div class="ledger__row"><dt>Now</dt><dd class="t-ledger" data-footer-now>wTCENTx · reading MarketClock</dd></div>
       <div class="ledger__row"><dt>Instruments</dt><dd>${instruments}</dd></div>
       <div class="ledger__row"><dt>For agents</dt><dd><a href="${EXTERNAL.api}" rel="noopener">api.curb.markets${arrowHTML('ext')}</a><span class="ledger__dot" aria-hidden="true"> · </span>OKX AI marketplace, agent #${EXTERNAL.agentId}</dd></div>
       <div class="ledger__row"><dt>Chain</dt><dd>X Layer, chain 196<span class="ledger__dot" aria-hidden="true"> · </span>Builder Code <code>${EXTERNAL.builderCode}</code></dd></div>
-      <div class="ledger__row"><dt>Identity</dt><dd><a href="/brand"${page === 'brand' ? ' aria-current="page"' : ''}>Colours, type and the mark ${arrowHTML('int')}</a></dd></div>
+      <div class="ledger__row"><dt>Identity</dt><dd><a href="/brand"${page === 'brand' ? ' aria-current="page"' : ''}>Colours, type and the mark${arrowHTML('int')}</a></dd></div>
     </dl>
     <p class="footer-ledger__sign">${markTileHTML('footer-ledger__mark')}<span>Curb keeps Hong Kong’s hours.</span></p>
   </div>

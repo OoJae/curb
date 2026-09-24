@@ -32,6 +32,18 @@ function publicFile(p: string): boolean {
   return existsSync(resolve(root, 'public', p));
 }
 
+/** Dev/preview parity with Vercel `cleanUrls` + `trailingSlash: false`: /clock serves clock/index.html. */
+const CLEAN = new Set(['/clock', '/scorecard', '/api', '/notes', '/depth', '/brand', '/404']);
+type Next = () => void;
+function cleanUrls(req: { url?: string }, _res: unknown, next: Next): void {
+  const url = req.url ?? '/';
+  const q = url.indexOf('?');
+  const path = q < 0 ? url : url.slice(0, q);
+  const query = q < 0 ? '' : url.slice(q);
+  if (CLEAN.has(path)) req.url = path === '/404' ? `/404.html${query}` : `${path}/${query}`;
+  next();
+}
+
 /**
  * curb-shell: writes the static shell (head tags, masthead, footer ledger, grain) into every page
  * so it is present on first paint. Pages mark themselves with <body data-page="…">.
@@ -39,6 +51,12 @@ function publicFile(p: string): boolean {
 function curbShell(): Plugin {
   return {
     name: 'curb-shell',
+    configureServer(server) {
+      server.middlewares.use(cleanUrls);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(cleanUrls);
+    },
     configResolved(config) {
       if (config.command !== 'build') return;
       const vercel = readFileSync(resolve(root, 'vercel.json'), 'utf8');

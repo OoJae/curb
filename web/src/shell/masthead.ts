@@ -25,9 +25,9 @@ function carryFlags(): () => void {
   if (!flags.regime && !flags.mock && !flags.capture) return () => {};
   const rewrite = (a: HTMLAnchorElement) => {
     const href = a.getAttribute('href');
-    if (href && href.startsWith('/') && !href.startsWith('//') && !a.dataset.flagged) {
-      a.setAttribute('href', withFlags(href));
-      a.dataset.flagged = '';
+    if (href && href.startsWith('/') && !href.startsWith('//')) {
+      const next = withFlags(href);
+      if (next !== href) a.setAttribute('href', next);
     }
   };
   document.querySelectorAll<HTMLAnchorElement>('a[href^="/"]').forEach(rewrite);

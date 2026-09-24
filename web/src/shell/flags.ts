@@ -34,12 +34,12 @@ export const flags: Flags = typeof location === 'undefined' ? { regime: null, mo
 /** Append the active flags to an internal href ("/clock" → "/clock?mock=1"). External hrefs pass through. */
 export function withFlags(href: string, f: Flags = flags): string {
   if (!href.startsWith('/') || href.startsWith('//')) return href;
-  const params: string[] = [];
-  if (f.regime) params.push(`regime=${f.regime}`);
-  if (f.mock) params.push('mock=1');
-  if (f.capture) params.push('capture=1');
-  if (!params.length) return href;
-  const [path, hash = ''] = href.split('#');
-  const joiner = path!.includes('?') ? '&' : '?';
-  return `${path}${joiner}${params.join('&')}${hash ? `#${hash}` : ''}`;
+  const [pathAndQuery = '', hash = ''] = href.split('#');
+  const [path = '', query = ''] = pathAndQuery.split('?');
+  const q = new URLSearchParams(query);
+  if (f.regime && !q.has('regime')) q.set('regime', f.regime);
+  if (f.mock && !q.has('mock')) q.set('mock', '1');
+  if (f.capture && !q.has('capture')) q.set('capture', '1');
+  const qs = q.toString();
+  return `${path}${qs ? `?${qs}` : ''}${hash ? `#${hash}` : ''}`;
 }

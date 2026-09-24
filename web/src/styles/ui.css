@@ -444,6 +444,13 @@ button:hover .arrow--ext {
   height: calc(var(--strip-h) + var(--s-1));
 }
 
+/* The live "Now" row reserves two lines on narrow screens so the reading cannot push the ledger. */
+@media (max-width: 767.98px) {
+  [data-footer-now] {
+    min-height: calc(2em * var(--lh-data));
+  }
+}
+
 .footer-ledger__caption {
   margin-top: var(--s-1);
   max-width: 72ch;

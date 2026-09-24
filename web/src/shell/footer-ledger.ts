@@ -57,7 +57,9 @@ export function mountFooterLedger(root: ParentNode = document): FooterLedger | n
   if (!footer) return null;
   const stripEl = footer.querySelector<HTMLElement>('[data-footer-strip]');
   const nowEl = footer.querySelector<HTMLElement>('[data-footer-now]');
-  const caption = footer.querySelector<HTMLElement>('[data-footer-week]');
+  const amber = footer.querySelector<HTMLElement>('[data-footer-amber]');
+  const total = footer.querySelector<HTMLElement>('[data-footer-total]');
+  const sourceNote = footer.querySelector<HTMLElement>('[data-footer-source]');
 
   let strip: ReturnType<typeof slotStrip> | null = null;
   const drawWeek = () => {
@@ -65,13 +67,10 @@ export function mountFooterLedger(root: ParentNode = document): FooterLedger | n
     const w = weekSlotsNow();
     if (strip) strip.update(w.slots, w.nowIndex);
     else strip = slotStrip(stripEl, w.slots, { nowIndex: w.nowIndex });
-    if (caption) {
-      const s = summarizeSlots(w.slots);
-      caption.textContent =
-        `This week in Hong Kong, one mark per five minutes: ivory while the exchange is open, amber while it is shut ` +
-        `and wTCENTx still trades. ${s.shut.toLocaleString('en-US')} of ${s.total.toLocaleString('en-US')} marks are amber` +
-        (w.source === 'timetable' ? ' (published timetable, before holidays).' : '.');
-    }
+    const sum = summarizeSlots(w.slots);
+    if (amber) amber.textContent = sum.shut.toLocaleString('en-US');
+    if (total) total.textContent = sum.total.toLocaleString('en-US');
+    if (sourceNote) sourceNote.hidden = w.source !== 'timetable';
   };
   drawWeek();
   // Redraw on each slot boundary (the "now" tick moves every five minutes).
