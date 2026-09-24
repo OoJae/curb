@@ -3,20 +3,21 @@
  * spec (§1 "Mark and iconography"). Pure functions, no DOM: used at build time by the HTML
  * plugin in vite.config.ts and at runtime by the shell.
  *
- * Construction, in units of the C's centreline radius R (= 100 user units here):
- *   C       = 250° of arc, 110° gap centred due east, stroke 0.42 R (radii 0.79 → 1.21)
- *   amber   = arc at radius 1.09 R, thickness 0.20 R (0.99 → 1.19), spanning 96° centred east
- *   ink gap = ≥7° between the amber arc and each end of the C (55° − 48° = 7°)
+ * Construction, measured from the published avatar (script/asp/curb-avatar.png; web/og/brand/
+ * measure-avatar.py, 0.06 px rms), in units of the C's centreline radius R (= 100 user units here):
+ *   C       = 236° of arc, 124° gap centred due east (ends radial at ±62°), stroke 0.434 R
+ *   amber   = concentric arc at radius 1.00 R, thickness 0.191 R, spanning 92° (±46°) centred east
+ *   ink gap = 16° between the amber arc and each end of the C (62° − 46°)
  * The gap always faces east (forward in time); the whole mark is never rotated.
  */
 
 export const MARK = {
   R: 100,
-  cHalfGapDeg: 55,
-  cStroke: 0.42,
-  arcRadius: 1.09,
-  arcThickness: 0.2,
-  arcHalfSpanDeg: 48,
+  cHalfGapDeg: 62,
+  cStroke: 0.434,
+  arcRadius: 1.0,
+  arcThickness: 0.191,
+  arcHalfSpanDeg: 46,
 } as const;
 
 /** Outer radius of the mark (the C's outer edge) in user units. */
@@ -49,10 +50,10 @@ const C_OUT = MARK.R * (1 + MARK.cStroke / 2);
 export const C_TOP_PATH = sectorPath(C_IN, C_OUT, MARK.cHalfGapDeg, 180);
 export const C_BOTTOM_PATH = sectorPath(C_IN, C_OUT, 180, 360 - MARK.cHalfGapDeg);
 
-/** SVG path data for the C (250°, gap east). */
+/** SVG path data for the C (236°, gap east). */
 export const C_PATH = sector(C_IN, C_OUT, MARK.cHalfGapDeg, false);
 
-/** SVG path data for the amber arc (96°, centred east). */
+/** SVG path data for the amber arc (92°, centred east). */
 export const ARC_PATH = sector(
   MARK.R * (MARK.arcRadius - MARK.arcThickness / 2),
   MARK.R * (MARK.arcRadius + MARK.arcThickness / 2),

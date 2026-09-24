@@ -23,8 +23,10 @@ import {IScorecardPrice} from "./interfaces/IScorecardPrice.sol";
 ///      provenance, and reading them can never block a redemption.
 ///
 ///      - Mint only while MarketClock says CLOSED with zero primary capacity, outside a multiplier
-///        blackout, under the asset's fixed open-interest cap, and after ReopenPointer.observe has
-///        itself witnessed the market not open. `epochAtMint` is the epoch it returned.
+///        blackout, after ReopenPointer.observe has itself witnessed the market not open (`epochAtMint`
+///        is the epoch it returned), and under the asset's fixed cap FOR THAT CLOSURE: the cap bounds
+///        the units of one epoch still outstanding (`mintedInEpoch`), so notes from an earlier closure
+///        that unlocked but were never redeemed cannot block minting in a later one.
 ///      - Redeem calls observe first (so a redemption can witness the reopen itself), then unlocks when
 ///        the epoch has moved past `epochAtMint` or `mintedAt + FALLBACK_AFTER` has passed. It does not
 ///        stop in a multiplier blackout.
@@ -60,6 +62,7 @@ contract ReopenNote is ERC1155Min, IReopenNote {
     error UnsupportedAsset();
     error MarketNotClosed();
     error InBlackout();
+    /// @dev `oi` is the closure's outstanding units after this mint: mintedInEpoch[w][epoch] + s.
     error CapExceeded(uint256 oi, uint256 cap);
     error ZeroAmount();
     error NotReopened(uint256 id, uint32 epochAtMint, uint32 epochNow);
@@ -71,6 +74,7 @@ contract ReopenNote is ERC1155Min, IReopenNote {
     error EscrowMismatch(uint256 received, uint256 expected);
     error ValueOverflow();
     error Reentrancy();
+    error InvalidRecipient(address to);
 
     string public constant name = "Curb Reopen Note";
     string public constant symbol = "CURB-RN";
@@ -80,10 +84,14 @@ contract ReopenNote is ERC1155Min, IReopenNote {
     IReopenPointer public immutable pointer;
     IScorecardPrice public immutable scorecard;
 
-    /// @notice Maximum open interest per wrapper, in wrapper-share wei. Written only by the constructor.
+    /// @notice Per-closure cap per wrapper, in wrapper-share wei: bounds `mintedInEpoch`. Written only by
+    ///         the constructor.
     mapping(address wrapper => uint256) public capShares;
-    /// @notice Wrapper shares escrowed against live units, per wrapper.
+    /// @notice Wrapper shares escrowed against live units, per wrapper, across all epochs (== Σ outstanding).
     mapping(address wrapper => uint256) public openInterest;
+    /// @notice Units minted in closure `epoch` (the `epochAtMint` observe returned) that are still
+    ///         outstanding: + on mint, - on redeem and cancel. Mint requires it to stay <= capShares.
+    mapping(address wrapper => mapping(uint32 epoch => uint256)) public mintedInEpoch;
     /// @notice Number of notes ever minted; the latest id.
     uint256 public noteCount;
 
@@ -102,7 +110,7 @@ contract ReopenNote is ERC1155Min, IReopenNote {
     }
 
     /// @param wrappers  The supported wrappers; each must have a Scorecard price source.
-    /// @param caps      Open-interest cap per wrapper, in wrapper-share wei (> 0, no duplicates).
+    /// @param caps      Per-closure cap per wrapper, in wrapper-share wei (> 0, no duplicates).
     constructor(
         IMarketClock clock_,
         IReopenPointer pointer_,
@@ -139,12 +147,13 @@ contract ReopenNote is ERC1155Min, IReopenNote {
             revert MarketNotClosed();
         }
         if (clock.isInMultiplierBlackout(wrapper)) revert InBlackout();
-        uint256 oi = openInterest[wrapper] + wrapperShares;
-        if (oi > cap) revert CapExceeded(oi, cap);
         (uint32 epoch, bool open) = pointer.observe(wrapper);
         if (open) revert MarketNotClosed();
+        uint256 inEpoch = mintedInEpoch[wrapper][epoch] + wrapperShares;
+        if (inEpoch > cap) revert CapExceeded(inEpoch, cap);
 
-        openInterest[wrapper] = oi;
+        mintedInEpoch[wrapper][epoch] = inEpoch;
+        openInterest[wrapper] += wrapperShares;
         id = _record(wrapper, wrapperShares, epoch);
         _pull(wrapper, wrapperShares);
 
@@ -154,9 +163,11 @@ contract ReopenNote is ERC1155Min, IReopenNote {
     }
 
     /// @notice Burn `amount` of the caller's units of note `id` and send exactly `amount` wrapper shares to `to`.
+    /// @dev `to` may not be the note itself: shares sent there would be stranded outside every note's escrow.
     function redeem(uint256 id, uint128 amount, address to) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (to == address(0)) revert ERC1155ZeroAddress();
+        if (to == address(this)) revert InvalidRecipient(to);
         Unit storage u = _units[id];
         address wrapper = u.wrapper;
         if (wrapper == address(0)) revert UnknownNote();
@@ -167,6 +178,7 @@ contract ReopenNote is ERC1155Min, IReopenNote {
         _burn(msg.sender, id, amount);
         _outstanding[id] -= amount;
         openInterest[wrapper] -= amount;
+        mintedInEpoch[wrapper][u.epochAtMint] -= amount;
         wrapper.safeTransfer(to, amount);
 
         (uint256 underlyingNow, uint32 nonceNow) = _provenance(wrapper, amount);
@@ -185,7 +197,8 @@ contract ReopenNote is ERC1155Min, IReopenNote {
         _burn(msg.sender, id, out);
         _outstanding[id] = 0;
         openInterest[wrapper] -= out;
-        wrapper.safeTransfer(msg.sender, out);
+        mintedInEpoch[wrapper][u.epochAtMint] -= out;
+        wrapper.safeTransfer(msg.sender, out); // msg.sender is the issuer, never this contract
         emit NoteCancelled(id, msg.sender, out);
     }
 

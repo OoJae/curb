@@ -62,10 +62,39 @@ export const fallbackRegime: RegimeSource = async () => ({
 });
 
 // Lane B's module, if present. import.meta.glob resolves to {} when the file does not exist.
-const bModules = import.meta.glob<{ getRegime?: RegimeSource }>('../data/regime.ts', { eager: true });
+const bModules = import.meta.glob<{ getRegime?: () => Promise<unknown> }>('../data/regime.ts', { eager: true });
 const bGetRegime = Object.values(bModules)[0]?.getRegime;
+const schedModules = import.meta.glob<{ nextChange?: (nowMs: number) => { atMs: number } | null }>('../data/schedule.ts', { eager: true });
+const bNextChange = Object.values(schedModules)[0]?.nextChange;
 
-let source: RegimeSource = bGetRegime ?? fallbackRegime;
+/**
+ * Lane B's `getRegime` returns the chain's own vocabulary (data/types.ts RegimeState: `regime`
+ * 'CLOSED' | 'MARKET' | …, `paper`, `stale`); the shell speaks SiteRegime. Map one to the other:
+ * paper → open, stale or UNKNOWN → unknown, anything else → shut. A source that already returns a
+ * RegimeReading passes through unchanged.
+ */
+function adaptDataRegime(fn: () => Promise<unknown>): RegimeSource {
+  return async () => {
+    const r = (await fn()) as {
+      regime?: string; paper?: boolean; stale?: boolean; cap?: number | null;
+      asOfMs?: number; block?: number | null; source?: string; nextChangeAtMs?: number | null;
+    };
+    if (r.regime === 'open' || r.regime === 'shut' || r.regime === 'unknown') return r as RegimeReading;
+    const regime: SiteRegime = r.stale || r.regime === 'UNKNOWN' ? 'unknown' : r.paper ? 'open' : 'shut';
+    let nextChangeAtMs: number | null = null;
+    try { nextChangeAtMs = bNextChange?.(Date.now())?.atMs ?? null; } catch { nextChangeAtMs = null; }
+    return {
+      regime,
+      cap: typeof r.cap === 'number' ? r.cap : null,
+      asOfMs: r.asOfMs ?? Date.now(),
+      block: r.block ?? null,
+      nextChangeAtMs,
+      source: r.source === 'override' || r.source === 'fixture' ? 'fixture' : r.source === 'api' ? 'api' : 'chain',
+    };
+  };
+}
+
+let source: RegimeSource = bGetRegime ? adaptDataRegime(bGetRegime) : fallbackRegime;
 
 /** Inject a regime source (tests, fixtures, or a page that already reads the chain). */
 export function setRegimeSource(fn: RegimeSource): void {

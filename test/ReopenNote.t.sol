@@ -163,7 +163,10 @@ contract ReopenNoteTest is SuffixHarness {
 
     function _digest() internal view override returns (bytes memory) {
         address[4] memory who = [issuer, holder, stranger, sink];
-        bytes memory out = abi.encode(note.noteCount(), note.openInterest(address(wT)), pointer.headOf(address(wT)));
+        bytes memory out = abi.encode(
+            note.noteCount(), note.openInterest(address(wT)), note.mintedInEpoch(address(wT), 0),
+            note.mintedInEpoch(address(wT), 1), pointer.headOf(address(wT))
+        );
         for (uint256 id = 1; id <= 2; ++id) {
             out = abi.encode(out, note.unitOf(id), note.outstanding(id), note.redeemable(id));
             for (uint256 i; i < 4; ++i) out = abi.encode(out, note.balanceOf(who[i], id));
@@ -272,6 +275,8 @@ contract ReopenNoteTest is SuffixHarness {
         assertEq(note.balanceOf(issuer, id), 0);
         assertEq(note.outstanding(id), 10e18);
         assertEq(note.openInterest(address(wT)), 10e18);
+        assertEq(note.mintedInEpoch(address(wT), 1), 10e18, "counted in its own closure");
+        assertEq(note.mintedInEpoch(address(wT), 0), 0);
         assertFalse(note.redeemable(id));
 
         uint256 id2 = _mint(1, issuer);
@@ -452,6 +457,9 @@ contract ReopenNoteTest is SuffixHarness {
         note.redeem(id, 0, holder);
         vm.expectRevert(ERC1155Min.ERC1155ZeroAddress.selector);
         note.redeem(id, 1, address(0));
+        // Shares sent to the note itself would be stranded outside every escrow.
+        vm.expectRevert(abi.encodeWithSelector(ReopenNote.InvalidRecipient.selector, address(note)));
+        note.redeem(id, 1, address(note));
         vm.expectRevert(ReopenNote.UnknownNote.selector);
         note.redeem(0, 1, holder);
         vm.expectRevert(ReopenNote.UnknownNote.selector);
@@ -577,17 +585,19 @@ contract ReopenNoteTest is SuffixHarness {
         assertEq(wT.balanceOf(address(note)), 0);
     }
 
-    // --- open interest ----------------------------------------------------------------------------
+    // --- per-closure cap and open interest ----------------------------------------------------------
 
-    function test_open_interest_decrements_and_frees_the_cap() public {
+    function test_cap_is_per_closure_and_frees_on_cancel_and_redeem() public {
         vm.startPrank(issuer);
         uint256 a = note.mint(address(wA), 10e18, issuer);
         uint256 b = note.mint(address(wA), 4e18, holder);
+        assertEq(note.mintedInEpoch(address(wA), 0), 14e18);
         vm.expectRevert(abi.encodeWithSelector(ReopenNote.CapExceeded.selector, 14e18 + 1, 14e18));
         note.mint(address(wA), 1, issuer);
         assertEq(note.openInterest(address(wA)), 14e18);
 
-        note.cancel(a);
+        note.cancel(a); // cancel frees the closure's cap
+        assertEq(note.mintedInEpoch(address(wA), 0), 4e18);
         assertEq(note.openInterest(address(wA)), 4e18);
         note.mint(address(wA), 10e18, issuer);
         vm.stopPrank();
@@ -597,16 +607,59 @@ contract ReopenNoteTest is SuffixHarness {
         vm.prank(holder);
         note.redeem(b, 1e18, holder);
         assertEq(note.openInterest(address(wA)), 13e18);
+        assertEq(note.mintedInEpoch(address(wA), 0), 13e18, "closure 0 still counts its own outstanding units");
         assertEq(wA.balanceOf(address(note)), 13e18);
 
+        // The next closure has its whole cap, even though 13e18 of closure 0 is still outstanding.
         _later(1 hours);
         _shut(address(wA));
         vm.startPrank(issuer);
-        note.mint(address(wA), 1e18, issuer);
+        note.mint(address(wA), 14e18, issuer);
         vm.expectRevert(abi.encodeWithSelector(ReopenNote.CapExceeded.selector, 14e18 + 1, 14e18));
         note.mint(address(wA), 1, issuer);
         vm.stopPrank();
+        assertEq(note.mintedInEpoch(address(wA), 1), 14e18);
+        assertEq(note.openInterest(address(wA)), 27e18, "escrow total spans closures");
+        assertEq(wA.balanceOf(address(note)), 27e18);
         assertEq(note.openInterest(address(wT)), 0, "per-wrapper");
+    }
+
+    /// Review finding: an unlocked-but-never-redeemed note from closure e must not block closure e+1.
+    function test_an_unredeemed_note_from_the_last_closure_does_not_block_the_next() public {
+        vm.prank(issuer);
+        uint256 id = note.mint(address(wA), 14e18, holder); // closure 0 filled to the cap
+        _later(1 hours);
+        _open(address(wA));
+        pointer.observe(address(wA)); // reopen witnessed: the note is unlocked, and the holder sits on it
+        assertTrue(note.redeemable(id));
+        _later(20 hours);
+        _shut(address(wA));
+
+        vm.prank(issuer);
+        uint256 next = note.mint(address(wA), 14e18, issuer); // closure 1: full cap available
+        assertEq(note.unitOf(next).epochAtMint, 1);
+        assertEq(note.mintedInEpoch(address(wA), 0), 14e18);
+        assertEq(note.mintedInEpoch(address(wA), 1), 14e18);
+        assertEq(note.openInterest(address(wA)), 28e18);
+
+        // The old note still redeems for exactly its shares, and only its own closure's count moves.
+        vm.prank(holder);
+        note.redeem(id, 14e18, holder);
+        assertEq(wA.balanceOf(holder), 14e18);
+        assertEq(note.mintedInEpoch(address(wA), 0), 0);
+        assertEq(note.mintedInEpoch(address(wA), 1), 14e18);
+    }
+
+    function test_a_fallback_redeem_in_the_same_closure_frees_its_cap() public {
+        vm.prank(issuer);
+        uint256 id = note.mint(address(wA), 14e18, holder);
+        vm.warp(block.timestamp + 10 days); // no reopen witnessed in ten days
+        vm.prank(holder);
+        note.redeem(id, 4e18, holder);
+        assertEq(note.mintedInEpoch(address(wA), 0), 10e18);
+        vm.prank(issuer);
+        note.mint(address(wA), 4e18, issuer); // still closure 0, and there is room again
+        assertEq(note.mintedInEpoch(address(wA), 0), 14e18);
     }
 
     // --- ERC-1155 -------------------------------------------------------------------------------

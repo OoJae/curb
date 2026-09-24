@@ -6,7 +6,7 @@ import {IScorecardPrice} from "./interfaces/IScorecardPrice.sol";
 import {IReopenPointer} from "./interfaces/IReopenPointer.sol";
 
 /// @title ReopenPointer
-/// @notice A monotonic, permissionless record of verified reopens per wrapper, and one write-once
+/// @notice A monotonic, permissionless record of WITNESSED reopens per wrapper, and one write-once
 ///         reopen print per (wrapper, epoch).
 ///
 /// @dev WHY THIS EXISTS. A ReopenNote minted while the primary market is shut becomes redeemable
@@ -22,9 +22,25 @@ import {IReopenPointer} from "./interfaces/IReopenPointer.sol";
 ///      - A shut and an open seen in the same second would give an empty bracket (t, t], so the open is
 ///        not taken until a later second (see `observe`); the bracket is always strict.
 ///
+///      WHAT AN EPOCH IS, EXACTLY. The epoch counts reopens this contract has WITNESSED, not every reopen
+///      that happened. "Shut" and "open" mean what MarketClock's attestations said at the moment someone
+///      called `observe` (directly, or through ReopenNote / ClosedAuction), so the bracket
+///      (shutSeenAt, openedAt] is relative to those attestations, not to the exchange's own timeline.
+///      If nobody observes during a whole session (open -> shut with no call while open), that reopen is
+///      never recorded: the next open seen after a shut advances the epoch by one, not by the number of
+///      sessions missed. Consumers that must not act across a reopen (ClosedAuction's bids) therefore
+///      also check the clock itself; the operator's poke keeps observations dense around transitions.
+///
 ///      The print is Scorecard's own TWAP-guarded `priceNow`, taken between PRINT_DELAY and
 ///      PRINT_DELAY + PRINT_WINDOW after the witnessed reopen, once, for every note of that asset and
 ///      epoch. Nobody can pick a better moment after the first successful call.
+///
+///      PRINTS DEPEND ON THE POOL ORACLE'S DEPTH. `priceNow` reads the Uniswap V3 pool's TWAP, which needs
+///      the pool's observation ring to reach back across the TWAP window. A pool with a shallow ring
+///      (e.g. the default 32 slots on a busy pool) can be flushed by a burst of swaps so the TWAP read
+///      reverts for a while; every recordPrint in the 30-minute window then reverts and the epoch stays
+///      unprinted. Delivery is unaffected (notes settle in shares, not at the print), only the grade.
+///      The mitigation is on the pool: raise its observation cardinality (256 for the W3 pools).
 ///
 ///      No admin, no upgrade, no pause.
 contract ReopenPointer is IReopenPointer {
