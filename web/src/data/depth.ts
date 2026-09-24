@@ -284,7 +284,8 @@ export async function getCreditPosition(borrower: Address, wrapper: Address): Pr
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "positionOf", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "debtOf", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "limitOf", args: [borrower, wrapper] },
-      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "ltvFor", args: [wrapper] },
+      // The ratio limitOf applies: ltvEffective = ltvFor · min(1, cover / totalPrincipal) (P4 re-review).
+      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "ltvEffective", args: [wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "isBreached", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "cureOf", args: [borrower, wrapper] },
     ],

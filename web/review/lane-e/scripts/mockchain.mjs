@@ -54,6 +54,7 @@ export async function makeChain(repo, opts = {}) {
     'DepthCert.makers': () => A('a6'),
     'DepthCert.honouredDepth': () => [3n * E18 / 100n, 1_560_000n, 52_000_000n, BigInt(now + 80 * 3600)],
     'CurbCredit.ltvFor': () => 3000n,
+    'CurbCredit.ltvEffective': () => 2800n,
     'CurbCredit.realisable': () => 1_560_000n,
     'CurbCredit.totalCollateral': () => 5n * E18 / 100n,
     'CurbCredit.minCertExpiry': () => BigInt(now + 73 * 3600 + 1800),

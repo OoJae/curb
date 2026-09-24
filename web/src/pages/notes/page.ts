@@ -82,14 +82,17 @@ function replaySpecimen(l: LotView, cutoffMs: number | null): LotView {
 }
 
 async function load(): Promise<State> {
+  // The public RPC allows a few requests a second, so read the lots first and then only the one note the
+  // certificate shows (the featured lot's note, else the newest).
   const [noteCount, lotCount] = await Promise.all([getNoteCount().catch(() => 0), getLotCount().catch(() => 0)]);
-  const noteIds = idsFrom(knownIds('notes'), noteCount);
-  const lotIds = idsFrom(knownIds('lots'), lotCount);
-  const [notes, lotResults] = await Promise.all([
-    getNotes(noteIds, account).catch(() => [] as NoteView[]),
-    Promise.allSettled(LIVE.auction ? lotIds.map((id) => getLot(id)) : [getLot(1)]),
-  ]);
+  const lotIds = idsFrom(knownIds('lots'), lotCount, 6);
+  const lotResults = await Promise.allSettled(LIVE.auction ? lotIds.map((id) => getLot(id)) : [getLot(1)]);
   let lots = lotResults.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  const liveLot = lots.find((l) => l.status === 'LIVE' && Date.now() <= l.endAtMs) ?? lots[0];
+  const noteId = liveLot && Number(liveLot.noteId) <= noteCount ? Number(liveLot.noteId) : noteCount;
+  const notes: NoteView[] = LIVE.notes
+    ? noteId > 0 ? await getNotes([noteId], account).catch(() => [] as NoteView[]) : []
+    : await getNotes([], account).catch(() => [] as NoteView[]);
   const assets = LIVE.notes ? NOTE_ASSETS : NOTE_ASSETS.slice(0, 1);
   const pointers = (await Promise.allSettled(assets.map((a) => getPointer(a.wrapper)))).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
   const caps = new Map<string, Cap>();
@@ -614,11 +617,11 @@ drawProvenance();
 wireFlow();
 void refresh();
 
-// Live pages re-read every 30 s while visible; the specimen does not change.
+// Live pages re-read every 60 s while visible (the public RPC is rate-limited); the specimen does not change.
 if (ANY_LIVE && !isMock()) {
   setInterval(() => {
     if (!document.hidden) void refresh();
-  }, 30_000);
+  }, 60_000);
 }
 
 void raw;

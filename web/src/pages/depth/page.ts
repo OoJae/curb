@@ -55,6 +55,23 @@ interface State {
   regime: RegimeState | null;
   /** CurbCredit.minCertExpiry(asset) in ms (live), or an estimate from the published rule (specimen). */
   horizon: { ms: number; estimate: boolean } | null;
+  /** CurbCredit.ltvEffective(asset) in bps (live), or ltvFor · min(1, cover / lent) from the specimen. */
+  effective: { bps: number; estimate: boolean } | null;
+}
+
+async function readEffective(d: DepthView, p: CreditPosition | null): Promise<State['effective']> {
+  if (W4_LIVE && !isMock()) {
+    try {
+      const v = await publicClient().readContract({ address: CURB_CREDIT!, abi: curbCreditAbi, functionName: 'ltvEffective', args: [asset.wrapper] });
+      return { bps: Number(v), estimate: false };
+    } catch {
+      return null;
+    }
+  }
+  // Specimen: one borrower, so what is lent is its debt.
+  const lent = p?.debt ?? 0;
+  const scale = lent > 0 ? Math.min(1, d.honouredNotional / lent) : 1;
+  return { bps: Math.floor(d.ltvBps * scale), estimate: true };
 }
 
 /** The published cert horizon: now + (open ? 1 h : max(73 h, next transition + 1 h)) + 30 min. Estimate only. */
@@ -108,7 +125,8 @@ async function load(): Promise<State> {
     getCreditPosition(borrower, asset.wrapper).catch(() => null),
     getRegime({ wrapper: asset.wrapper }).catch(() => null),
   ]);
-  return { depth, position, borrower, regime, horizon: await readHorizon(regime) };
+  const [horizon, effective] = await Promise.all([readHorizon(regime), readEffective(depth, position)]);
+  return { depth, position, borrower, regime, horizon, effective };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -136,7 +154,7 @@ function drawPlot(d: DepthView): void {
   if (now) now.textContent = fmtPct(d.ltvBps);
 }
 
-function drawStats(d: DepthView, horizon: State['horizon']): void {
+function drawStats(d: DepthView, horizon: State['horizon'], effective: State['effective']): void {
   const el = $('[data-dp-stats]');
   if (!el) return;
   const c = d.curve;
@@ -148,8 +166,14 @@ function drawStats(d: DepthView, horizon: State['horizon']): void {
       ${statHTML({ label: 'ltvFor, now', value: fmtPct(d.ltvBps), asOf: at, size: 'data', note: `Per position; cap ${fmtPct(c.regimeCapBps, 0)}: ${regimeWord}` })}
       ${statHTML({ label: 'Honoured depth', value: `${fmtShares(d.honouredShares)} shares`, asOf: at, size: 'data', note: `${fmtUsdg(d.honouredNotional, 4)} of bids` })}
       ${statHTML({ label: 'Lowest bid counted', value: d.minBidPx !== null ? fmtUsdg(d.minBidPx) : 'none', asOf: at, size: 'data', note: c.priceNow !== null ? `Scorecard price $${c.priceNow.toFixed(2)} a share` : 'Scorecard price unreadable' })}
-      ${statHTML({ label: 'Realisable', value: fmtUsdg(d.realisable, 4), asOf: at, size: 'data', note: 'What the bids would pay for the pooled collateral' })}
-      ${statHTML({ label: 'Pooled collateral', value: `${fmtShares(c.totalCollateral)} shares`, asOf: at, size: 'data', note: 'totalCollateral, the basis of the LTV' })}
+      ${statHTML({ label: 'Realisable', value: fmtUsdg(d.realisable, 4), asOf: at, size: 'data', note: `What the bids would pay for the pooled collateral (${fmtShares(c.totalCollateral)} shares): the most the pool may owe` })}
+      ${statHTML({
+        label: 'ltvEffective, applied',
+        value: effective ? fmtPct(effective.bps) : '—',
+        asOf: effective && !effective.estimate ? at : undefined,
+        size: 'data',
+        note: `${effective?.estimate ? 'Estimate from the specimen. ' : ''}ltvFor × min(1, what the book pays ÷ what is lent): lower only once depth has left, the margin call`,
+      })}
       ${statHTML({
         label: 'A cert must outlive',
         value: horizon ? hktShort(horizon.ms) : '—',
@@ -521,7 +545,7 @@ async function refresh(): Promise<void> {
   }
   drawStatus(state.depth.block);
   drawPlot(state.depth);
-  drawStats(state.depth, state.horizon);
+  drawStats(state.depth, state.horizon, state.effective);
   drawBook(state.depth);
   drawPosition(state);
   drawCure(state);
@@ -538,6 +562,6 @@ void refresh();
 if (W4_LIVE && !isMock()) {
   setInterval(() => {
     if (!document.hidden) void refresh();
-  }, 30_000);
+  }, 60_000);
 }
 

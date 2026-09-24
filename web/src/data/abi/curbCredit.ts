@@ -60,6 +60,18 @@ export const curbCreditAbi = [
   },
   {
     "type": "function",
+    "name": "GAS_FLOOR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "LTV_OPEN_BPS",
     "inputs": [],
     "outputs": [
@@ -458,6 +470,23 @@ export const curbCreditAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "ltvEffective",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1257,6 +1286,11 @@ export const curbCreditAbi = [
   {
     "type": "error",
     "name": "Ineligible",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InsufficientGas",
     "inputs": []
   },
   {
