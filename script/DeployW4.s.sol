@@ -9,6 +9,7 @@ import {IScorecardPrice} from "../src/interfaces/IScorecardPrice.sol";
 import {IDepthCert} from "../src/interfaces/IDepthCert.sol";
 import {IEligibility} from "../src/interfaces/IEligibility.sol";
 import {IERC20} from "../src/interfaces/IERC20.sol";
+import {EligibilityRegistry} from "../src/EligibilityRegistry.sol";
 
 /// W4: DepthCert (bonded firm bids, no admin) and CurbCredit (the fixed-rate reserve that lends against them).
 ///
@@ -34,6 +35,10 @@ contract DeployW4 is Script {
     address constant W_MEIT = 0xad1b65C8556957cf23d1B5e9accdc449b415fA97;
     address constant W_NVDA = 0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5;
     address constant W_AAPL = 0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f;
+
+    // Demo wallets (docs/WALLETS.md): K posts certs naming CurbCredit, A borrows, D is the fade demo's maker.
+    address constant DESK_K = 0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E;
+    address constant AGENTIC_A = 0x055BA8ACd60A2287b2D01cb3BF237e4424357105;
 
     function run() external returns (address depthCert, address credit) {
         address registry = vm.envAddress("REGISTRY");
@@ -81,8 +86,15 @@ contract DeployW4 is Script {
         require(DEPLOYER.balance > 0.0005 ether, "deployer has too little OKB for two deployments");
         require(registry.code.length > 0, "REGISTRY has no code");
         require(registry != CLOCK && registry != SCORECARD && registry != USDG, "REGISTRY is a known non-registry");
+        // The W3 EligibilityRegistry, administered by the deployer; it gates CurbCredit's borrowers AND DepthCert's
+        // makers of certs naming a beneficiary.
+        require(EligibilityRegistry(registry).admin() == DEPLOYER, "REGISTRY admin is not the deployer");
         // Must answer the one call CurbCredit makes (a reverting registry would refuse every borrower).
         IEligibility(registry).isEligible(DEPLOYER);
+        // Not required to deploy, but the demo needs them: say so before anything is signed.
+        console2.log("eligible K (maker)   :", IEligibility(registry).isEligible(DESK_K));
+        console2.log("eligible A (borrower):", IEligibility(registry).isEligible(AGENTIC_A));
+        console2.log("eligible D (fade mk) :", IEligibility(registry).isEligible(DEPLOYER));
         require(CLOCK.code.length > 0 && SCORECARD.code.length > 0 && USDG.code.length > 0, "pinned address has no code");
         require(IERC20(USDG).decimals() == 6, "USDG decimals");
         for (uint256 i; i < five.length; ++i) {
@@ -121,13 +133,16 @@ contract DeployW4 is Script {
         require(c.reserve() == 0, "CurbCredit: reserve");
         require(c.LTV_OPEN_BPS() == 6000 && c.LTV_SHUT_BPS() == 3000, "CurbCredit: ltv caps");
         require(c.APR_BPS() == 500 && c.STALE_BONUS_BPS() == 500, "CurbCredit: rates");
-        require(c.CURE_OPEN_SECONDS() == 1800 && c.MAX_TICK_GAP() == 600 && c.MIN_CERT_LIFE() == 3600, "CurbCredit: clock");
+        require(c.CURE_OPEN_SECONDS() == 1800 && c.MAX_TICK_GAP() == 600, "CurbCredit: cure clock");
+        require(c.MIN_CERT_LIFE() == 1 hours && c.SHUT_CERT_LIFE() == 73 hours, "CurbCredit: cert horizons");
         address[] memory got = c.assets();
         require(got.length == five.length, "CurbCredit: asset count");
         for (uint256 i; i < five.length; ++i) {
             require(got[i] == five[i] && c.isAsset(five[i]), "CurbCredit: asset list");
             require(c.totalCollateral(five[i]) == 0 && c.totalPrincipal(five[i]) == 0, "CurbCredit: fresh");
             require(c.ltvFor(five[i]) == 0, "CurbCredit: no depth yet, so ltvFor must be 0");
+            require(c.realisable(five[i]) == 0, "CurbCredit: nothing realisable yet");
+            require(c.minCertExpiry(five[i]) >= block.timestamp + 90 minutes, "CurbCredit: cert horizon");
         }
         require(!c.isAsset(0xff637d2d435D6745Df3faf61272B1216e7e8b727), "CurbCredit: wSHEINx must not be listed");
     }

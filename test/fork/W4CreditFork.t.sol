@@ -37,8 +37,8 @@ contract W4CreditForkTest is Test {
     address constant W_NVDA = 0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5;
     address constant W_AAPL = 0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f;
 
-    /// @dev K's demo cert expiry: Tue 29 Sep 2026 06:00Z. Posted before the cut, it outlives the shut horizon
-    ///      (now + 73 h + 30 min) until Sun 27 Sep 04:30Z. On a later fork the test uses now + 110 h instead.
+    /// @dev K's demo cert expiry: Tue 29 Sep 2026 06:00Z. It outlives the shut horizon (now + 73 h + 30 min) until
+    ///      Sat 26 Sep 04:30Z; on a fork taken after that the test uses now + 110 h instead.
     uint64 constant DEMO_EXPIRY = 1790661600;
 
     CurbCredit credit;
