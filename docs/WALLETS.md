@@ -54,6 +54,15 @@ The 0.0434 OKB transfer is a **contract-internal transfer**, not a top-level tra
 `tx.to` misses it. Its source was found by binary-searching host A's balance: 0 at block 70,617,099,
 non-zero at 70,617,100. Its odd amount matches a bridge or swap payout, not a typed number.
 
+### curb-desk gas — 24 Sept 2026
+
+| from | to | amount | tx |
+|---|---|---|---|
+| deployer `0x78a5…f809` | curb-desk `0xe1df…9A3E` | 0.0008 OKB (gas only) | `0xc404ec8fb86d2ced41c2369ab0ea72f52e04fcd8bd28e23a88df400eaca3f480` (block 71,505,855) |
+
+curb-desk's USDG and wTCENTx come only from the team's Agentic Wallet (below); every demo counterparty
+pair is team ↔ team.
+
 ## Admin transactions
 
 Every privileged call, signed by the deployer/admin from the team's Mac.
