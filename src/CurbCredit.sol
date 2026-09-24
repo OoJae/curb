@@ -33,11 +33,13 @@ import {MulDiv} from "./lib/MulDiv.sol";
 ///      breach. Depth LEAVING (a cert expiring, filling, being realised or revoked) lowers every borrower's limit
 ///      pro rata: that is the margin call. Depth coverage is also enforced in aggregate at borrow time:
 ///
-///          realisable(a) = notional(min(totalCollateral[a], dS), minBid)
+///          realisable(a) = notional(min(totalCollateral[a], dS - seized[a]), minBid)
 ///          borrow(x) requires totalPrincipal[a] + x <= realisable(a)       (else Refusal ExceedsDepth)
 ///
-///      so right after any successful borrow cover >= totalPrincipal and nobody is scaled. Seized shares still
-///      held here will be sold into the same book first, so dS above is the honoured depth net of `seized[a]`.
+///      (seized shares still held here will be sold into the same book first, so new lending only counts the rest)
+///      so right after any successful borrow cover >= totalPrincipal and nobody is scaled. `cover` itself is the
+///      whole book: a liquidation or repayment only lowers totalPrincipal, so it can never push anyone else into
+///      breach.
 ///
 ///      WHICH CERTS COUNT. A cert only supports lending if the lender could still hit it after the slowest
 ///      possible liquidation: the next reopen, then a full cure. So honoured depth counts only certs with
@@ -571,8 +573,9 @@ contract CurbCredit {
         return _ltvEff(_market(asset), asset);
     }
 
-    /// @notice USDG the honoured bids would pay for the pool's collateral: notional(min(totalCollateral, dS), minBid).
-    ///         Every successful borrow leaves totalPrincipal <= realisable.
+    /// @notice USDG the honoured bids would pay for the pool's collateral, after the seized shares they must absorb
+    ///         first: notional(min(totalCollateral, dS - seized), minBid). Every successful borrow leaves
+    ///         totalPrincipal <= realisable.
     function realisable(address asset) external view returns (uint256) {
         if (!isAsset[asset]) return 0;
         return _realisable(asset, _market(asset));
@@ -664,7 +667,6 @@ contract CurbCredit {
         return d;
     }
 
-    /// @dev `depthShares` is honoured depth net of the seized shares still held here (they sell into it first).
     function _market(address asset) internal view returns (Market memory m) {
         IMarketClock.Regime r;
         try clock.regime(asset) returns (IMarketClock.Regime r_) {
@@ -682,9 +684,7 @@ contract CurbCredit {
         } catch {
             _notStarved();
         }
-        (uint256 dS, uint256 minBid) = _depth(asset, _minExpiry(asset, m.open));
-        uint256 held = seized[asset];
-        if (dS > held) (m.depthShares, m.minBid) = (dS - held, minBid);
+        (m.depthShares, m.minBid) = _depth(asset, _minExpiry(asset, m.open));
     }
 
     /// @dev See the contract NatSpec, WHICH CERTS COUNT.
@@ -763,8 +763,11 @@ contract CurbCredit {
         if (cover < tp) ltv = MulDiv.mulDiv(ltv, cover, tp);
     }
 
+    /// @dev Borrow-time aggregate: the book net of the seized shares that will be sold into it first.
     function _realisable(address asset, Market memory m) internal view returns (uint256) {
-        return MulDiv.mulDiv(_min(totalCollateral[asset], m.depthShares), m.minBid, 1e18);
+        uint256 held = seized[asset];
+        uint256 avail = m.depthShares > held ? m.depthShares - held : 0;
+        return MulDiv.mulDiv(_min(totalCollateral[asset], avail), m.minBid, 1e18);
     }
 
     /// @dev min(coll, sharesForUp(debt, pFresh), sharesFor(debt * 1.05, pBreach)).

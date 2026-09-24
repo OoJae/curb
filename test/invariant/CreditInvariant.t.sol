@@ -29,8 +29,8 @@ import {CreditHandler, ISettableEligibility} from "./handlers/CreditHandler.sol"
 ///           7. no depositor action (deposit, withdraw) changes any other position's isBreached -- idle
 ///              collateral cannot push anyone into breach -- and no borrow/repay/liquidate on one position pushes
 ///              another known-healthy position into breach;
-///           8. positions are judged by ltvEffective = ltvFor * min(1, notional(dS net of seized, minBid) /
-///              totalPrincipal): never above ltvFor, and equal to it whenever the book covers everything lent;
+///           8. positions are judged by ltvEffective = ltvFor * min(1, notional(dS, minBid) / totalPrincipal):
+///              never above ltvFor, and equal to it whenever the book covers everything lent;
 ///           4. the cure clock does not move across a tick with a shut/UNKNOWN end, and never over-counts;
 ///           5. conservation: wrapper balance = totalCollateral + seized; USDG balance = reserve;
 ///              sum of positions = totals;
@@ -164,8 +164,7 @@ contract CreditInvariantTest is StdInvariant, Test {
             uint256 eff = credit.ltvEffective(a);
             assertLe(eff, ltv, "ltvEffective > ltvFor");
             (uint256 dS,, uint128 minBid,) = dc.honouredDepth(a, address(credit), credit.minCertExpiry(a));
-            uint256 held = credit.seized(a);
-            uint256 cover = dS > held ? MulDiv.mulDiv(dS - held, minBid, 1e18) : 0;
+            uint256 cover = MulDiv.mulDiv(dS, minBid, 1e18);
             uint256 tp = credit.totalPrincipal(a);
             if (tp == 0 || cover >= tp) assertEq(eff, ltv, "scaled although the book covers everything lent");
             else assertEq(eff, MulDiv.mulDiv(ltv, cover, tp), "scaling is pro rata");

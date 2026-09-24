@@ -580,10 +580,11 @@ contract CurbCreditTest is CreditBase {
         assertGt(held, 70e18);
         _deposit(bob, address(wA), 200e18);
         assertEq(credit.realisable(address(wA)), MulDiv.mulDiv(DEPTH - held, BID, 1e18), "only what is left after them");
-        // A book no bigger than what is already held supports nothing.
+        // A book no bigger than what is already held supports no new lending (the ratio itself is unchanged).
         dc.setDepth(address(wA), address(credit), held, BID, uint64(block.timestamp + 10 days));
-        assertEq(credit.ltvFor(address(wA)), 0);
-        _refuseBorrow(bob, address(wA), 1e6, CurbCredit.NoDepth.selector, 0);
+        assertEq(credit.ltvFor(address(wA)), 6000);
+        assertEq(credit.realisable(address(wA)), 0);
+        _refuseBorrow(bob, address(wA), 1e6, CurbCredit.ExceedsDepth.selector, 0);
     }
 
     // --- gas starvation ------------------------------------------------------------------------------------
