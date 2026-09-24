@@ -26,8 +26,11 @@ import {CreditHandler, ISettableEligibility} from "./handlers/CreditHandler.sol"
 ///           3. a seizure never exceeds the stale cap sharesFor(debt * 1.05, P_breach), and none happens while shut
 ///              (or before 1800 witnessed open seconds); bad debt is only ever booked when every share was seized,
 ///              and a partial liquidation takes exactly `cleared` off the debt;
-///           7. no action on one position (deposit, withdraw, borrow, repay, liquidate) changes another
-///              position's isBreached -- idle collateral cannot push anyone into breach;
+///           7. no depositor action (deposit, withdraw) changes any other position's isBreached -- idle
+///              collateral cannot push anyone into breach -- and no borrow/repay/liquidate on one position pushes
+///              another known-healthy position into breach;
+///           8. positions are judged by ltvEffective = ltvFor * min(1, notional(dS net of seized, minBid) /
+///              totalPrincipal): never above ltvFor, and equal to it whenever the book covers everything lent;
 ///           4. the cure clock does not move across a tick with a shut/UNKNOWN end, and never over-counts;
 ///           5. conservation: wrapper balance = totalCollateral + seized; USDG balance = reserve;
 ///              sum of positions = totals;
@@ -147,9 +150,26 @@ contract CreditInvariantTest is StdInvariant, Test {
         assertEq(handler.debtForgiven(), 0, "a partial liquidation forgave debt");
     }
 
-    // 7. positions are independent
+    // 7. positions are independent of other depositors; lending actions never push others into breach
     function invariant_no_cross_position_breach() public view {
-        assertEq(handler.crossPositionBreachChange(), 0, "one position's action moved another's isBreached");
+        assertEq(handler.crossPositionBreachChange(), 0, "a deposit/withdraw moved another position's isBreached");
+        assertEq(handler.crossPositionPushedIntoBreach(), 0, "a borrow/repay/liquidate pushed another into breach");
+    }
+
+    // 8. the effective ratio: a pro-rata margin call only when the book no longer covers what is lent
+    function invariant_effective_ltv() public view {
+        for (uint256 i; i < assetList.length; ++i) {
+            address a = assetList[i];
+            uint256 ltv = credit.ltvFor(a);
+            uint256 eff = credit.ltvEffective(a);
+            assertLe(eff, ltv, "ltvEffective > ltvFor");
+            (uint256 dS,, uint128 minBid,) = dc.honouredDepth(a, address(credit), credit.minCertExpiry(a));
+            uint256 held = credit.seized(a);
+            uint256 cover = dS > held ? MulDiv.mulDiv(dS - held, minBid, 1e18) : 0;
+            uint256 tp = credit.totalPrincipal(a);
+            if (tp == 0 || cover >= tp) assertEq(eff, ltv, "scaled although the book covers everything lent");
+            else assertEq(eff, MulDiv.mulDiv(ltv, cover, tp), "scaling is pro rata");
+        }
     }
 
     // 4. the cure clock only counts witnessed open time
@@ -206,7 +226,7 @@ contract CreditInvariantTest is StdInvariant, Test {
     }
 
     function coverageHeader() public pure returns (string memory) {
-        return "borrowsOk,refusals,breaches,ticks,shutTicks,liquidations,partialLiquidations,fills,fades,"
+        return "borrowsOk,refusals,breaches,ticks,shutTicks,liquidations,partialLiquidations,scaledObserved,fills,fades,"
             "Ineligible,UnsupportedAsset,MarketUnknown,PriceUnavailable,NoDepth,ExceedsLtv,ExceedsDepth,"
             "ReserveShort,InCure,WouldBreach";
     }
@@ -216,7 +236,8 @@ contract CreditInvariantTest is StdInvariant, Test {
             vm.toString(handler.borrowsOk()), ",", vm.toString(handler.refusals()), ",",
             vm.toString(handler.breaches()), ",", vm.toString(handler.ticks()), ",",
             vm.toString(handler.shutTicks()), ",", vm.toString(handler.liquidations()), ",",
-            vm.toString(handler.partialLiquidations()), ",", vm.toString(handler.realisedFills()), ",",
+            vm.toString(handler.partialLiquidations()), ",", vm.toString(handler.scaledObserved()), ",",
+            vm.toString(handler.realisedFills()), ",",
             vm.toString(handler.realisedFades())
         );
         bytes4[10] memory r = [
@@ -283,5 +304,6 @@ contract CreditHandlerCoverageTest is Test {
         inv.invariant_conservation();
         inv.invariant_ltv_within_cap_and_bid();
         inv.invariant_no_cross_position_breach();
+        inv.invariant_effective_ltv();
     }
 }
