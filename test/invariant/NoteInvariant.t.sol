@@ -32,7 +32,9 @@ import {NoteHandler} from "./handlers/NoteHandler.sol";
 ///   - every successful bid cleared while shut, in the note's unchanged epoch, within [floor, start], by an
 ///     eligible bidder, paying the seller exactly the price; each lot sells at most once;
 ///   - the auction's note balance per id == sum of amount over its LIVE lots, and it never holds USDG;
-///   - realisedDiscountBps agrees with the pointer's print, and unsolicited notes are refused.
+///   - realisedDiscountBps agrees with the pointer's print, and unsolicited notes are refused;
+///   - every lot ends by its cutoff (the clock's next boundary at listing), and every cleared lot cleared
+///     at or before it.
 /// Stage 2: the auction path is the real ClosedAuction with an EligibilityRegistry; actors 0-2 are
 /// eligible, actor 3 (mallory) is not.
 contract NoteInvariant is StdInvariant, Test {
@@ -90,6 +92,8 @@ contract NoteInvariant is StdInvariant, Test {
         }
         clock.set(address(wT), IMarketClock.Regime.CLOSED, 0);
         clock.set(address(wA), IMarketClock.Regime.CLOSED, 0);
+        clock.setNextTransition(address(wT), uint64(block.timestamp + 9 hours)); // e.g. 09:00 HKT reopen
+        clock.setNextTransition(address(wA), uint64(block.timestamp + 9 hours));
 
         handler = new NoteHandler(note, pointer, clock, auction, usdg, [wT, wA], actors);
         targetContract(address(handler));
@@ -208,6 +212,7 @@ contract NoteInvariant is StdInvariant, Test {
         assertFalse(handler.badBid(), "bid while open / after reopen / out of bounds");
         assertFalse(handler.badPayment(), "seller delta != price");
         assertFalse(handler.ineligibleCleared(), "ineligible bidder cleared (or wrong refusal)");
+        assertFalse(handler.badList(), "lot listed without a future cutoff or past it");
     }
 
     function invariant_each_lot_sells_at_most_once() public view {
@@ -215,7 +220,10 @@ contract NoteInvariant is StdInvariant, Test {
         for (uint256 lotId = 1; lotId <= n; ++lotId) {
             assertLe(handler.sales(lotId), 1);
             ClosedAuction.Lot memory l = auction.lotOf(lotId);
+            assertLe(l.endAt, l.cutoff, "lot ends by its cutoff");
+            assertGt(l.cutoff, l.startAt, "cutoff in the future at listing");
             if (l.status == ClosedAuction.Status.SOLD) {
+                assertLe(l.clearedAt, l.cutoff, "cleared at or before the cutoff");
                 assertGe(l.clearedPrice, l.floorPrice);
                 assertLe(l.clearedPrice, l.startPrice);
                 assertTrue(l.buyer != actors[3], "ineligible buyer");
@@ -259,12 +267,13 @@ contract NoteInvariant is StdInvariant, Test {
     function afterInvariant() public {
         string memory path = vm.envOr("NOTE_INV_STATS", string(""));
         if (bytes(path).length == 0) return;
-        vm.writeLine(path, string.concat(
+        string memory a = string.concat(
             vm.toString(handler.mints()), " ", vm.toString(handler.redeems()), " ", vm.toString(handler.fallbackRedeems()), " ",
-            vm.toString(handler.cancels()), " ", vm.toString(handler.prints()), " ", vm.toString(handler.reopens()), " ",
+            vm.toString(handler.cancels()), " ", vm.toString(handler.prints()), " ", vm.toString(handler.reopens()), " ");
+        string memory b = string.concat(
             vm.toString(handler.bids()), " ", vm.toString(auction.lotCount()), " ", vm.toString(handler.idCount()), " ",
-            vm.toString(handler.ineligibleRefusals()), " ", vm.toString(handler.withdrawals()), " ",
-            vm.toString(handler.grades())));
+            vm.toString(handler.ineligibleRefusals()), " ", vm.toString(handler.withdrawals()), " ");
+        vm.writeLine(path, string.concat(a, b, vm.toString(handler.grades()), " ", vm.toString(handler.cutoffRefusals())));
     }
 
     /// Not an invariant, a proof the campaign is not vacuous: a scripted pass through every handler path.

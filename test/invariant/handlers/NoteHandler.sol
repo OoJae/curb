@@ -47,6 +47,7 @@ contract NoteHandler is Test {
     bool public ineligibleCleared;  // the ineligible actor won a lot
     bool public unsolicitedAccepted; // the auction accepted a note it did not pull itself
     bool public badGrade;           // realisedDiscountBps disagreed with the print, or graded an unprintable lot
+    bool public badList;            // a lot listed with no future cutoff, or ending after its cutoff
     mapping(uint256 lotId => uint256) public sales;
 
     uint256 public mints;
@@ -59,6 +60,7 @@ contract NoteHandler is Test {
     uint256 public ineligibleRefusals;
     uint256 public withdrawals;
     uint256 public grades;
+    uint256 public cutoffRefusals;
 
     constructor(
         ReopenNote note_,
@@ -114,6 +116,9 @@ contract NoteHandler is Test {
         if (kind == 0) clock.setRegime(w, IMarketClock.Regime.UNKNOWN);
         else if (kind <= 3) clock.set(w, IMarketClock.Regime.CLOSED, 0); // shut is the common case, as on X Layer
         else clock.set(w, kind == 4 ? IMarketClock.Regime.MARKET : IMarketClock.Regime.OVERNIGHT, uint128(bound(cap, 1, 50_000_000)));
+        // The attestor publishes the next scheduled boundary with the regime (0 = unknown, now and then).
+        // These opens are unscheduled on purpose: the auction must stay safe even when a reopen comes early.
+        if (kind != 0) _schedule(w, cap % 7 == 0 ? 0 : bound(cap, 10 minutes, 18 hours));
         if (poked) pointer.observe(w);
     }
 
@@ -159,16 +164,26 @@ contract NoteHandler is Test {
     function keeperReopen(uint256 wSeed, uint256 gap, uint256 printAfter, uint128 cap) external tracked {
         address w = address(wrappers[wSeed % 4 == 0 ? 1 : 0]);
         clock.set(w, IMarketClock.Regime.CLOSED, 0);
+        _schedule(w, bound(gap, 0, 12 hours) + 1); // this closure's scheduled reopen
         pointer.observe(w);
-        _warp(bound(gap, 0, 12 hours));
+        // A scheduled reopen: never before the boundary the clock published.
+        uint64 boundary = clock.stateOf(w).nextTransitionAt;
+        if (block.timestamp < boundary) _warp(boundary - block.timestamp);
         clock.set(w, IMarketClock.Regime.MARKET, uint128(bound(cap, 1, 50_000_000)));
+        _schedule(w, 2 hours); // next boundary: the session's close
         (uint32 head,) = pointer.observe(w);
         _warp(bound(printAfter, 0, 2400));
         _print(w, head);
         if (gap % 2 == 0) {
             clock.set(w, IMarketClock.Regime.CLOSED, 0);
+            _schedule(w, bound(printAfter, 10 minutes, 18 hours));
             pointer.observe(w);
         }
+    }
+
+    /// Next boundary `dt` seconds from now (dt = 0: no boundary published).
+    function _schedule(address w, uint256 dt) internal {
+        clock.setNextTransition(w, dt == 0 ? 0 : uint64(block.timestamp + dt));
     }
 
     function _warp(uint256 dt) internal {
@@ -277,10 +292,34 @@ contract NoteHandler is Test {
         uint256 floor_ = start * bound(floorBps, 1, 10_000) / 10_000;
         if (floor_ == 0) floor_ = 1;
         decay = bound(decay, 60, 6 hours);
-        life = bound(life, 10 minutes, 4 days);
+        uint64 endAt = _endAt(note.unitOf(id).wrapper, life);
         vm.prank(seller);
-        try auction.list(id, uint128(amount), uint128(start), uint128(floor_), uint32(decay), uint64(block.timestamp + life)) {}
-        catch {}
+        try auction.list(id, uint128(amount), uint128(start), uint128(floor_), uint32(decay), endAt) returns (uint256 lotId) {
+            ClosedAuction.Lot memory l = auction.lotOf(lotId);
+            // The lot is pinned inside the closure segment it was listed in.
+            if (l.cutoff <= l.startAt || l.endAt > l.cutoff || l.cutoff != clock.stateOf(l.wrapper).nextTransitionAt) {
+                badList = true;
+            }
+        } catch (bytes memory err) {
+            bytes4 sel = bytes4(err);
+            if (sel == ClosedAuction.NoCutoff.selector || sel == ClosedAuction.SpansTransition.selector) cutoffRefusals++;
+        }
+    }
+
+    /// The lot's end, by mode (life % 16): 0 = as the seller asks, no refresh of the boundary (a stale or
+    /// missing one must be refused); 1 = one second past the boundary (must be refused); otherwise the
+    /// attestor has a future boundary on record and the lot ends by it, as the operator's cycle does.
+    function _endAt(address w, uint256 life) internal returns (uint64) {
+        uint256 mode = life % 16;
+        life = bound(life, 10 minutes, 4 days);
+        uint64 next = clock.stateOf(w).nextTransitionAt;
+        if (mode != 0 && next <= block.timestamp) {
+            _schedule(w, bound(life, 10 minutes, 18 hours));
+            next = clock.stateOf(w).nextTransitionAt;
+        }
+        if (mode == 1) return next + 1;
+        uint256 end = block.timestamp + life;
+        return uint64(mode != 0 && end > next ? next : end);
     }
 
     function bid(uint256 actorSeed, uint256 lotSeed, uint256 slack) external tracked {
