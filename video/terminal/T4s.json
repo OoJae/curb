@@ -1,0 +1,26 @@
+{
+  "schema": "curb.video.terminal/1",
+  "id": "T4s",
+  "title": "curb-verify",
+  "show": "node tools/curb-verify/src/cli.ts selftest",
+  "command": "node tools/curb-verify/src/cli.ts selftest",
+  "cwd": "..",
+  "startedAt": "2026-09-24T14:05:48.652Z",
+  "endedAt": "2026-09-24T14:05:48.881Z",
+  "durationMs": 229,
+  "exitCode": 0,
+  "signal": null,
+  "output": "  ok    round-70617365  claims re-derive: root 0xe48cde50188a98adf457f121f308c89f29176b92ccc56728f2e0647f992956b5\n  ok    round-70617365  wrong label is surfaced, not hidden: top-level kind=\"diff\" contradicts committed PARAMS.kind=\"heartbeat\"\n  ok    round-70617365  catches tampering: rejected: JSON preimage hash mismatch for 0x578e23b8a7070b57071e2bc7e1ad62d999a1d47d6e780df5fc9bc8d3ffc90beb\n  ok    round-70619137  claims re-derive: root 0xaa249f49efe5b3ee9834db512039f74ad299fa0146fc174cf6518cb4a8dd6978\n  ok    round-70619137  labels agree with the root: every top-level field matches its committed counterpart\n  ok    round-70619137  catches tampering: rejected: JSON preimage hash mismatch for 0x8dc8b5365356ca98f2be3e80a9bb2cf8dd0cfc1038e4381364411848be5b8691\nselftest passed: 6 checks over 2 real mainnet rounds, no network\n",
+  "chunks": [
+    {
+      "t": 226,
+      "s": "  ok    round-70617365  claims re-derive: root 0xe48cde50188a98adf457f121f308c89f29176b92ccc56728f2e0647f992956b5\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 226,
+      "s": "  ok    round-70617365  wrong label is surfaced, not hidden: top-level kind=\"diff\" contradicts committed PARAMS.kind=\"heartbeat\"\n  ok    round-70617365  catches tampering: rejected: JSON preimage hash mismatch for 0x578e23b8a7070b57071e2bc7e1ad62d999a1d47d6e780df5fc9bc8d3ffc90beb\n  ok    round-70619137  claims re-derive: root 0xaa249f49efe5b3ee9834db512039f74ad299fa0146fc174cf6518cb4a8dd6978\n  ok    round-70619137  labels agree with the root: every top-level field matches its committed counterpart\n  ok    round-70619137  catches tampering: rejected: JSON preimage hash mismatch for 0x8dc8b5365356ca98f2be3e80a9bb2cf8dd0cfc1038e4381364411848be5b8691\nselftest passed: 6 checks over 2 real mainnet rounds, no network\n",
+      "stream": "stdout"
+    }
+  ]
+}

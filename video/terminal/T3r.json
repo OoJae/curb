@@ -1,0 +1,21 @@
+{
+  "schema": "curb.video.terminal/1",
+  "id": "T3r",
+  "title": "curl",
+  "show": "curl -s https://api.curb.markets/receipts/0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c.json",
+  "command": "curl -s https://api.curb.markets/receipts/0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c.json",
+  "cwd": ".",
+  "startedAt": "2026-09-24T13:55:39.237Z",
+  "endedAt": "2026-09-24T13:55:40.925Z",
+  "durationMs": 1688,
+  "exitCode": 0,
+  "signal": null,
+  "output": "{\"schema\":\"curb.asp.receipt/1\",\"receiptId\":\"0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c\",\"route\":\"GET /v1/closure-calendar\",\"query\":{\"symbol\":\"wTCENTx\",\"horizonDays\":7},\"network\":\"eip155:196\",\"scheme\":\"exact\",\"asset\":\"0x779ded0c9e1022225f8e0630b35a9b54be713736\",\"amount\":\"10000\",\"payTo\":\"0x277cA91276A3801667B76C97Da3872Ccb6E96068\",\"payer\":\"0x055ba8acd60a2287b2d01cb3bf237e4424357105\",\"transaction\":\"0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7\",\"settleStatus\":\"success\",\"requirementsDigest\":\"0x46882186f9f946ed650b7984bba0ed44aaa916b18cf1cec2befa16fc52a3c674\",\"payloadDigest\":\"0xf962d3224a1b53929c10bfa9e222e9bf31f04ee60bc97f4696b7d29ef9f16353\",\"responseDigest\":\"0x902e20a0bba4a98fc9a5e5bea60d3d7c35fffa8a9e3f141f6915c61c450dec4f\",\"responseBytes\":2256,\"contentType\":\"application/json; charset=utf-8\",\"tsMs\":1790250980602}",
+  "chunks": [
+    {
+      "t": 1687,
+      "s": "{\"schema\":\"curb.asp.receipt/1\",\"receiptId\":\"0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c\",\"route\":\"GET /v1/closure-calendar\",\"query\":{\"symbol\":\"wTCENTx\",\"horizonDays\":7},\"network\":\"eip155:196\",\"scheme\":\"exact\",\"asset\":\"0x779ded0c9e1022225f8e0630b35a9b54be713736\",\"amount\":\"10000\",\"payTo\":\"0x277cA91276A3801667B76C97Da3872Ccb6E96068\",\"payer\":\"0x055ba8acd60a2287b2d01cb3bf237e4424357105\",\"transaction\":\"0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7\",\"settleStatus\":\"success\",\"requirementsDigest\":\"0x46882186f9f946ed650b7984bba0ed44aaa916b18cf1cec2befa16fc52a3c674\",\"payloadDigest\":\"0xf962d3224a1b53929c10bfa9e222e9bf31f04ee60bc97f4696b7d29ef9f16353\",\"responseDigest\":\"0x902e20a0bba4a98fc9a5e5bea60d3d7c35fffa8a9e3f141f6915c61c450dec4f\",\"responseBytes\":2256,\"contentType\":\"application/json; charset=utf-8\",\"tsMs\":1790250980602}",
+      "stream": "stdout"
+    }
+  ]
+}

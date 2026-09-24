@@ -1,0 +1,9 @@
+# T4 · started 2026-09-24T14:22:13.662Z · exit 0
+$ node tools/curb-verify/src/cli.ts bundle https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json
+round bundle 0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141
+  source     https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json
+  root       0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141
+  kind       heartbeat
+  evaluated  2026-09-24T14:19:36Z
+  claims     6
+  REPRODUCED
