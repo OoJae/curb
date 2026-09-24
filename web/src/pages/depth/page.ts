@@ -119,12 +119,12 @@ function drawStats(d: DepthView): void {
   render(
     el,
     html`${d.specimen ? html`<p class="dp-stats__tag"><span class="tag tag--specimen">Specimen · in build</span></p>` : ''}<div class="dp-stats__grid">
-      ${statHTML({ label: 'ltvFor, now', value: fmtPct(d.ltvBps), asOf: at, size: 'data', note: `Cap ${fmtPct(c.regimeCapBps, 0)}: ${regimeWord}` })}
+      ${statHTML({ label: 'ltvFor, now', value: fmtPct(d.ltvBps), asOf: at, size: 'data', note: `Per position; cap ${fmtPct(c.regimeCapBps, 0)}: ${regimeWord}` })}
       ${statHTML({ label: 'Honoured depth', value: `${fmtShares(d.honouredShares)} shares`, asOf: at, size: 'data', note: `${fmtUsdg(d.honouredNotional, 4)} of bids` })}
       ${statHTML({ label: 'Lowest bid counted', value: d.minBidPx !== null ? fmtUsdg(d.minBidPx) : 'none', asOf: at, size: 'data', note: c.priceNow !== null ? `Scorecard price $${c.priceNow.toFixed(2)} a share` : 'Scorecard price unreadable' })}
       ${statHTML({ label: 'Realisable', value: fmtUsdg(d.realisable, 4), asOf: at, size: 'data', note: 'What the bids would pay for the pooled collateral' })}
       ${statHTML({ label: 'Pooled collateral', value: `${fmtShares(c.totalCollateral)} shares`, asOf: at, size: 'data', note: 'totalCollateral, the basis of the LTV' })}
-      ${statHTML({ label: 'Soonest expiry counted', value: d.soonestExpiryMs ? hktShort(d.soonestExpiryMs) : 'none', asOf: at, size: 'data', note: 'Certs expiring within the hour do not count' })}
+      ${statHTML({ label: 'Soonest expiry counted', value: d.soonestExpiryMs ? hktShort(d.soonestExpiryMs) : 'none', asOf: at, size: 'data', note: 'A cert counts only if it outlives the next reopen plus a cure' })}
     </div>`,
   );
 }

@@ -7,7 +7,7 @@
  * The SVG is drawn at its box's pixel size so its type stays at CSS size; the accessible control is
  * the <input type="range"> under it, which the pointer drag keeps in step.
  */
-import { LTV_OPEN_BPS, LTV_SHUT_BPS, ltvBpsAt, ltvPoints } from '../../data/depth';
+import { LTV_OPEN_BPS, LTV_SHUT_BPS, ltvBpsAt, ltvForBps, ltvPoints } from '../../data/depth';
 import type { LtvCurve } from '../../data/types';
 import { fmtPct, fmtShares } from '../notes/instrument';
 
@@ -56,7 +56,12 @@ export function mountLtvPlot(box: HTMLElement, range: HTMLInputElement, readout:
     const inv = (px: number) => Math.min(xMax, Math.max(0, ((px - PAD.l) / (W - PAD.l - PAD.r)) * xMax));
     scale = { x, y, inv };
     const cap = curve.regimeCapBps;
-    const other = cap === LTV_SHUT_BPS ? LTV_OPEN_BPS : cap === LTV_OPEN_BPS ? LTV_SHUT_BPS : 0;
+    // ltvFor is a step: zero with no honoured depth, then min(cap, minBid / P) whatever the depth.
+    const stepPath = (c: number) => {
+      const v = ltvForBps({ depthShares: 1, minBidPx: curve!.minBidPx ?? 0, price: curve!.priceNow, regimeCapBps: c });
+      const x0 = x(xMax / 400);
+      return `M${x(0).toFixed(1)} ${y(0).toFixed(1)} L${x0.toFixed(1)} ${y(0).toFixed(1)} L${x0.toFixed(1)} ${y(v).toFixed(1)} L${x(xMax).toFixed(1)} ${y(v).toFixed(1)}`;
+    };
     const capLine = (bps: number, label: string, active: boolean) =>
       `<line class="dp-svg__cap${active ? ' is-active' : ''}" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(bps).toFixed(1)}" y2="${y(bps).toFixed(1)}"/>` +
       `<text class="dp-svg__caplabel${active ? ' is-active' : ''}" x="${W - PAD.r}" y="${(y(bps) - 6).toFixed(1)}" text-anchor="end">${label}</text>`;
@@ -67,9 +72,10 @@ export function mountLtvPlot(box: HTMLElement, range: HTMLInputElement, readout:
       .map((b) => `<text class="dp-svg__tick" x="${PAD.l - 8}" y="${(y(b) + 4).toFixed(1)}" text-anchor="end">${b / 100}%</text>`)
       .join('');
     const here = curve.here;
+    const hereBps = here ? ltvBpsAt({ ...params(cap), depthShares: here.depthShares }) : 0;
     const hereMark =
       here && priced()
-        ? `<g class="dp-svg__here" transform="translate(${x(Math.min(here.depthShares, xMax)).toFixed(1)} ${y(here.ltvBps).toFixed(1)})"><circle r="6"/><text x="${here.depthShares > xMax * 0.6 ? -10 : 10}" y="22" text-anchor="${here.depthShares > xMax * 0.6 ? 'end' : 'start'}">you are here</text></g>`
+        ? `<g class="dp-svg__here" transform="translate(${x(Math.min(here.depthShares, xMax)).toFixed(1)} ${y(hereBps).toFixed(1)})"><circle r="6"/><text x="${here.depthShares > xMax * 0.6 ? -10 : 10}" y="22" text-anchor="${here.depthShares > xMax * 0.6 ? 'end' : 'start'}">you are here</text></g>`
         : '';
     box.innerHTML = `<svg class="dp-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" focusable="false" aria-hidden="true">
       <line class="dp-svg__axis" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(0)}" y2="${y(0)}"/>
@@ -78,15 +84,14 @@ export function mountLtvPlot(box: HTMLElement, range: HTMLInputElement, readout:
       ${capLine(LTV_SHUT_BPS, 'shut cap 30%', cap === LTV_SHUT_BPS)}
       ${ticks}${yTicks}
       <text class="dp-svg__tick" x="${W - PAD.r}" y="${H - 6}" text-anchor="end">honoured depth, shares →</text>
-      ${priced() && other ? `<path class="dp-svg__other" d="${path(other)}"/>` : ''}
-      ${priced() ? `<path class="dp-svg__curve" d="${path(cap)}"/>` : ''}
-      <g class="dp-svg__handle" data-dp-handle><line y1="${PAD.t}" y2="${y(0)}"/><circle r="7" data-dp-knob/></g>
+      ${priced() ? `<path class="dp-svg__other" d="${stepPath(cap)}"/>` : ''}
+      ${priced() ? `<path class="dp-svg__curve" d="${path(cap)}"/>` : ''}      <g class="dp-svg__handle" data-dp-handle><line y1="${PAD.t}" y2="${y(0)}"/><circle r="7" data-dp-knob/></g>
       ${hereMark}
     </svg>${priced() ? '' : `<p class="dp-svg__empty t-small">No honoured depth yet, so ltvFor is 0 and every borrow refuses with <code>NoDepth()</code>. The curve appears once a maker bonds a bid naming CurbCredit.</p>`}`;
     placeHandle();
     if (text) {
       text.textContent = priced()
-        ? `Plot of loan-to-value against honoured depth for ${curve.symbol}: it rises in a straight line until the bids cover all the collateral, capped at ${fmtPct(cap, 0)} under the current regime (${fmtPct(LTV_OPEN_BPS, 0)} open, ${fmtPct(LTV_SHUT_BPS, 0)} shut).${here ? ` Today: ${fmtShares(here.depthShares)} shares of honoured depth, ltvFor ${fmtPct(here.ltvBps)}.` : ''}`
+        ? `Plot against honoured depth for ${curve.symbol}: what the pool can borrow, as a share of its collateral, rises in a straight line until the bids cover all the collateral, capped at ${fmtPct(cap, 0)} under the current regime (${fmtPct(LTV_OPEN_BPS, 0)} open, ${fmtPct(LTV_SHUT_BPS, 0)} shut). Each position's ltvFor steps from zero to the lowest bid over the price, under the same cap, as soon as any depth is honoured.${here ? ` Today: ${fmtShares(here.depthShares)} shares of honoured depth, ltvFor ${fmtPct(here.ltvBps)}, the pool up to ${fmtPct(hereBps)}.` : ''}`
         : `No honoured depth for ${curve.symbol}: ltvFor is 0.`;
     }
   };
@@ -99,8 +104,9 @@ export function mountLtvPlot(box: HTMLElement, range: HTMLInputElement, readout:
     g?.querySelector('[data-dp-knob]')?.setAttribute('cy', scale.y(bps).toFixed(1));
     const shut = priced() ? ltvBpsAt({ ...params(LTV_SHUT_BPS), depthShares: hypo }) : 0;
     const open = priced() ? ltvBpsAt({ ...params(LTV_OPEN_BPS), depthShares: hypo }) : 0;
+    const per = priced() ? ltvForBps({ ...params(curve.regimeCapBps), depthShares: hypo }) : 0;
     readout.textContent = priced()
-      ? `At ${fmtShares(Number(hypo.toPrecision(4)))} shares of honoured depth: ${fmtPct(shut)} while shut, ${fmtPct(open)} while open. Maths only; nothing is sent.`
+      ? `At ${fmtShares(Number(hypo.toPrecision(4)))} shares of honoured depth the pool can borrow up to ${fmtPct(shut)} of its collateral while shut, ${fmtPct(open)} while open; each position’s ltvFor is ${fmtPct(per)} now. Maths only; nothing is sent.`
       : 'Needs at least one honoured bid to price the curve.';
   };
 

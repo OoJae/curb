@@ -15,7 +15,7 @@
     <main id="main" class="page page--notes" tabindex="-1">
       <!-- 1. The note -->
       <section class="wrap nt-hero" aria-labelledby="nt-title">
-        <div class="grid">
+        <div class="grid nt-grid">
           <div class="col-ledger nt-hero__text">
             <p class="t-label nt-kicker">Reopen notes · ReopenNote, ClosedAuction, ReopenPointer</p>
             <h1 class="t-h1 vt-title-notes" id="nt-title" data-reveal>Sell the <em>reopen,</em> not the asset.</h1>
@@ -52,7 +52,7 @@
 
       <!-- 2. The descending clock -->
       <section class="wrap section nt-clock" id="clock" aria-labelledby="nt-clock-h">
-        <div class="grid">
+        <div class="grid nt-grid">
           <div class="col-ledger">
             <h2 class="t-h2 nt-h2" id="nt-clock-h">A clock that only falls</h2>
             <div class="nt-prose t-body">
@@ -85,7 +85,7 @@
 
       <!-- 3. The flow -->
       <section class="wrap section nt-flow" id="flow" aria-labelledby="nt-flow-h">
-        <div class="grid">
+        <div class="grid nt-grid">
           <div class="col-ledger">
             <h2 class="t-h2 nt-h2" id="nt-flow-h">Mint, list, bid, redeem</h2>
             <p class="t-body measure nt-flow__lede">Every step is one transaction you sign in your own wallet. Each is simulated first, sent with Curb’s Builder Code attached, and linked to OKLink when it lands. A revert shows its reason.</p>
@@ -177,7 +177,7 @@
 
       <!-- 4. The pointer -->
       <section class="wrap section nt-pointer" id="pointer" aria-labelledby="nt-pointer-h">
-        <div class="grid">
+        <div class="grid nt-grid">
           <div class="col-ledger">
             <h2 class="t-h2 nt-h2" id="nt-pointer-h">The pointer only believes what it saw</h2>
             <div class="nt-prose t-body">
@@ -186,7 +186,7 @@
             </div>
           </div>
         </div>
-        <div class="nt-scroll" tabindex="0" role="region" aria-labelledby="nt-pointer-cap">
+        <div class="nt-scroll nt-tablebox" tabindex="0" role="region" aria-labelledby="nt-pointer-cap">
           <table class="table nt-table">
             <caption id="nt-pointer-cap" data-nt-pointer-cap>ReopenPointer, per note asset</caption>
             <thead><tr><th scope="col">Asset</th><th scope="col" class="num">Epoch</th><th scope="col">Pointer sees</th><th scope="col">Last reopen bracket (HKT)</th><th scope="col">Print</th><th scope="col">Next scheduled reopen</th><th scope="col" class="num">Cap used this closure, shares</th></tr></thead>
@@ -197,7 +197,7 @@
 
       <!-- 5. Lots and the graded price -->
       <section class="wrap section nt-lots" id="lots" aria-labelledby="nt-lots-h">
-        <div class="grid">
+        <div class="grid nt-grid">
           <div class="col-ledger">
             <h2 class="t-h2 nt-h2" id="nt-lots-h">Every sale is graded after the reopen</h2>
             <div class="nt-prose t-body">
@@ -207,7 +207,7 @@
           </div>
           <div class="col-instrument nt-lots__stat" data-nt-realised></div>
         </div>
-        <div class="nt-scroll" tabindex="0" role="region" aria-labelledby="nt-lots-cap">
+        <div class="nt-scroll nt-tablebox" tabindex="0" role="region" aria-labelledby="nt-lots-cap">
           <table class="table nt-table">
             <caption id="nt-lots-cap" data-nt-lots-cap>Lots on ClosedAuction</caption>
             <thead><tr><th scope="col">Lot</th><th scope="col">Note</th><th scope="col">Asset</th><th scope="col" class="num">Shares</th><th scope="col" class="num">Start → floor, USDG</th><th scope="col" class="num">Now or cleared</th><th scope="col">Ends</th><th scope="col">Status</th><th scope="col" class="num">Realised</th></tr></thead>

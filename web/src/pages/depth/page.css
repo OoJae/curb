@@ -7,11 +7,7 @@
   padding-block: var(--s-8) var(--section);
 }
 
-.dp-hero .grid,
-.dp-numbers .grid,
-.dp-book .grid,
-.dp-credit .grid,
-.dp-cure .grid {
+.dp-grid {
   row-gap: var(--s-5);
   align-items: start;
 }
@@ -123,6 +119,39 @@
   stroke-dasharray: 4 4;
 }
 
+.dp-plot__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-half) var(--s-3);
+  margin-bottom: var(--s-2);
+  color: var(--slate);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+}
+
+.dp-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.dp-key__line {
+  width: var(--s-2);
+  border-top: var(--rule-strong) solid var(--ivory);
+}
+
+.dp-key__line--step {
+  border-top: var(--rule) dashed var(--slate);
+}
+
+.dp-key__dot {
+  width: var(--s-1);
+  height: var(--s-1);
+  border-radius: 50%;
+  background: var(--streetlamp);
+}
+
 .dp-svg__here circle {
   fill: var(--streetlamp);
 }
@@ -184,7 +213,7 @@
 }
 
 /* ── 3. The book ──────────────────────────────────────────────────────────────────────────── */
-.dp-book .nt-scroll {
+.dp-book__scroll {
   margin-top: var(--s-5);
 }
 
@@ -384,6 +413,6 @@
   max-width: 72ch;
 }
 
-.dp-act .nt-flow__wallet {
+.dp-act__wallet {
   margin-top: var(--s-4);
 }

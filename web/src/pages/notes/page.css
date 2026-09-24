@@ -6,7 +6,7 @@
   padding-block: var(--s-8) var(--section);
 }
 
-.nt-hero .grid {
+.nt-hero .nt-grid {
   row-gap: var(--s-6);
   align-items: start;
 }
@@ -48,9 +48,7 @@
 }
 
 /* ── 2. The descending clock ─────────────────────────────────────────────────────────────── */
-.nt-clock .grid,
-.nt-lots .grid,
-.nt-pointer .grid {
+.nt-grid {
   row-gap: var(--s-5);
 }
 
@@ -189,8 +187,7 @@
 }
 
 /* ── 4 / 5. Tables ───────────────────────────────────────────────────────────────────────── */
-.nt-pointer .nt-scroll,
-.nt-lots .nt-scroll {
+.nt-tablebox {
   margin-top: var(--s-5);
 }
 
