@@ -1,7 +1,29 @@
 {
-  "name": "curb",
-  "private": true,
-  "description": "Curb: the market that trades when the exchange is shut. Infrastructure config lives in .railway/railway.ts.",
+  "name": "curb-verify",
+  "version": "0.1.0",
+  "description": "Re-derive a Curb number instead of trusting it: check any MarketClock round or Scorecard mark on X Layer against the evidence it was published with.",
+  "//": "This is also the repository root. Infrastructure config lives in .railway/railway.ts (devDependency railway). The published package is the verifier alone: see files.",
+  "keywords": ["curb", "x-layer", "verifier", "attestation", "merkle", "tokenized-equities"],
+  "license": "MIT",
+  "bin": {
+    "curb-verify": "tools/curb-verify/bin/curb-verify.mjs"
+  },
+  "files": [
+    "tools/curb-verify/bin/",
+    "tools/curb-verify/src/",
+    "services/attestor/src/",
+    "services/keeper/src/",
+    "docs/VERIFY.md",
+    "!**/*.test.ts"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "@openzeppelin/merkle-tree": "1.0.8",
+    "canonicalize": "5.0.0",
+    "ethers": "6.17.0"
+  },
   "devDependencies": {
     "railway": "3.11.0"
   }

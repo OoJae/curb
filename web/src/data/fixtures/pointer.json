@@ -1,0 +1,14 @@
+[
+  {
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "symbol": "wTCENTx",
+    "epoch": 0,
+    "open": false,
+    "shutSeenAtMs": null,
+    "openedAtMs": null,
+    "openedBlock": null,
+    "print": null,
+    "printE18": null,
+    "printedAtMs": null
+  }
+]

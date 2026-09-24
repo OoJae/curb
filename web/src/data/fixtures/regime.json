@@ -1,0 +1,18 @@
+{
+  "symbol": "wTCENTx",
+  "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+  "regime": "CLOSED",
+  "attestedRegime": "CLOSED",
+  "cap": 0,
+  "asOfMs": 1790256611000,
+  "readAtMs": 1790256756918,
+  "block": 71487722,
+  "stale": false,
+  "attestedAgoMin": 2,
+  "nextTransitionAtMs": 1790298000000,
+  "halted": false,
+  "multiplierNonce": 0,
+  "paper": false,
+  "glyph": "shut",
+  "source": "fixture"
+}

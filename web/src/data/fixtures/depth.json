@@ -1,0 +1,254 @@
+[
+  {
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "symbol": "wTCENTx",
+    "honouredShares": 0.028,
+    "honouredNotional": 1.456,
+    "minBidPx": 52,
+    "soonestExpiryMs": 1790332200000,
+    "ltvBps": 3000,
+    "realisable": 1.456,
+    "certs": [
+      {
+        "id": "1",
+        "maker": "0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E",
+        "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+        "symbol": "wTCENTx",
+        "beneficiary": "0x0000000000000000000000000000000000000000",
+        "sizeSharesRaw": "28000000000000000",
+        "sizeShares": 0.028,
+        "remainingSharesRaw": "28000000000000000",
+        "remainingShares": 0.028,
+        "bidPx": 52,
+        "bidPxRaw": "52000000",
+        "bond": 1,
+        "bondRaw": "1000000",
+        "notional": 1.456,
+        "postedAtMs": 1790238600000,
+        "expiryMs": 1790332200000,
+        "status": "LIVE",
+        "makerHonourable": true,
+        "specimen": true,
+        "block": 71487725,
+        "source": "fixture"
+      }
+    ],
+    "curve": {
+      "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+      "symbol": "wTCENTx",
+      "regime": "CLOSED",
+      "regimeCapBps": 3000,
+      "priceNow": 55.87261259906549,
+      "minBidPx": 52,
+      "totalCollateral": 0.05,
+      "points": [
+        {
+          "depthShares": 0,
+          "ltvBps": 0
+        },
+        {
+          "depthShares": 0.0020833333333333333,
+          "ltvBps": 387
+        },
+        {
+          "depthShares": 0.004166666666666667,
+          "ltvBps": 775
+        },
+        {
+          "depthShares": 0.006250000000000001,
+          "ltvBps": 1163
+        },
+        {
+          "depthShares": 0.008333333333333333,
+          "ltvBps": 1551
+        },
+        {
+          "depthShares": 0.010416666666666666,
+          "ltvBps": 1938
+        },
+        {
+          "depthShares": 0.012500000000000002,
+          "ltvBps": 2326
+        },
+        {
+          "depthShares": 0.014583333333333335,
+          "ltvBps": 2714
+        },
+        {
+          "depthShares": 0.016666666666666666,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.01875,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.020833333333333332,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.02291666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.025000000000000005,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.027083333333333334,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.02916666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.03125,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.03333333333333333,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.03541666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.0375,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.03958333333333334,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.041666666666666664,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.043750000000000004,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.04583333333333334,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.04791666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.05000000000000001,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.052083333333333336,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.05416666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.05625,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.05833333333333334,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.060416666666666674,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.0625,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.06458333333333334,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.06666666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.06875,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.07083333333333335,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.07291666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.075,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.07708333333333334,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.07916666666666668,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.08125,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.08333333333333333,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.08541666666666668,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.08750000000000001,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.08958333333333333,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.09166666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.09375,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.09583333333333334,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.09791666666666667,
+          "ltvBps": 3000
+        },
+        {
+          "depthShares": 0.10000000000000002,
+          "ltvBps": 3000
+        }
+      ],
+      "here": {
+        "depthShares": 0.028,
+        "ltvBps": 3000
+      },
+      "specimen": true,
+      "block": 71487725,
+      "source": "fixture"
+    },
+    "specimen": true,
+    "block": 71487725,
+    "source": "fixture"
+  }
+]

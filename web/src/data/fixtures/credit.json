@@ -1,0 +1,30 @@
+[
+  {
+    "borrower": "0x055ba8acd60a2287b2d01cb3bf237e4424357105",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "symbol": "wTCENTx",
+    "collateralRaw": "50000000000000000",
+    "collateral": 0.05,
+    "debt": 1.4,
+    "debtRaw": "1400000",
+    "limit": 0.838089,
+    "limitRaw": "838089",
+    "ltvBps": 3000,
+    "breach": {
+      "known": true,
+      "breached": true
+    },
+    "cure": {
+      "active": true,
+      "lastOpen": false,
+      "openedAtMs": 1790236500000,
+      "lastTickAtMs": 1790236500000,
+      "openSecondsUsed": 0,
+      "requiredSeconds": 1800,
+      "priceAtBreach": 55.87261259906549
+    },
+    "specimen": true,
+    "block": 71487725,
+    "source": "fixture"
+  }
+]

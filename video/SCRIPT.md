@@ -26,19 +26,20 @@ and repeat the whole sentence (or cut the fluff in Clipchamp so no line appears 
 
 **4 · MarketClock (0:52–1:24)** — *Picture: /clock; an OKLink attestation; the terminal.*
 > Curb starts with MarketClock: a free, on-chain oracle that says whether each stock's home market is
-> really open. ⏸ Two independent hosts attest it every five minutes, and every round commits the exact
-> issuer data it was built from, so anyone can re-derive it with one command. ⏸ And every transaction
+> really open. ⏸ One host attests it every few minutes, a second, independent host checks and signs every
+> round, and each round commits the exact issuer data it was built from, so anyone can re-derive it
+> with one command. ⏸ And every transaction
 > carries our X Layer Builder Code.
 
-**5 · Scorecard (1:24–1:56)** — *Picture: a row committed, then graded; the terminal verifying it.*
-> Before every reopen, Curb commits its price on chain. ⏸ After the reopen, the contract reads the pool
+**5 · Scorecard (1:24–1:56)** — anchor: "Before a reopen" — *Picture: a row committed, then graded; the terminal verifying it.*
+> Before a reopen, Curb commits its price on chain. ⏸ After the reopen, the contract reads the pool
 > itself and grades us against the last price. Nobody supplies the answer, not even us. ⏸ When the
 > pools went quiet, our marks tied, and the record says so, because a tie isn't a win. ⏸ So we changed
 > the method, not the rows: the new mark listens to markets that trade while Hong Kong is shut.
 
 **6 · Agents pay (1:56–2:32)** — *Picture: marketplace #13869; the 402; onchainos paying; the receipt.*
-> Agents can buy all of this. Curb is listed on OKX's AI marketplace, with three paid services over
-> x402. ⏸ Ask without paying, and you get a free preview and a price. ⏸ Pay one cent from an OKX Agentic
+> Agents can buy all of this. Curb is registered on OKX's AI marketplace, with three paid services
+> over x402. ⏸ Ask without paying, and you get a free preview and a price. ⏸ Pay one cent from an OKX Agentic
 > Wallet, and you get the answer and a receipt that ties the payment to the exact bytes you received.
 > ⏸ This one is our own wallet paying us: it proves the rail, not demand.
 
