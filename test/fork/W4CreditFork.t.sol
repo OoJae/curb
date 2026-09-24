@@ -39,7 +39,7 @@ contract W4CreditForkTest is Test {
     address constant W_AAPL = 0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f;
 
     /// @dev K's demo cert expiry: Sat 17 Oct 2026 06:00Z, under DepthCert's 30-day MAX_LIFE from a Fri 25 Sep post.
-    ///      It outlives the shut horizon (now + 73 h + 30 min) until Tue 13 Oct 04:30Z, so the demo loan's arc
+    ///      It outlives the shut horizon (now + 73 h + 30 min) until Wed 14 Oct 04:30Z, so the demo loan's arc
     ///      (breached at the cut, frozen all weekend, cured at Monday's reopen) is not undone before the 7 Oct finale.
     ///      On a fork taken later than that the test uses now + 110 h instead.
     uint64 constant DEMO_EXPIRY = 1792216800;
