@@ -16,6 +16,34 @@ import type { HTTPAdapter } from "@okxweb3/x402-core/server";
 
 export class BodyTooLarge extends Error {}
 
+export type AdapterRefusal = { ok: false; status: number; body: Record<string, unknown> };
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * A POST body's parameters as name/value pairs: a flat JSON object of strings, numbers or booleans, or a
+ * form-encoded body. Null values count as absent. Anything else is a refusal naming what is accepted.
+ */
+function bodyParams(body: Buffer, contentType: string): Array<[string, string]> | AdapterRefusal {
+  const text = body.toString("utf8");
+  if (text.trim() === "") return [];
+  const refusal = (detail: string): AdapterRefusal => ({ ok: false, status: 400, body: { error: "bad-body", detail } });
+  if (contentType.includes("x-www-form-urlencoded")) return [...new URLSearchParams(text)];
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { return refusal("the body must be a JSON object of parameters, or form-encoded"); }
+  if (!isPlainObject(parsed)) return refusal("the body must be a JSON object of parameters");
+  const out: Array<[string, string]> = [];
+  for (const [k, v] of Object.entries(parsed)) {
+    if (v === null) continue;
+    if (typeof v !== "string" && typeof v !== "number" && typeof v !== "boolean") {
+      return refusal(`parameter ${JSON.stringify(k.slice(0, 64))} must be a string or a number`);
+    }
+    out.push([k, String(v)]);
+  }
+  return out;
+}
+
 /** Buffer the request body, refusing past `limitBytes` so a slow upload cannot hold memory. */
 export async function bufferBody(req: IncomingMessage, limitBytes = 64 * 1024): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -33,16 +61,45 @@ export class NodeHttpAdapter implements HTTPAdapter {
   readonly req: IncomingMessage;
   readonly body: Buffer;
   readonly url: URL;
+  readonly method: string;
 
   // Explicit fields rather than constructor parameter properties: Node's type stripping only accepts
-  // erasable TypeScript syntax.
-  constructor(req: IncomingMessage, body: Buffer, publicOrigin: string) {
+  // erasable TypeScript syntax. `view` is for asGet() only: the same request under another method and URL.
+  constructor(req: IncomingMessage, body: Buffer, publicOrigin: string, view?: { method: string; url: URL }) {
     this.req = req;
     this.body = body;
+    if (view) {
+      this.method = view.method;
+      this.url = view.url;
+      return;
+    }
+    this.method = (req.method ?? "GET").toUpperCase();
     const raw = req.url ?? "/";
     // Parse against a throwaway base, keep only path + query, then re-root on the public origin.
     const parsed = new URL(raw.startsWith("/") ? raw : "/", "http://request.invalid");
     this.url = new URL(parsed.pathname + parsed.search, publicOrigin);
+  }
+
+  /**
+   * This request as the GET it stands for. A priced route answers POST exactly as it answers GET: OKX's
+   * A2MCP self-check probes an endpoint with `curl -i -X POST` and no parameters, and a buyer agent may send
+   * its parameters as a body rather than a query string. Body parameters join the query string, so a
+   * route's `accept` parses one set of parameters however they arrived; a name given in both with a
+   * different value is refused, since it is then ambiguous what is being bought. The view has no body.
+   */
+  asGet(): { ok: true; adapter: NodeHttpAdapter } | AdapterRefusal {
+    if (this.method === "GET") return { ok: true, adapter: this };
+    const params = bodyParams(this.body, this.getHeader("content-type") ?? "");
+    if (!Array.isArray(params)) return params;
+    const url = new URL(this.url);
+    for (const [k, v] of params) {
+      const inUrl = url.searchParams.getAll(k);
+      if (inUrl.length === 0) url.searchParams.append(k, v);
+      else if (inUrl.length > 1 || inUrl[0] !== v) {
+        return { ok: false, status: 400, body: { error: "conflicting-parameter", parameter: k.slice(0, 64) } };
+      }
+    }
+    return { ok: true, adapter: new NodeHttpAdapter(this.req, Buffer.alloc(0), url.origin, { method: "GET", url }) };
   }
 
   getHeader(name: string): string | undefined {
@@ -51,7 +108,7 @@ export class NodeHttpAdapter implements HTTPAdapter {
   }
 
   getMethod(): string {
-    return (this.req.method ?? "GET").toUpperCase();
+    return this.method;
   }
 
   getPath(): string {

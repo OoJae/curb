@@ -303,6 +303,71 @@ test("paid: verify, then build, then settle; 200 with the receipt header, and a 
   } finally { await h.close(); }
 });
 
+test("POST is the same priced resource as GET: OKX's bare `curl -i -X POST` self-check gets the 402", async () => {
+  const h = await harness();
+  try {
+    const post = (path: string, body?: string, contentType = "application/json") =>
+      fetch(`${h.base}${path}`, { method: "POST", headers: { ...API, ...(body === undefined ? {} : { "content-type": contentType }) }, body });
+
+    // No parameters at all: every priced path answers with its challenge, never 400 or 405.
+    for (const route of PRICED_ROUTES) {
+      const r = await post(route.path);
+      assert.equal(r.status, 402, route.path);
+      assert.equal(decodePaymentRequiredHeader(r.headers.get("payment-required")!).accepts[0].amount, route.atomic, route.path);
+      assert.match(r.headers.get("access-control-allow-methods") ?? "", /POST/);
+      await r.arrayBuffer();
+    }
+
+    // Parameters from a JSON body, a form body, or the query string all bill the same query.
+    const get = await (await fetch(`${h.base}/v1/closure-calendar?symbol=wSHEINx&horizonDays=3`, { headers: API })).json();
+    for (const [path, body, type] of [
+      ["/v1/closure-calendar", JSON.stringify({ symbol: "wSHEINx", horizonDays: 3 }), "application/json"],
+      ["/v1/closure-calendar", "symbol=wSHEINx&horizonDays=3", "application/x-www-form-urlencoded"],
+      ["/v1/closure-calendar?symbol=wSHEINx", JSON.stringify({ symbol: "wSHEINx", horizonDays: "3", ignored: null }), "application/json"],
+      ["/v1/closure-calendar?symbol=wSHEINx&horizonDays=3", "", "application/json"],
+    ] as const) {
+      const r = await post(path, body, type);
+      assert.equal(r.status, 402, `${path} ${body}`);
+      assert.deepEqual(await r.json(), get, `${path} ${body}`);
+    }
+
+    // Refused for free, before any challenge.
+    for (const [path, body, error] of [
+      ["/v1/closure-calendar?symbol=wTCENTx", JSON.stringify({ symbol: "wSHEINx" }), "conflicting-parameter"],
+      ["/v1/closure-calendar", "{not json", "bad-body"],
+      ["/v1/closure-calendar", JSON.stringify(["wTCENTx"]), "bad-body"],
+      ["/v1/closure-calendar", JSON.stringify({ symbol: { nested: "wTCENTx" } }), "bad-body"],
+      ["/v1/closure-calendar", JSON.stringify({ symbol: "wNOPEx" }), "unknown-symbol"],
+    ] as const) {
+      const r = await post(path, body);
+      assert.equal(r.status, 400, body);
+      assert.equal(r.headers.get("payment-required"), null, body);
+      assert.equal((await r.json()).error, error, body);
+    }
+    assert.deepEqual(h.events, ["supported"], "nothing verified or settled");
+  } finally { await h.close(); }
+});
+
+test("paid by POST: the same verify, build, settle and receipt as GET, billed for the body's parameters", async () => {
+  const h = await harness();
+  try {
+    const pr = await challenge(h.base);
+    const r = await fetch(`${h.base}/v1/closure-calendar`, {
+      method: "POST",
+      headers: { ...API, "content-type": "application/json", "PAYMENT-SIGNATURE": signedPayment(pr) },
+      body: JSON.stringify({ symbol: "wTCENTx", horizonDays: 3 }),
+    });
+    assert.equal(r.status, 200);
+    const body = await r.json();
+    assert.equal(body.schema, CALENDAR_SCHEMA);
+    assert.equal(body.horizonDays, 3);
+    assert.deepEqual(h.events, ["supported", "verify", "build", "settle"]);
+    const receipt = JSON.parse(readFileSync(join(h.dataDir, "receipts", `${r.headers.get("x-curb-receipt")}.json`), "utf8"));
+    assert.equal(receipt.route, "GET /v1/closure-calendar", "one priced resource, whichever verb carried it");
+    assert.deepEqual(receipt.query, { symbol: "wTCENTx", horizonDays: 3 });
+  } finally { await h.close(); }
+});
+
 test("verified, but the answer cannot be built: 503 and the payment is NEVER settled", async () => {
   const h = await harness();
   try {
@@ -437,9 +502,12 @@ test("free refusals come before any challenge: bad input, unknown symbol, issuer
     assert.equal(r.headers.get("payment-required"), null);
     assert.deepEqual(await r.json(), { error: "unknown-symbol", symbol: "wNOPEx", valid: ["wTCENTx", "wSHEINx"] });
 
-    r = await get("/v1/closure-calendar");
-    assert.equal(r.status, 400);
-    assert.equal((await r.json()).error, "missing-symbol");
+    // No symbol is the default asset, not a refusal: OKX's marketplace probes with no parameters.
+    for (const q of ["", "?symbol=", "?symbol=wTCENTx&horizonDays="]) {
+      r = await get(`/v1/closure-calendar${q}`);
+      assert.equal(r.status, 402, q);
+      assert.equal((await r.json()).symbol, "wTCENTx", q);
+    }
 
     for (const bad of ["0", "15", "abc", "7.5", "-1"]) {
       r = await get(`/v1/closure-calendar?symbol=wTCENTx&horizonDays=${bad}`);
@@ -546,9 +614,17 @@ test("the free routes: assets, discovery, health and home", async () => {
     const missing = await fetch(`${h.base}/receipts/0x${"00".repeat(32)}.json`);
     assert.equal(missing.status, 404);
     await missing.arrayBuffer();
-    const post = await fetch(`${h.base}/v1/closure-calendar`, { method: "POST" });
-    assert.equal(post.status, 405);
-    await post.arrayBuffer();
+    // POST is for the priced routes only; everything else is GET.
+    for (const path of ["/", "/healthz", "/v1/assets", "/.well-known/x402"]) {
+      const post = await fetch(`${h.base}${path}`, { method: "POST" });
+      assert.equal(post.status, 405, path);
+      assert.equal(post.headers.get("allow"), "GET, OPTIONS", path);
+      await post.arrayBuffer();
+    }
+    const put = await fetch(`${h.base}/v1/closure-calendar`, { method: "PUT" });
+    assert.equal(put.status, 405);
+    assert.equal(put.headers.get("allow"), "GET, POST, OPTIONS");
+    await put.arrayBuffer();
   } finally { await h.close(); }
 });
 

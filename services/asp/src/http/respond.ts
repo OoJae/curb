@@ -14,7 +14,7 @@ import type { HTTPResponseInstructions } from "@okxweb3/x402-core/server";
 
 export const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, OPTIONS",
+  "access-control-allow-methods": "GET, POST, OPTIONS",
   "access-control-allow-headers": "PAYMENT-SIGNATURE, X-PAYMENT, Content-Type, Accept",
   "access-control-expose-headers": "PAYMENT-REQUIRED, PAYMENT-RESPONSE, x-curb-receipt",
 };
