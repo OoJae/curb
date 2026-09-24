@@ -29,6 +29,8 @@ contract MockDepthCert is IDepthCert {
     mapping(uint256 => Cert) internal _certs;
     mapping(uint256 => bool) public fades;
     bool public revertTake;
+    /// @dev Extra work done inside `honouredDepth` (keccak rounds), to model a big book's gas cost.
+    uint256 public burn;
     uint256 public nextId = 1;
 
     /// @dev Last `take`, for assertions.
@@ -72,6 +74,7 @@ contract MockDepthCert is IDepthCert {
 
     function setFade(uint256 id, bool on) external { fades[id] = on; }
     function setRevertTake(bool on) external { revertTake = on; }
+    function setBurn(uint256 rounds) external { burn = rounds; }
 
     // --- IDepthCert ------------------------------------------------------------------------
 
@@ -80,8 +83,10 @@ contract MockDepthCert is IDepthCert {
         view
         returns (uint256 shares, uint256 notional, uint128 minBidPx, uint64 soonestExpiry)
     {
+        bytes32 acc;
+        for (uint256 i; i < burn; ++i) acc = keccak256(abi.encode(acc, i));
         Book memory bk = books[wrapper][beneficiary];
-        if (bk.shares == 0 || bk.expiry < minExpiry) return (0, 0, 0, 0);
+        if (bk.shares == 0 || bk.expiry < minExpiry || acc == bytes32(uint256(1))) return (0, 0, 0, 0);
         return (bk.shares, MulDiv.mulDiv(bk.shares, bk.minBidPx, 1e18), bk.minBidPx, bk.expiry);
     }
 
