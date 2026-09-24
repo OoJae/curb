@@ -215,6 +215,11 @@ export async function putObject(cfg: R2Config, key: string, body: Uint8Array, op
       return { ok: true, status: res.status, existed: res.status === 412 };
     }
     const text = await Promise.race([res.text(), deadline]).catch(() => "");
+    // R2 checks the bucket lock before If-None-Match: a repeat PUT of a write-once key under a lock rule answers
+    // 409 ObjectLockedByBucketPolicy, not 412. Either way the object is already there and can never change.
+    if (policy.writeOnce && res.status === 409 && /<Code>ObjectLockedByBucketPolicy<\/Code>/.test(text)) {
+      return { ok: true, status: 409, existed: true };
+    }
     return { ok: false, status: res.status, existed: false, error: scrub(`HTTP ${res.status}${s3Error(text)}`, cfg) };
   } catch (e) {
     return { ok: false, status: 0, existed: false, error: scrub(describe(e), cfg) };

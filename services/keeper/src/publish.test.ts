@@ -145,6 +145,17 @@ test("412 means the object is already there: success, not an error", async () =>
   assert.deepEqual(await putObject(CFG, `marks/${ROOT}.json`, Buffer.from("{}"), { fetch: f }), { ok: true, status: 412, existed: true });
 });
 
+test("409 ObjectLockedByBucketPolicy on a write-once key is the lock's 412: already there, not an error", async () => {
+  const locked = "<Error><Code>ObjectLockedByBucketPolicy</Code><Message>The object is locked by the bucket policy.</Message></Error>";
+  const { f } = recorder(() => new Response(locked, { status: 409 }));
+  assert.deepEqual(await putObject(CFG, `rounds/${ROOT}.json`, Buffer.from("{}"), { fetch: f }), { ok: true, status: 409, existed: true });
+  // Any other 409, or a lock answer on a key that is not write-once, stays an error.
+  const other = recorder(() => new Response("<Error><Code>OperationAborted</Code></Error>", { status: 409 }));
+  assert.equal((await putObject(CFG, `rounds/${ROOT}.json`, Buffer.from("{}"), { fetch: other.f })).ok, false);
+  const idx = recorder(() => new Response(locked, { status: 409 }));
+  assert.equal((await putObject(CFG, "index/latest.json", Buffer.from("{}"), { fetch: idx.f })).ok, false);
+});
+
 test("an HTTP failure reports only the S3 code and message, scrubbed of both keys", async () => {
   const xml = `<Error><Code>SignatureDoesNotMatch</Code><Message>bad sig for ${AKID} using ${SECRET}</Message><StringToSign>…</StringToSign></Error>`;
   const { f } = recorder(() => new Response(xml, { status: 403 }));
