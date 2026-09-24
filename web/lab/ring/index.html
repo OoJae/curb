@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Week Ring lab</title>
+    <link rel="stylesheet" href="./stubs/tokens.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: var(--ink); color: var(--ivory); }
+      body { font: 13px/1.4 ui-monospace, Menlo, monospace; display: grid; grid-template-columns: 1fr 300px; }
+      .stage { position: relative; display: grid; place-items: center; overflow: hidden; }
+      .fig { position: relative; width: min(92vh, calc(100vw - 340px)); aspect-ratio: 1; }
+      .fig > img, .fig > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+      .fig.live > img { opacity: 0; }
+      .caption { position: absolute; left: 24px; bottom: 24px; font-size: 18px; min-height: 1.4em; }
+      aside { border-left: 1px solid color-mix(in oklab, var(--ivory) 14%, var(--ink)); padding: 16px; overflow: auto; }
+      aside label { display: block; margin: 12px 0 4px; color: var(--slate); }
+      aside input[type='range'] { width: 100%; }
+      aside button, aside select { font: inherit; background: none; color: inherit; border: 1px solid var(--slate); padding: 4px 8px; }
+      pre { white-space: pre-wrap; color: var(--slate); }
+      @media (max-width: 767.98px) {
+        body { display: block; }
+        .fig { width: 100vw; }
+        aside { display: none; }
+      }
+      body.capture { display: block; background: transparent; }
+      body.capture aside, body.capture .caption { display: none; }
+      body.capture .stage { display: block; }
+      body.capture .fig { width: var(--capture-size); }
+      body.capture .fig > img { display: none; }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <div class="fig" id="fig">
+        <img src="/posters/ring-logo.avif" alt="" width="1600" height="1600" aria-hidden="true" onerror="this.remove()" />
+        <canvas id="ring" aria-hidden="true"></canvas>
+      </div>
+      <div class="caption" id="caption"></div>
+    </main>
+    <aside>
+      <strong>Week Ring lab</strong>
+      <label for="p">progress <span id="pv">0</span></label>
+      <input id="p" type="range" min="0" max="1" step="0.001" value="0" />
+      <label for="now">now slot <span id="nv"></span></label>
+      <input id="now" type="range" min="0" max="2015" step="1" />
+      <label for="regime">regime</label>
+      <select id="regime"><option>shut</option><option>open</option><option>unknown</option></select>
+      <p><button id="pulse">pulse()</button> <button id="play">play 4.5 s</button></p>
+      <pre id="info"></pre>
+    </aside>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
