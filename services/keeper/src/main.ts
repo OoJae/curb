@@ -42,6 +42,7 @@ import type { PeriodLimits } from "./reopen.ts";
 import type { ExchangeSchedule, TradingObject } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
 import { Sender, RevertedInSimulation, PendingUnresolved, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
+import { publisherFromEnv } from "./publish.ts";
 
 const MODES = ["shadow", "live"];
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -166,6 +167,9 @@ const log = (event: string, fields: Record<string, unknown> = {}) =>
     { t: new Date().toISOString(), host: CFG.hostId, event, ...fields },
     (_, v) => (typeof v === "bigint" ? v.toString() : v),
   ));
+
+/** Second copy of every mark bundle, in the locked R2 archive (publish.ts). Off in shadow mode and while R2_* is unset. */
+const publisher = publisherFromEnv(CFG.dataDir, CFG.mode, log);
 
 /** Hash of every non-test source file, committed in each bundle so a row names the code that made it. */
 function codeDigest(): string {
@@ -488,6 +492,7 @@ async function main() {
     : { on: false, note: "DATA_SUFFIX unset: transactions carry no Builder Code" });
   mkdirSync(join(CFG.dataDir, "marks"), { recursive: true });
   mkdirSync(join(CFG.dataDir, "closures"), { recursive: true });
+  publisher.start();
   const digest = codeDigest();
 
   const password = process.env.KEEPER_KEY_PASSWORD ?? process.env.ATTESTOR_KEY_PASSWORD;
@@ -839,6 +844,7 @@ async function buildPlan(
     // Evidence first, always: a row whose bundle was not on disk before the signature is a number
     // we would be asking people to take on trust.
     persistOnce(join(CFG.dataDir, "marks", `${round.root}.json`), JSON.stringify(round.bundle));
+    publisher.enqueue(`marks/${round.root.toLowerCase()}.json`, join(CFG.dataDir, "marks", `${round.root}.json`));
     log("mark-built", {
       symbol: c.symbol, root: round.root, mark: built.mark.markE18, band: built.mark.bandBps,
       drift: built.mark.driftBps, swaps: closureSwaps.length, flags: built.mark.flags,
@@ -913,7 +919,7 @@ function startHttp(health: Health) {
     if (url === "/healthz") {
       const ok = health.ticks > 0 && Date.now() - health.lastTickOkMs < 6 * CFG.tickMs;
       res.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok, ...health }));
+      res.end(JSON.stringify({ ok, ...health, archive: publisher.health() }));
       return;
     }
     const m = url.match(/^\/marks\/(0x[0-9a-fA-F]{64})\.json$/);

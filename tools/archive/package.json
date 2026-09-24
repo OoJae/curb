@@ -1,0 +1,11 @@
+{
+  "name": "@curb/archive-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "for tz in UTC Asia/Hong_Kong America/Los_Angeles Pacific/Kiritimati; do echo \"--- TZ=$tz\"; TZ=$tz node --test --experimental-strip-types '*.test.ts' || exit 1; done",
+    "test:once": "node --test --experimental-strip-types '*.test.ts'",
+    "backfill": "node --experimental-strip-types backfill.ts",
+    "check": "tsc --noEmit"
+  }
+}
