@@ -1,0 +1,27 @@
+{
+  "name": "curb-demo",
+  "private": true,
+  "type": "module",
+  "description": "Curb product demo (HyperFrames, 1920x1080, 30 fps, target 3:12). OKX Dev Day submission.",
+  "scripts": {
+    "dev": "HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 npx --yes hyperframes@0.8.40 preview",
+    "lint": "HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 npx --yes hyperframes@0.8.40 lint",
+    "check": "HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 npx --yes hyperframes@0.8.40 check",
+    "snapshot": "HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 npx --yes hyperframes@0.8.40 snapshot",
+    "transcribe": "HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 npx --yes hyperframes@0.8.40 transcribe",
+    "render:draft": "HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 npx --yes hyperframes@0.8.40 render --quality draft --output renders/curb-draft.mp4",
+    "render": "HYPERFRAMES_NO_TELEMETRY=1 HYPERFRAMES_NO_UPDATE_CHECK=1 npx --yes hyperframes@0.8.40 render --quality delivery --video-frame-format png --output renders/curb-demo.mp4",
+    "terminal": "node capture/term-build.mjs",
+    "capture:terminal": "node capture/terminal-now.mjs",
+    "capture:oklink": "node capture/run.mjs O1 O2 O3 O4 O5 O6",
+    "capture": "node capture/run.mjs",
+    "live-window": "node capture/live-window.mjs",
+    "align": "node capture/align/align-beats.mjs",
+    "retime": "node capture/align/retime.mjs"
+  },
+  "devDependencies": {
+    "gsap": "3.15.0",
+    "ox": "1.7.5",
+    "playwright-core": "1.63.0"
+  }
+}

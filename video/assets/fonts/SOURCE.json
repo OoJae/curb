@@ -1,0 +1,73 @@
+{
+  "fetched": "2026-09-24T13:10:24.262Z",
+  "css": "https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Libre+Franklin:ital,wght@0,100..900;1,100..900&family=Martian+Mono:wdth,wght@75..112.5,100..800&display=swap",
+  "subset": "latin",
+  "files": [
+    {
+      "family": "Bodoni Moda",
+      "style": "italic",
+      "weight": "400 900",
+      "file": "bodoni-moda-italic.woff2",
+      "bytes": 53640,
+      "src": "https://fonts.gstatic.com/s/bodonimoda/v28/aFTS7PxzY382XsXX63LUYJSPeKrcW3JNsao.woff2",
+      "unicodeRange": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+    },
+    {
+      "family": "Bodoni Moda",
+      "style": "normal",
+      "weight": "400 900",
+      "file": "bodoni-moda.woff2",
+      "bytes": 46248,
+      "src": "https://fonts.gstatic.com/s/bodonimoda/v28/aFTQ7PxzY382XsXX63LUYJSKSKjWXFBP.woff2",
+      "unicodeRange": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+    },
+    {
+      "family": "Libre Franklin",
+      "style": "italic",
+      "weight": "100 900",
+      "file": "libre-franklin-italic.woff2",
+      "bytes": 32816,
+      "src": "https://fonts.gstatic.com/s/librefranklin/v20/jizBREVItHgc8qDIbSTKq4XkRiUa6zUTjnTLgNs.woff2",
+      "unicodeRange": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+    },
+    {
+      "family": "Libre Franklin",
+      "style": "normal",
+      "weight": "100 900",
+      "file": "libre-franklin.woff2",
+      "bytes": 29336,
+      "src": "https://fonts.gstatic.com/s/librefranklin/v20/jizDREVItHgc8qDIbSTKq4XkRiUf2zcZiVbJ.woff2",
+      "unicodeRange": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+    },
+    {
+      "family": "Martian Mono",
+      "style": "normal",
+      "weight": "100 800",
+      "stretch": "75% 112.5%",
+      "file": "martian-mono.woff2",
+      "bytes": 38392,
+      "src": "https://fonts.gstatic.com/s/martianmono/v6/2V0aKIcADoYhV6w87xrTKjsSBanIRWbh8g.woff2",
+      "unicodeRange": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+    }
+  ],
+  "symbols": [
+    {
+      "file": "martian-mono-sym.woff2",
+      "css": "https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,100..800&text=%E2%86%92%E2%86%97%E2%82%AE%E2%86%90",
+      "bytes": 1340,
+      "text": "→↗₮←"
+    },
+    {
+      "file": "libre-franklin-sym.woff2",
+      "css": "https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@100..900&text=%E2%86%92%E2%86%97%E2%82%AE%E2%86%90",
+      "bytes": 1220,
+      "text": "→↗₮←"
+    },
+    {
+      "file": "bodoni-moda-sym.woff2",
+      "css": "https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400..900&text=%E2%86%92%E2%86%97%E2%82%AE%E2%86%90",
+      "bytes": 1664,
+      "text": "→↗₮←"
+    }
+  ]
+}

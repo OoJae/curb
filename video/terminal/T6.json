@@ -1,0 +1,21 @@
+{
+  "schema": "curb.video.terminal/1",
+  "id": "T6",
+  "title": "curl",
+  "show": "curl -s \"https://api.curb.markets/v1/relay/binance/klines?symbol=HK0700USDT&startTime=1790251200000&limit=1\"",
+  "command": "curl -s 'https://api.curb.markets/v1/relay/binance/klines?symbol=HK0700USDT&startTime=1790251200000&limit=1'",
+  "cwd": ".",
+  "startedAt": "2026-09-24T14:24:22.106Z",
+  "endedAt": "2026-09-24T14:24:24.785Z",
+  "durationMs": 2679,
+  "exitCode": 0,
+  "signal": null,
+  "output": "[[1790251200000,\"438.58000\",\"438.59000\",\"438.58000\",\"438.59000\",\"0.39\",1790251259999,\"171.0482000\",3,\"0.39\",\"171.0482000\",\"0\"]]",
+  "chunks": [
+    {
+      "t": 2677,
+      "s": "[[1790251200000,\"438.58000\",\"438.59000\",\"438.58000\",\"438.59000\",\"0.39\",1790251259999,\"171.0482000\",3,\"0.39\",\"171.0482000\",\"0\"]]",
+      "stream": "stdout"
+    }
+  ]
+}

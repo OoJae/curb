@@ -1,0 +1,21 @@
+{
+  "schema": "curb.video.terminal/1",
+  "id": "T1",
+  "title": "cast",
+  "show": "cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b \"stateOf(address)((uint8,uint128,uint64,uint64,uint32,bool))\" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech",
+  "command": "cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b 'stateOf(address)((uint8,uint128,uint64,uint64,uint32,bool))' 0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech",
+  "cwd": ".",
+  "startedAt": "2026-09-24T13:55:27.037Z",
+  "endedAt": "2026-09-24T13:55:32.322Z",
+  "durationMs": 5285,
+  "exitCode": 0,
+  "signal": null,
+  "output": "(1, 0, 1790298000 [1.79e9], 1790257926 [1.79e9], 0, false)\n",
+  "chunks": [
+    {
+      "t": 5281,
+      "s": "(1, 0, 1790298000 [1.79e9], 1790257926 [1.79e9], 0, false)\n",
+      "stream": "stdout"
+    }
+  ]
+}
