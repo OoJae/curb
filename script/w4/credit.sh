@@ -16,9 +16,12 @@
 #   withdraw ASSET SHARES
 #   borrow   ASSET AMOUNT                    returns false + Refusal(...) rather than reverting on a refusal
 #   repay    BORROWER ASSET AMOUNT
-#   post     WRAPPER SIZE BIDPX EXPIRY BOND  DepthCert.post naming CREDIT (override with BENEFICIARY=0x..), sent
-#                                            by the MAKER (see below). EXPIRY: unix seconds, +SECONDS from now, or
-#                                            `demo` (= Tue 29 Sep 2026 06:00Z). BIDPX in USDG units per share.
+#   post     WRAPPER BENEFICIARY SIZE BIDPX EXPIRY BOND
+#                                            DepthCert.post, sent by the MAKER (see below). BENEFICIARY is explicit:
+#                                            `credit` (= $CREDIT: depth CurbCredit lends against), `open` (anyone may
+#                                            take), or a 0x address (only it may take, e.g. A for the fade demo).
+#                                            EXPIRY: unix seconds, +SECONDS from now, or `demo` (= Fri 2 Oct 2026
+#                                            06:00Z). BIDPX in USDG units per share. Notional must be >= 1 USDG.
 #   maker-approve AMOUNT                     the MAKER approves USDG to DEPTH_CERT (bond now + notional on a fill)
 #   revoke                                   the MAKER revokes its USDG allowance to DEPTH_CERT (fade demo): every
 #                                            cert of that maker stops counting at once, so never K (refused
@@ -31,21 +34,28 @@
 #
 # Amounts are integers in token units; scientific notation is fine (1.4e6 = 1.4 USDG, 0.05e18 = 0.05 shares).
 #
-# Which certs count (CurbCredit.minCertExpiry): a cert supports lending only if it outlives
-#     now + (market open ? 1 h : max(73 h, the clock's next transition + 1 h)) + 30 min (a full cure).
-# While shut that is >= 73 h 30 min from NOW, so a cert meant to carry a loan through a weekend must be posted
-# with expiry >= (the last moment it must count) + 73 h 30 min. `post` warns when a cert would not count shut.
+# Which certs count (CurbCredit.minCertExpiry): a cert supports lending only if it outlives now + life + 30 min
+# (a full cure), where life is
+#     open, next transition >= 1 h 30 away:  1 h
+#     open, next transition <  1 h 30 away:  time to it + 73 h   (a close is imminent: it must see the reopen)
+#     shut / UNKNOWN:                        max(73 h, time to the next transition + 1 h)
+# so a cert meant to carry a loan through a weekend needs expiry >= (the last moment it must count) + 73 h 30 min.
+# `post` warns when a cert would not count while shut. Positions are judged by ltvEffective: once the honoured
+# book pays less than everything lent, every limit shrinks pro rata (a margin call for all borrowers).
 #
-# W4 demo (HK, wTCENTx). NB per the attestor's calendar HKEX closes from 12:00 HKT (04:00Z) on Fri 25 Sep
-# (Mid-Autumn half day) and reopens Mon 28 Sep 01:30Z.
-#   K: ACCOUNT=curb-desk      fund 3e6; maker-approve; post $W 0.028e18 52e6 demo 1e6  (cert to Tue 29 Sep 06:00Z;
-#                             counts while shut only until Sat 26 Sep 04:30Z = expiry - 73h30m; to count through
-#                             the whole closure to Mon 28 Sep 01:30Z it needs expiry >= Thu 1 Oct 03:00Z)
+# Makers: only DeployW4's maker allowlist (K and D) may post a cert with a beneficiary.
+#
+# W4 demo (HK, wTCENTx). Fri 25 Sep is a normal HKEX trading day: morning to the 03:55Z recess, recess
+# 03:55-05:00Z, afternoon to the 07:55Z cut, then shut until Mon 28 Sep 01:30Z (and 1 Oct is a holiday).
+#   K: ACCOUNT=curb-desk      fund 3e6; maker-approve 3e6; post $W credit 0.028e18 52e6 demo 1e6
+#                             (cert to Fri 2 Oct 06:00Z: counts while shut until Mon 28 Sep 04:30Z, past the reopen)
 #   A: (Agentic Wallet)       approve $W $CREDIT; deposit $W 0.05e18; borrow $W 1.4e6 before the cert -> Refusal
-#                             (NoDepth); after it -> ok (per-position 60% open / 30% shut; the book pays 1.456 total)
-#   at the cut:               flagBreach A $W  (1.4 > 30% of ~2.8)    -- cure frozen while shut
-#   fade (separate maker D):  MAKER_ACCOUNT=curb-deployer ... maker-approve; post ...; revoke; then `take` or the
-#                             admin's `realise` hits D's cert -> Faded, bond to the taker. K's depth is untouched.
+#                             (NoDepth); after it -> ok (per-position 60% open; the book pays 1.456 in total)
+#   07:55Z cut:               flagBreach A $W  (1.4 > 30% of ~2.8)    -- cure frozen while shut
+#   fade (maker D, never K):  MAKER_ACCOUNT=curb-deployer MAKER_PWFILE=...:
+#                               maker-approve 2e6; post $W <A> 0.03e18 52e6 +93600 0.2e6; revoke
+#                             A (Agentic Wallet): approve $W $DEPTH_CERT; take <id> 0.03e18 <A> -> Faded: D's bond
+#                             to A, A keeps her shares. K's depth is untouched.
 #
 # Env:
 #   CREDIT      CurbCredit address (required)
@@ -65,7 +75,7 @@ set -euo pipefail
 SUFFIX="6464377535306e636b74356537323966100080218021802180218021802180218021" # ERC-8021, Builder Code dd7u50nckt5e729f
 USDG="0x4ae46a509F6b1D9056937BA4500cb143933D2dc8"
 DESK_K="0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E" # curb-desk: the demo's depth maker; never the fade maker
-DEMO_EXPIRY=1790661600                                 # Tue 29 Sep 2026 06:00:00Z
+DEMO_EXPIRY=1790920800                                 # Fri 2 Oct 2026 06:00:00Z
 SHUT_HORIZON=$(( 73 * 3600 + 30 * 60 ))                # SHUT_CERT_LIFE + CURE_OPEN_SECONDS
 RPC_URL="${RPC_URL:-https://rpc.xlayer.tech}"
 CHAIN_ID=196
@@ -140,7 +150,7 @@ cmd_status() {
     assets=$(call "$c" 'assets()(address[])' | tr -d '[] ' | tr ',' ' ')
     for x in $assets; do
         if [[ -n "$a" ]] && [[ "$(lower "$x")" != "$(lower "$a")" ]]; then continue; fi
-        log "  $x  open=$(call "$c" 'isOpen(address)(bool)' "$x")  ltvFor=$(call "$c" 'ltvFor(address)(uint256)' "$x")bps  realisable=$(call "$c" 'realisable(address)(uint256)' "$x")  totalColl=$(call "$c" 'totalCollateral(address)(uint256)' "$x")  totalPrincipal=$(call "$c" 'totalPrincipal(address)(uint256)' "$x")  seized=$(call "$c" 'seized(address)(uint256)' "$x")  certs-count-if-expiry>=$(call "$c" 'minCertExpiry(address)(uint64)' "$x")"
+        log "  $x  open=$(call "$c" 'isOpen(address)(bool)' "$x")  ltvFor=$(call "$c" 'ltvFor(address)(uint256)' "$x")bps  ltvEffective=$(call "$c" 'ltvEffective(address)(uint256)' "$x")bps  realisable=$(call "$c" 'realisable(address)(uint256)' "$x")  totalColl=$(call "$c" 'totalCollateral(address)(uint256)' "$x")  totalPrincipal=$(call "$c" 'totalPrincipal(address)(uint256)' "$x")  seized=$(call "$c" 'seized(address)(uint256)' "$x")  certs-count-if-expiry>=$(call "$c" 'minCertExpiry(address)(uint64)' "$x")"
         if [[ -n "$b" ]]; then
             log "    $b  debt=$(call "$c" 'debtOf(address,address)(uint256)' "$b" "$x")  limit=$(call "$c" 'limitOf(address,address)(uint256)' "$b" "$x")  breached(known,breached)=$(call "$c" 'isBreached(address,address)(bool,bool)' "$b" "$x" | tr '\n' ' ')"
             log "    cure(active,lastOpen,openedAt,lastTickAt,used,priceAtBreach)=$(call "$c" 'cureOf(address,address)((bool,bool,uint64,uint64,uint64,uint128))' "$b" "$x")"
@@ -206,15 +216,22 @@ main() {
             need_addr BORROWER "$1"; need_addr ASSET "$2"
             send_tx "$(credit)" "$(cast calldata 'repay(address,address,uint256)' "$1" "$2" "$3")" "repay $3 for $1 on $2" ;;
         post)
-            [[ $# == 5 ]] || die "post WRAPPER SIZE BIDPX EXPIRY BOND"
+            [[ $# == 6 ]] || die "post WRAPPER BENEFICIARY(credit|open|0x..) SIZE BIDPX EXPIRY BOND"
             need_addr WRAPPER "$1"
+            local ben exp now counts_until
+            case "$2" in
+                credit) ben=$(credit) ;;
+                open) ben=0x0000000000000000000000000000000000000000 ;;
+                *) need_addr BENEFICIARY "$2"; ben="$2" ;;
+            esac
+            set -- "$1" "$3" "$4" "$5" "$6" # WRAPPER SIZE BIDPX EXPIRY BOND; the beneficiary is resolved into $ben
             as_maker
-            local ben="${BENEFICIARY:-$(credit)}" exp now counts_until
-            need_addr BENEFICIARY "$ben"
             exp=$(expiry_of "$4")
             now=$(date +%s)
             counts_until=$(( exp - SHUT_HORIZON ))
-            if (( counts_until <= now )); then
+            if [[ "$(lower "$ben")" != "$(lower "${CREDIT:-none}")" ]]; then
+                log "beneficiary $ben is not CurbCredit: this cert is not lending depth (only $ben may take it)"
+            elif (( counts_until <= now )); then
                 log "WARNING: expiry $exp is < now + 73h30m: this cert will NOT count while the market is shut"
             else
                 log "cert counts while shut until $(date -u -r "$counts_until" +%Y-%m-%dT%H:%MZ 2>/dev/null || date -u -d "@$counts_until" +%Y-%m-%dT%H:%MZ) (expiry - 73h30m; longer closures need more)"

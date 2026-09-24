@@ -9,9 +9,165 @@
   <body data-page="clock">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
     <main id="main" class="page page--clock" tabindex="-1">
-      <section class="wrap section stub">
-        <h1 class="t-h1 vt-title-clock" data-reveal>Clock</h1>
-        <p class="t-lede muted measure stub__note">This page is in build. The shell around it is live.</p>
+      <section class="wrap clk-intro grid" aria-labelledby="clk-title">
+        <div class="col-ledger clk-intro__text">
+          <p class="t-label">MarketClock · X Layer</p>
+          <h1 id="clk-title" class="t-h1 vt-title-clock" data-reveal>Six assets, open or <em>shut</em> right now</h1>
+          <p class="t-lede measure">For each tokenized equity, MarketClock records whether its home market will create and redeem shares right now. An attestor reads the issuer every five minutes and writes the answer to X Layer.</p>
+          <p class="t-body muted measure">The contract fails closed. An attestation older than 30 minutes reads as unknown, with a cap of zero, so a dead attestor can never leave an asset looking open.</p>
+        </div>
+        <aside class="col-instrument clk-summary" aria-label="The board at a glance">
+          <div class="clk-summary__count" data-clk-summary>
+            <span class="clk-summary__figure t-numeral" data-clk-shut>&nbsp;</span>
+            <span class="clk-summary__of t-h2">of <span data-clk-total>6</span> shut</span>
+          </div>
+          <p class="clk-summary__asof t-data muted" data-clk-asof>Reading MarketClock…</p>
+          <dl class="ledger clk-summary__facts">
+            <div class="ledger__row">
+              <dt>Contract</dt>
+              <dd class="clk-addr">
+                <a class="txlink" href="https://www.oklink.com/xlayer/address/0x160Dc415902971a7a9B5ade7f43005b36FE5B09b" target="_blank" rel="noopener" title="0x160Dc415902971a7a9B5ade7f43005b36FE5B09b">0x160D…B09b<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a>
+                <button class="copy" type="button" data-copy="0x160Dc415902971a7a9B5ade7f43005b36FE5B09b"><span class="copy__label">Copy address</span><span class="copy__done" aria-hidden="true">Copied</span></button>
+              </dd>
+            </div>
+            <div class="ledger__row">
+              <dt>Registered</dt>
+              <dd class="t-data" data-clk-registered>…</dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section class="wrap section clk-board" aria-labelledby="clk-board-title">
+        <div class="clk-head">
+          <h2 id="clk-board-title" class="t-h2">The board</h2>
+          <p class="t-body muted measure">One row per registered asset. The glyph is the regime: a closed ring when the primary cap is above zero, the C with its amber arc when the market is shut but the pool still trades, a dotted ring when the attestation is stale. The next change comes from the venue's published schedule, less the issuer's 300-second early cut.</p>
+        </div>
+        <div class="clk-table-wrap">
+          <table class="table clk-table" data-clk-table>
+            <caption class="visually-hidden" data-clk-caption>MarketClock state for each registered asset.</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="clk-col-asset">Asset</th>
+                <th scope="col" class="clk-col-regime">Regime</th>
+                <th scope="col" class="clk-col-cap">Primary cap</th>
+                <th scope="col" class="clk-col-next">Next change</th>
+                <th scope="col" class="clk-col-att">Attested</th>
+                <th scope="col" class="clk-col-week">
+                  <span class="clk-week-head">This week, Hong Kong time</span>
+                  <span class="clk-days" aria-hidden="true"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></span>
+                </th>
+              </tr>
+            </thead>
+            <tbody data-clk-rows>
+              <tr class="clk-row" data-sym="wTCENTx"><th scope="row" class="clk-asset"><div class="clk-asset__in"><span class="clk-glyph" data-glyph></span><span class="clk-sym">wTCENTx</span><span class="clk-venue muted">Tencent · HKEX</span></div></th><td class="clk-regime" data-label="Regime">…</td><td class="clk-cap" data-label="Primary cap">…</td><td class="clk-next" data-label="Next change">…</td><td class="clk-att" data-label="Attested">…</td><td class="clk-week" data-label="This week"><div class="clk-strip" data-strip></div></td></tr>
+              <tr class="clk-row" data-sym="wSHEINx"><th scope="row" class="clk-asset"><div class="clk-asset__in"><span class="clk-glyph" data-glyph></span><span class="clk-sym">wSHEINx</span><span class="clk-venue muted">SHEIN · HKEX</span></div></th><td class="clk-regime" data-label="Regime">…</td><td class="clk-cap" data-label="Primary cap">…</td><td class="clk-next" data-label="Next change">…</td><td class="clk-att" data-label="Attested">…</td><td class="clk-week" data-label="This week"><div class="clk-strip" data-strip></div></td></tr>
+              <tr class="clk-row" data-sym="wXIAOx"><th scope="row" class="clk-asset"><div class="clk-asset__in"><span class="clk-glyph" data-glyph></span><span class="clk-sym">wXIAOx</span><span class="clk-venue muted">Xiaomi · HKEX</span></div></th><td class="clk-regime" data-label="Regime">…</td><td class="clk-cap" data-label="Primary cap">…</td><td class="clk-next" data-label="Next change">…</td><td class="clk-att" data-label="Attested">…</td><td class="clk-week" data-label="This week"><div class="clk-strip" data-strip></div></td></tr>
+              <tr class="clk-row" data-sym="wMEITx"><th scope="row" class="clk-asset"><div class="clk-asset__in"><span class="clk-glyph" data-glyph></span><span class="clk-sym">wMEITx</span><span class="clk-venue muted">Meituan · HKEX</span></div></th><td class="clk-regime" data-label="Regime">…</td><td class="clk-cap" data-label="Primary cap">…</td><td class="clk-next" data-label="Next change">…</td><td class="clk-att" data-label="Attested">…</td><td class="clk-week" data-label="This week"><div class="clk-strip" data-strip></div></td></tr>
+              <tr class="clk-row" data-sym="wNVDAx"><th scope="row" class="clk-asset"><div class="clk-asset__in"><span class="clk-glyph" data-glyph></span><span class="clk-sym">wNVDAx</span><span class="clk-venue muted">Nvidia · Nasdaq</span></div></th><td class="clk-regime" data-label="Regime">…</td><td class="clk-cap" data-label="Primary cap">…</td><td class="clk-next" data-label="Next change">…</td><td class="clk-att" data-label="Attested">…</td><td class="clk-week" data-label="This week"><div class="clk-strip" data-strip></div></td></tr>
+              <tr class="clk-row" data-sym="wAAPLx"><th scope="row" class="clk-asset"><div class="clk-asset__in"><span class="clk-glyph" data-glyph></span><span class="clk-sym">wAAPLx</span><span class="clk-venue muted">Apple · Nasdaq</span></div></th><td class="clk-regime" data-label="Regime">…</td><td class="clk-cap" data-label="Primary cap">…</td><td class="clk-next" data-label="Next change">…</td><td class="clk-att" data-label="Attested">…</td><td class="clk-week" data-label="This week"><div class="clk-strip" data-strip></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="clk-legend t-small muted">
+          <span class="clk-legend__item"><span class="clk-swatch clk-swatch--open" aria-hidden="true"></span>Primary market open</span>
+          <span class="clk-legend__item"><span class="clk-swatch clk-swatch--shut" aria-hidden="true"></span>Shut, pool still trading</span>
+          <span class="clk-legend__item"><span class="clk-swatch clk-swatch--now" aria-hidden="true"></span>Now</span>
+        </p>
+        <p class="visually-hidden" aria-live="polite" data-clk-announce></p>
+      </section>
+
+      <section class="wrap section clk-round grid" aria-labelledby="clk-round-title">
+        <div class="col-ledger">
+          <h2 id="clk-round-title" class="t-h2">The latest round</h2>
+          <p class="t-body muted measure">Each round is one transaction. It commits an input root: a Merkle root over the exact issuer responses the attestor read. Host A publishes those inputs as a bundle, so anyone can rebuild the root and re-run the derivation.</p>
+          <dl class="ledger clk-round__facts" data-clk-round>
+            <div class="ledger__row"><dt>Transaction</dt><dd data-round-tx>Reading the last 400 blocks…</dd></div>
+            <div class="ledger__row"><dt>Block</dt><dd class="t-data" data-round-block>…</dd></div>
+            <div class="ledger__row"><dt>Input root</dt><dd class="clk-root" data-round-root>…</dd></div>
+            <div class="ledger__row"><dt>Assets in the round</dt><dd data-round-assets>…</dd></div>
+          </dl>
+        </div>
+        <div class="col-instrument clk-verify">
+          <h3 class="t-h3">Check it yourself</h3>
+          <p class="t-small muted">Rebuilds the root from the bundle, re-runs the derivation, and compares it with what the transaction wrote. Needs Node 22.18 or newer.</p>
+          <div class="clk-cmd surface-ink">
+            <pre class="clk-cmd__code"><code data-round-cmd>npx -y curb-verify tx &lt;round transaction&gt;</code></pre>
+            <button class="copy clk-cmd__copy" type="button" data-copy-cmd><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap section clk-integrate grid" aria-labelledby="clk-int-title">
+        <div class="col-ledger">
+          <h2 id="clk-int-title" class="t-h2">Read it from a contract</h2>
+          <p class="t-body measure">MarketClock is free to read, with no key and no licence. Before you liquidate, lend or settle against a tokenized equity, ask whether its primary market is open.</p>
+          <p class="t-body muted measure">Read <code>regime()</code> and <code>primaryCapNow()</code>, not <code>stateOf()</code>. <code>stateOf()</code> returns the stored struct as written, so on a dead attestor it still shows the last known cap. The staleness check lives in the other two.</p>
+        </div>
+        <div class="clk-snippet">
+          <div class="clk-code surface-ink">
+            <div class="clk-code__bar">
+              <span class="t-data clk-code__name">UsesTheClock.sol</span>
+              <button class="copy" type="button" data-copy-sol><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
+            </div>
+<pre class="clk-code__pre" tabindex="0" role="region" aria-label="Solidity example"><code data-sol><span class="clk-c">// SPDX-License-Identifier: MIT</span>
+pragma solidity ^0.8.28;
+
+interface IMarketClock {
+    enum Regime { UNKNOWN, CLOSED, OVERNIGHT, EXTENDED, MARKET }
+    function regime(address wrapper) external view returns (Regime);
+    function primaryCapNow(address wrapper) external view returns (uint128);
+}
+
+contract UsesTheClock {
+    <span class="clk-c">// MarketClock on X Layer (chain 196)</span>
+    IMarketClock constant CLOCK = IMarketClock(0x160Dc415902971a7a9B5ade7f43005b36FE5B09b);
+
+    error MarketShut(address wrapper);
+
+    <span class="clk-c">// Whole USD the issuer will create or redeem now. 0 = shut, or stale.</span>
+    function _requireOpen(address wrapper) internal view {
+        if (CLOCK.primaryCapNow(wrapper) == 0) revert MarketShut(wrapper);
+    }
+
+    function inRegularSession(address wrapper) external view returns (bool) {
+        return CLOCK.regime(wrapper) == IMarketClock.Regime.MARKET;
+    }
+}</code></pre>
+          </div>
+          <div class="clk-cmd surface-ink">
+            <pre class="clk-cmd__code"><code data-cast>cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b "primaryCapNow(address)(uint128)" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech</code></pre>
+            <button class="copy clk-cmd__copy" type="button" data-copy-cast><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
+          </div>
+          <p class="t-small muted clk-snippet__note">The wrapper above is wTCENTx. The full interface, including <code>isInMultiplierBlackout</code> and <code>rawToShares</code>, is in the <a href="https://www.oklink.com/xlayer/address/0x160Dc415902971a7a9B5ade7f43005b36FE5B09b" target="_blank" rel="noopener">verified source<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a>.</p>
+        </div>
+      </section>
+
+      <section class="wrap section clk-hosts" aria-labelledby="clk-hosts-title">
+        <div class="clk-head">
+          <h2 id="clk-hosts-title" class="t-h2">Two hosts, one writer</h2>
+          <p class="t-body muted measure">One host writes every round. A second host, on a different provider and continent, checks every round it writes. A witness does not change what the contract stores: it is an attributable second check, not a quorum.</p>
+        </div>
+        <div class="grid clk-hosts__grid">
+          <article class="col-half-left clk-host" aria-labelledby="clk-host-a">
+            <p class="t-label">Host A · writes</p>
+            <h3 id="clk-host-a" class="t-h3">Railway, Singapore</h3>
+            <p class="t-body measure">Reads the issuer, derives each asset's regime and cap, and sends every round to MarketClock in one <code>attestBatch</code> transaction. It publishes each round's inputs as a bundle.</p>
+            <dl class="ledger">
+              <div class="ledger__row"><dt>Signer</dt><dd><a class="txlink" href="https://www.oklink.com/xlayer/address/0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4" target="_blank" rel="noopener" title="0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4">0x842e…eEC4<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a></dd></div>
+              <div class="ledger__row"><dt>Status</dt><dd><a class="txlink" href="https://attestor-a-production.up.railway.app/healthz" target="_blank" rel="noopener">/healthz<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens in a new tab)</span></a></dd></div>
+            </dl>
+          </article>
+          <article class="col-half-right clk-host" aria-labelledby="clk-host-b">
+            <p class="t-label">Host B · witnesses</p>
+            <h3 id="clk-host-b" class="t-h3">Tencent, Silicon Valley</h3>
+            <p class="t-body measure">For each round host A writes, host B fetches the bundle and re-derives it, checks that the calldata equals the committed claims, and compares them with its own reading of the issuer. Then it signs the result as EIP-712 typed data, pass or fail.</p>
+            <dl class="ledger">
+              <div class="ledger__row"><dt>Signer</dt><dd><a class="txlink" href="https://www.oklink.com/xlayer/address/0x50Fa162a1dE84D2719644DC45E44EC5D16e539fB" target="_blank" rel="noopener" title="0x50Fa162a1dE84D2719644DC45E44EC5D16e539fB">0x50Fa…39fB<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a></dd></div>
+              <div class="ledger__row"><dt>Check a witness</dt><dd><code class="clk-inline-cmd" data-witness-cmd>npx -y curb-verify witness &lt;inputRoot&gt;</code></dd></div>
+            </dl>
+          </article>
+        </div>
       </section>
     </main>
     <script type="module" src="/src/pages/clock/page.ts"></script>

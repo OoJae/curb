@@ -43,6 +43,26 @@ function markRevealed(el: Element): void {
   el.setAttribute('data-revealed', '');
 }
 
+/**
+ * Keep punctuation with the inline element it follows ("<em>shut</em>." or "<em>reopen</em>,"): SplitText
+ * treats the trailing mark as its own word and can wrap it onto a line by itself. Wrap the pair in a
+ * nowrap span first. Idempotent.
+ */
+function gluePunctuation(root: Element): void {
+  for (const inline of Array.from(root.querySelectorAll('em, i, strong, b, a, span:not(.glue)'))) {
+    const next = inline.nextSibling;
+    if (!next || next.nodeType !== Node.TEXT_NODE) continue;
+    const m = /^[.,;:!?)\]…’”]+/.exec(next.textContent ?? '');
+    if (!m) continue;
+    const glue = document.createElement('span');
+    glue.className = 'glue';
+    glue.style.whiteSpace = 'nowrap';
+    inline.replaceWith(glue);
+    glue.append(inline, document.createTextNode(m[0]));
+    next.textContent = (next.textContent ?? '').slice(m[0].length);
+  }
+}
+
 /** Reveal each target's lines once. Resolves when every animation has finished (or immediately under reduced motion). */
 export async function revealLines(targets: string | Element | ArrayLike<Element>, opts: RevealOptions = {}): Promise<void> {
   const els = toElements(targets).filter((el) => !done.has(el));
@@ -53,6 +73,7 @@ export async function revealLines(targets: string | Element | ArrayLike<Element>
     return;
   }
   await whenFontsReady();
+  els.forEach(gluePunctuation);
   await Promise.all(
     els.map(
       (el) =>

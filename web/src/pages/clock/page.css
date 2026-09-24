@@ -1,2 +1,448 @@
-/* Clock page styles: STUB from lane A. The page owner replaces this file.
-   Rules: every class starts with .clk- ; tokens only (no raw hex, no px font sizes). */
+/* /clock. Every class starts with .clk- ; tokens only (no raw hex, no px font sizes).
+   Ledger left, instrument right. The board is a real <table>; below 1024 px each row becomes a card. */
+
+/* ── intro ─────────────────────────────────────────────────────────────────────────────────── */
+.clk-intro {
+  padding-block: var(--s-10) var(--s-8);
+  row-gap: var(--s-6);
+  align-items: end;
+}
+
+.clk-intro__text > * + * {
+  margin-top: var(--s-3);
+}
+
+.clk-intro__text h1 {
+  margin-top: var(--s-2);
+}
+
+.clk-summary {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.clk-summary__count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+}
+
+.clk-summary__figure {
+  display: inline-block;
+  min-width: 1ch;
+}
+
+.clk-summary__asof {
+  min-height: calc(2 * var(--t-data) * var(--lh-data));
+}
+
+.clk-summary__facts {
+  margin-top: var(--s-3);
+}
+
+.clk-addr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--s-2);
+}
+
+.clk-addr > button {
+  margin-block: calc(-1 * var(--s-1-5));
+}
+
+/* ── section heads ─────────────────────────────────────────────────────────────────────────── */
+.clk-head {
+  display: grid;
+  gap: var(--s-2);
+  margin-bottom: var(--s-5);
+}
+
+.clk-round h2,
+.clk-integrate h2 {
+  margin-bottom: var(--s-2);
+}
+
+.clk-round > :first-child > p,
+.clk-integrate > :first-child > p + p {
+  margin-top: var(--s-2);
+}
+
+/* ── the board ─────────────────────────────────────────────────────────────────────────────── */
+.clk-table {
+  table-layout: fixed;
+}
+
+.clk-table th,
+.clk-table td {
+  vertical-align: top;
+}
+
+.clk-col-asset { width: 17%; }
+.clk-col-regime { width: 17%; }
+.clk-col-cap { width: 14%; }
+.clk-col-next { width: 18%; }
+.clk-col-att { width: 12%; }
+.clk-col-week { width: 22%; }
+
+.clk-week-head {
+  display: block;
+}
+
+.clk-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-top: var(--s-half);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-weight: 400;
+}
+
+.clk-row {
+  position: relative;
+}
+
+.clk-row > * {
+  padding-block: var(--s-2);
+}
+
+/* Row headers rule like the cells beside them, not like column headers. */
+.clk-table tbody th {
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+/* Row hover scales in the left rule (the ledger micro-interaction). */
+.clk-asset {
+  position: relative;
+  font-weight: 500;
+  text-align: start;
+}
+
+.clk-asset__in {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--s-1-5);
+  align-items: center;
+}
+
+.clk-asset::before {
+  content: '';
+  position: absolute;
+  inset-block: -1px;
+  inset-inline-start: calc(-1 * var(--s-2));
+  width: var(--rule-strong);
+  background: var(--figure);
+  transform: scaleY(0);
+  transition: transform var(--dur-ui) var(--ease-curb);
+}
+
+.clk-row:hover .clk-asset::before {
+  transform: scaleY(1);
+}
+
+.clk-glyph {
+  grid-row: 1 / span 2;
+  display: inline-grid;
+  place-items: center;
+  width: var(--s-4);
+  height: var(--s-4);
+  border-radius: var(--radius);
+  color: var(--figure);
+}
+
+.clk-glyph[data-glyph='unknown'] {
+  color: var(--muted);
+}
+
+/* The shut glyph carries amber: on paper it sits in its ink tile. */
+[data-regime='open'] .clk-glyph[data-glyph='shut'] {
+  background: var(--ink);
+}
+
+.clk-glyph__svg {
+  width: calc(var(--s-3) - var(--s-half));
+  height: calc(var(--s-3) - var(--s-half));
+}
+
+.clk-sym {
+  font-family: var(--font-data);
+  font-size: var(--t-small);
+  font-stretch: var(--wdth-ledger);
+  font-weight: 500;
+}
+
+.clk-venue {
+  grid-column: 2;
+  font-size: var(--t-small);
+  font-weight: 400;
+}
+
+.clk-line {
+  display: block;
+}
+
+.clk-sub {
+  display: block;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
+.clk-num,
+.clk-att .clk-line,
+.clk-next .clk-line {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+}
+
+.clk-next .clk-line,
+.clk-att .clk-line {
+  font-family: var(--font-text);
+  font-size: var(--t-small);
+  font-stretch: normal;
+}
+
+.clk-stale {
+  color: var(--signal);
+}
+
+.clk-strip {
+  width: 100%;
+  margin-top: var(--s-half);
+}
+
+/* A row whose regime changed pulses once (opacity only). */
+.clk-row[data-changed] > * {
+  animation: clk-changed var(--dur-reveal) var(--ease-curb);
+}
+
+@keyframes clk-changed {
+  from {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clk-row[data-changed] > * {
+    animation: none;
+  }
+
+  .clk-asset::before {
+    transition: none;
+  }
+}
+
+/* Cards below 1024 px: the header row is read by screen readers only; each cell carries its label. */
+@media (max-width: 1023.98px) {
+  .clk-table thead,
+  .clk-table thead tr {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .clk-table,
+  .clk-table tbody {
+    display: block;
+  }
+
+  .clk-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-2) var(--gutter);
+    padding-block: var(--s-3);
+    border-top: var(--rule) solid var(--hairline);
+  }
+
+  .clk-row:last-child {
+    border-bottom: var(--rule) solid var(--hairline);
+  }
+
+  .clk-row > * {
+    display: block;
+    padding: 0;
+    min-height: 0;
+    border: 0;
+  }
+
+  .clk-table .clk-row > td,
+  .clk-table .clk-row > th {
+    border: 0;
+    padding: 0;
+  }
+
+  .clk-asset {
+    grid-column: 1 / -1;
+  }
+
+  .clk-week {
+    grid-column: 1 / -1;
+  }
+
+  .clk-row > td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: var(--s-half);
+    color: var(--muted);
+    font-size: var(--t-small);
+    font-weight: 500;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .clk-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.clk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+  margin-top: var(--s-3);
+}
+
+.clk-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+/* Swatches sit in an ink window: amber never touches ivory. */
+.clk-swatch {
+  display: inline-block;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--ink);
+}
+
+.clk-swatch::after {
+  content: '';
+  display: block;
+  width: var(--s-2);
+  height: var(--s-1);
+  background: var(--ivory);
+}
+
+.clk-swatch--shut::after {
+  background: var(--streetlamp);
+}
+
+.clk-swatch--now::after {
+  width: var(--rule-strong);
+  margin-inline: 7px;
+  height: var(--s-1-5);
+  margin-block: -2px;
+}
+
+/* ── latest round ──────────────────────────────────────────────────────────────────────────── */
+.clk-round {
+  row-gap: var(--s-6);
+}
+
+.clk-round__facts {
+  margin-top: var(--s-4);
+}
+
+.clk-round__facts dd {
+  min-height: calc(var(--t-small) * var(--lh-small));
+}
+
+.clk-verify {
+  align-self: end;
+  display: grid;
+  gap: var(--s-1-5);
+}
+
+/* ── code windows (always ink: they are terminals) ─────────────────────────────────────────── */
+.clk-cmd,
+.clk-code {
+  position: relative;
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--wash);
+  color: var(--figure);
+}
+
+.clk-cmd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.clk-cmd__code {
+  padding: var(--s-1-5) var(--s-2);
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+.clk-cmd__copy {
+  align-self: stretch;
+  padding-inline: var(--s-2);
+  border-inline-start: var(--rule) solid var(--hairline);
+}
+
+.clk-snippet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-2);
+  margin-top: var(--s-5);
+}
+
+.clk-code__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: var(--s-2) 0;
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+.clk-code__name {
+  color: var(--muted);
+}
+
+.clk-code__bar > button {
+  padding-inline: var(--s-2);
+  border-inline-start: var(--rule) solid var(--hairline);
+}
+
+.clk-code__pre {
+  padding: var(--s-2) var(--s-2) var(--s-3);
+  overflow-x: auto;
+}
+
+.clk-c {
+  color: var(--muted);
+}
+
+.clk-snippet__note {
+  max-width: 72ch;
+}
+
+.clk-inline-cmd {
+  word-break: break-all;
+}
+
+/* ── two hosts ─────────────────────────────────────────────────────────────────────────────── */
+.clk-hosts__grid {
+  row-gap: var(--s-6);
+}
+
+.clk-host {
+  display: grid;
+  align-content: start;
+  gap: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: var(--rule-strong) solid var(--figure);
+}
+
+.clk-host > dl {
+  margin-top: var(--s-2);
+}

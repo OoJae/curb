@@ -40,7 +40,8 @@ contract CreditHandler is Test {
     uint256 public cureMovedAcrossShut; // a tick with shut/UNKNOWN at either end moved the clock
     uint256 public cureOverCounted; // a tick added more than min(gap, MAX_TICK_GAP)
     uint256 public refusalChangedState; // a refused borrow/withdraw changed the position or totals
-    uint256 public crossPositionBreachChange; // an action on one position changed another's isBreached
+    uint256 public crossPositionBreachChange; // a deposit/withdraw moved another position's isBreached
+    uint256 public crossPositionPushedIntoBreach; // a borrow/repay/liquidate pushed another position into breach
     uint256 public badDebtWithCollateralLeft; // a liquidation wrote debt off while the borrower kept shares
     uint256 public debtForgiven; // a partial liquidation took more off the debt than the shares it seized cover
 
@@ -52,6 +53,7 @@ contract CreditHandler is Test {
     uint256 public shutTicks;
     uint256 public liquidations;
     uint256 public partialLiquidations;
+    uint256 public scaledObserved; // borrow attempts made while ltvEffective < ltvFor (a margin call in force)
     uint256 public realisedFills;
     uint256 public realisedFades;
     uint256 public depositsRefusedIneligible;
@@ -127,11 +129,11 @@ contract CreditHandler is Test {
         amount = bound(amount, 1e15, 50e18);
         MockERC20(a).mint(who, amount);
         bool ok = elig.isEligible(who);
-        bytes32 others = _othersBreach(who, a);
+        uint256[] memory others = _othersBreach(who, a);
         vm.prank(who);
         if (ok) {
             credit.deposit(a, amount);
-            if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+            _anyChange(others, _othersBreach(who, a));
         } else {
             try credit.deposit(a, amount) {
                 revert("ineligible deposit accepted");
@@ -148,11 +150,11 @@ contract CreditHandler is Test {
         if (coll == 0) return;
         amount = bound(amount, 1, coll);
         bytes32 before = _positionDigest(who, a);
-        bytes32 others = _othersBreach(who, a);
+        uint256[] memory others = _othersBreach(who, a);
         vm.recordLogs();
         vm.prank(who);
         bool ok = credit.withdraw(a, amount);
-        if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+        _anyChange(others, _othersBreach(who, a));
         if (!ok) {
             _countRefusal();
             if (_positionDigest(who, a) != before) ++refusalChangedState;
@@ -168,11 +170,12 @@ contract CreditHandler is Test {
         amount = MulDiv.mulDiv(headroom, _h(amount) % 11_000 + 1, 1e4);
         if (amount == 0) amount = 1;
         bytes32 before = _positionDigest(who, a);
-        bytes32 others = _othersBreach(who, a);
+        uint256[] memory others = _othersBreach(who, a);
+        if (credit.ltvEffective(a) < credit.ltvFor(a)) ++scaledObserved;
         vm.recordLogs();
         vm.prank(who);
         bool ok = credit.borrow(a, amount);
-        if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+        _noneWorse(others, _othersBreach(who, a));
         if (ok) {
             ++borrowsOk;
             if (credit.totalPrincipal(a) > credit.realisable(a)) ++borrowOverRealisable;
@@ -189,9 +192,9 @@ contract CreditHandler is Test {
         amount = bound(amount, 1, debt + 10e6);
         usdg.mint(address(this), amount);
         usdg.approve(address(credit), amount);
-        bytes32 others = _othersBreach(who, a);
+        uint256[] memory others = _othersBreach(who, a);
         credit.repay(who, a, amount);
-        if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+        _noneWorse(others, _othersBreach(who, a));
     }
 
     function fund(uint256 amount) external {
@@ -321,12 +324,12 @@ contract CreditHandler is Test {
         uint256 debt = credit.debtOf(who, a);
         uint256 coll = credit.positionOf(who, a).collateral;
         uint256 bad0 = credit.badDebt(a);
-        bytes32 others = _othersBreach(who, a);
+        uint256[] memory others = _othersBreach(who, a);
         try credit.liquidate(who, a) {
             ++liquidations;
             if (!openNow) ++liquidatedWhileShut;
             if (c.openSecondsUsed < 1800) ++liquidatedEarly;
-            if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+            _noneWorse(others, _othersBreach(who, a));
             uint256 left = credit.positionOf(who, a).collateral;
             uint256 seize = coll - left;
             uint256 cap = MulDiv.mulDiv(MulDiv.mulDiv(debt, 10_500, 1e4), 1e30, c.priceAtBreach);
@@ -341,14 +344,34 @@ contract CreditHandler is Test {
         } catch {}
     }
 
-    /// @dev (known, breached) of every position except (who, a), hashed: an action on one position must not move it.
-    function _othersBreach(address who, address a) internal view returns (bytes32 h) {
+    /// @dev State of every position except (who, a): 0 unknown, 1 known healthy, 2 known breached, 3 self (skipped).
+    function _othersBreach(address who, address a) internal view returns (uint256[] memory st) {
+        st = new uint256[](_actors.length * _assets.length);
         for (uint256 i; i < _actors.length; ++i) {
             for (uint256 j; j < _assets.length; ++j) {
-                if (_actors[i] == who && _assets[j] == a) continue;
+                uint256 k = i * _assets.length + j;
+                if (_actors[i] == who && _assets[j] == a) {
+                    st[k] = 3;
+                    continue;
+                }
                 (bool known, bool breached) = credit.isBreached(_actors[i], _assets[j]);
-                h = keccak256(abi.encode(h, known, breached));
+                st[k] = !known ? 0 : (breached ? 2 : 1);
             }
+        }
+    }
+
+    /// @dev Depositor actions (deposit, withdraw) must not move any other position at all.
+    function _anyChange(uint256[] memory before, uint256[] memory afterwards) internal {
+        for (uint256 k; k < before.length; ++k) {
+            if (before[k] != afterwards[k]) ++crossPositionBreachChange;
+        }
+    }
+
+    /// @dev Lending actions on one position (borrow, repay, liquidate) may improve others -- repaying restores cover
+    ///      for everyone -- but must never push a known-healthy position into breach.
+    function _noneWorse(uint256[] memory before, uint256[] memory afterwards) internal {
+        for (uint256 k; k < before.length; ++k) {
+            if (before[k] == 1 && afterwards[k] == 2) ++crossPositionPushedIntoBreach;
         }
     }
 

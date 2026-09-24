@@ -11,7 +11,15 @@ import {IEligibility} from "../src/interfaces/IEligibility.sol";
 import {IERC20} from "../src/interfaces/IERC20.sol";
 import {EligibilityRegistry} from "../src/EligibilityRegistry.sol";
 
-/// W4: DepthCert (bonded firm bids, no admin) and CurbCredit (the fixed-rate reserve that lends against them).
+/// W4: a maker allowlist, DepthCert (bonded firm bids, no admin) and CurbCredit (the fixed-rate reserve that lends
+/// against them).
+///
+///   1. EligibilityRegistry(deployer) for MAKERS, with only K (curb-desk) and D (the deployer, fade demo) admitted.
+///      A cert naming a beneficiary may only be posted by an eligible maker. This is deliberately NOT the W3
+///      borrower registry: MIN_NOTIONAL bounds a cert's size, not its bidPx, so any borrower able to post a 1-USDG
+///      cert at a near-zero bid would drag the book's minBid, and with it every position's LTV, to zero.
+///   2. DepthCert(USDG, makers).
+///   3. CurbCredit(CLOCK, SCORECARD, DepthCert, REGISTRY = the W3 borrower registry, USDG, deployer, five wrappers).
 ///
 ///   Dry run (no account, nothing signed):
 ///     REGISTRY=0x<EligibilityRegistry from W3> forge script script/DeployW4.s.sol \
@@ -39,17 +47,22 @@ contract DeployW4 is Script {
     // Demo wallets (docs/WALLETS.md): K posts certs naming CurbCredit, A borrows, D is the fade demo's maker.
     address constant DESK_K = 0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E;
     address constant AGENTIC_A = 0x055BA8ACd60A2287b2D01cb3BF237e4424357105;
+    bytes32 constant EV_DESK = keccak256("team:curb-desk");
+    bytes32 constant EV_DEPLOYER = keccak256("team:deployer");
 
-    function run() external returns (address depthCert, address credit) {
+    function run() external returns (address makers, address depthCert, address credit) {
         address registry = vm.envAddress("REGISTRY");
         require(msg.sender == DEPLOYER, "run with --sender 0x78a5955b433988198bccA2E8bdC671444798f809");
         address[] memory five = _five();
         _preflight(registry, five);
 
         vm.startBroadcast();
-        // Makers of certs naming a beneficiary (i.e. CurbCredit's book) must be eligible in the same registry that
-        // gates CurbCredit's borrowers, so nobody else can seed or grief the book the LTV is priced from.
-        depthCert = address(new DepthCert(IERC20(USDG), IEligibility(registry)));
+        // Makers of certs naming a beneficiary (CurbCredit's book) come from their OWN allowlist: K and D only.
+        EligibilityRegistry makerList = new EligibilityRegistry(DEPLOYER);
+        makerList.setEligible(DESK_K, true, EV_DESK);
+        makerList.setEligible(DEPLOYER, true, EV_DEPLOYER);
+        makers = address(makerList);
+        depthCert = address(new DepthCert(IERC20(USDG), IEligibility(makers)));
         credit = address(
             new CurbCredit(
                 IMarketClock(CLOCK),
@@ -63,13 +76,15 @@ contract DeployW4 is Script {
         );
         vm.stopBroadcast();
 
-        _readBackDepthCert(DepthCert(depthCert), credit, registry);
+        _readBackMakers(EligibilityRegistry(makers), registry);
+        _readBackDepthCert(DepthCert(depthCert), credit, makers);
         _readBackCredit(CurbCredit(credit), depthCert, registry, five);
 
-        console2.log("DepthCert  :", depthCert);
-        console2.log("CurbCredit :", credit);
-        console2.log("registry   :", registry);
-        console2.log("admin      :", DEPLOYER);
+        console2.log("makers (EligibilityRegistry):", makers);
+        console2.log("DepthCert                   :", depthCert);
+        console2.log("CurbCredit                  :", credit);
+        console2.log("borrowers (W3 registry)     :", registry);
+        console2.log("admin                       :", DEPLOYER);
     }
 
     function _five() internal pure returns (address[] memory five) {
@@ -91,10 +106,8 @@ contract DeployW4 is Script {
         require(EligibilityRegistry(registry).admin() == DEPLOYER, "REGISTRY admin is not the deployer");
         // Must answer the one call CurbCredit makes (a reverting registry would refuse every borrower).
         IEligibility(registry).isEligible(DEPLOYER);
-        // Not required to deploy, but the demo needs them: say so before anything is signed.
-        console2.log("eligible K (maker)   :", IEligibility(registry).isEligible(DESK_K));
-        console2.log("eligible A (borrower):", IEligibility(registry).isEligible(AGENTIC_A));
-        console2.log("eligible D (fade mk) :", IEligibility(registry).isEligible(DEPLOYER));
+        // Not required to deploy, but the demo's borrower must be admitted: say so before anything is signed.
+        console2.log("W3 registry: A (borrower) eligible:", IEligibility(registry).isEligible(AGENTIC_A));
         require(CLOCK.code.length > 0 && SCORECARD.code.length > 0 && USDG.code.length > 0, "pinned address has no code");
         require(IERC20(USDG).decimals() == 6, "USDG decimals");
         for (uint256 i; i < five.length; ++i) {
@@ -107,10 +120,19 @@ contract DeployW4 is Script {
         }
     }
 
-    function _readBackDepthCert(DepthCert d, address credit, address registry) internal view {
+    function _readBackMakers(EligibilityRegistry m, address borrowers) internal view {
+        require(address(m).code.length > 0, "makers: no code");
+        require(address(m) != borrowers, "makers must not be the borrower registry");
+        require(m.admin() == DEPLOYER && m.pendingAdmin() == address(0), "makers: admin");
+        require(m.isEligible(DESK_K), "makers: K");
+        require(m.isEligible(DEPLOYER), "makers: D");
+        require(!m.isEligible(AGENTIC_A), "makers: the borrower must not be a maker");
+    }
+
+    function _readBackDepthCert(DepthCert d, address credit, address makers) internal view {
         require(address(d).code.length > 0, "DepthCert: no code");
         require(address(d.usdg()) == USDG, "DepthCert: usdg");
-        require(address(d.makers()) == registry, "DepthCert: makers registry");
+        require(address(d.makers()) == makers, "DepthCert: makers registry");
         require(d.MIN_BOND_BPS() == 1000, "DepthCert: MIN_BOND_BPS");
         require(d.MIN_LIFE() == 10 minutes, "DepthCert: MIN_LIFE");
         require(d.MAX_LIFE() == 30 days, "DepthCert: MAX_LIFE");
@@ -136,13 +158,14 @@ contract DeployW4 is Script {
         require(c.LTV_OPEN_BPS() == 6000 && c.LTV_SHUT_BPS() == 3000, "CurbCredit: ltv caps");
         require(c.APR_BPS() == 500 && c.STALE_BONUS_BPS() == 500, "CurbCredit: rates");
         require(c.CURE_OPEN_SECONDS() == 1800 && c.MAX_TICK_GAP() == 600, "CurbCredit: cure clock");
+        require(c.GAS_FLOOR() == 50_000, "CurbCredit: GAS_FLOOR");
         require(c.MIN_CERT_LIFE() == 1 hours && c.SHUT_CERT_LIFE() == 73 hours, "CurbCredit: cert horizons");
         address[] memory got = c.assets();
         require(got.length == five.length, "CurbCredit: asset count");
         for (uint256 i; i < five.length; ++i) {
             require(got[i] == five[i] && c.isAsset(five[i]), "CurbCredit: asset list");
             require(c.totalCollateral(five[i]) == 0 && c.totalPrincipal(five[i]) == 0, "CurbCredit: fresh");
-            require(c.ltvFor(five[i]) == 0, "CurbCredit: no depth yet, so ltvFor must be 0");
+            require(c.ltvFor(five[i]) == 0 && c.ltvEffective(five[i]) == 0, "CurbCredit: no depth yet, so ltv 0");
             require(c.realisable(five[i]) == 0, "CurbCredit: nothing realisable yet");
             require(c.minCertExpiry(five[i]) >= block.timestamp + 90 minutes, "CurbCredit: cert horizon");
         }

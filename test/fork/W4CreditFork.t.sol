@@ -16,13 +16,14 @@ import {AllowList} from "../CurbCredit.t.sol";
 /// @notice W4 on a mainnet fork: the deployed MarketClock (regime flipped by pranking host A's `attest`), the
 ///         deployed Scorecard v2 (live `priceNow` from the real wTCENTx/USDG pool), real USDG and real wTCENTx
 ///         (both funded by pranking the pool). Walks the W4 demo: deposit -> Refusal(NoDepth) -> K's cert naming
-///         CurbCredit (expiry ~Tue 29 Sep 06:00Z, so it outlives the weekend horizon) -> ltvFor 60% per position,
+///         CurbCredit (expiry Fri 2 Oct 06:00Z, so it outlives the weekend horizon) -> ltvFor 60% per position,
 ///         with the book's 1.456 USDG bounding the total -> borrow 1.4 -> the cut takes LTV 60% -> 30% ->
 ///         flagBreach -> the cure clock freezes through the closure (and while the attestation is stale) and runs
 ///         only when open -> liquidation at the live price -> the seized shares realised into K's real cert; the
-///         fade is shown with a SEPARATE maker (D), so K's depth is untouched.
-/// @dev Depth is P3's real DepthCert(USDG, registry): K and D are eligible makers, post bonded certs naming
-///      CurbCredit with real USDG, and their allowance/balance are what make them count.
+///         fade is shown with a SEPARATE maker (D) whose cert names A, so A takes it and K's depth is untouched.
+/// @dev Wired as DeployW4 wires it: DepthCert's `makers` is its own allowlist (K and D only), CurbCredit's
+///      borrower registry is separate (A). K and D post bonded certs with real USDG; their allowance/balance are
+///      what make them count.
 contract W4CreditForkTest is Test {
     address constant CLOCK = 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b;
     address constant SCORECARD = 0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f;
@@ -37,13 +38,15 @@ contract W4CreditForkTest is Test {
     address constant W_NVDA = 0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5;
     address constant W_AAPL = 0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f;
 
-    /// @dev K's demo cert expiry: Tue 29 Sep 2026 06:00Z. It outlives the shut horizon (now + 73 h + 30 min) until
-    ///      Sat 26 Sep 04:30Z; on a fork taken after that the test uses now + 110 h instead.
-    uint64 constant DEMO_EXPIRY = 1790661600;
+    /// @dev K's demo cert expiry: Fri 2 Oct 2026 06:00Z (spec amendment). It outlives the shut horizon
+    ///      (now + 73 h + 30 min) until Mon 28 Sep 04:30Z, past Monday's reopen; on a later fork the test uses
+    ///      now + 110 h instead.
+    uint64 constant DEMO_EXPIRY = 1790920800;
 
     CurbCredit credit;
     DepthCert dc;
-    AllowList elig;
+    AllowList elig; // borrowers (W3 EligibilityRegistry stand-in)
+    AllowList makers; // DepthCert makers (DeployW4's second registry: K and D only)
     address desk = makeAddr("curb-desk (K)"); // reserve funder, cert maker
     address agent = makeAddr("agentic (A)"); // borrower
     address fadeMaker = DEPLOYER; // D: the fade demo's maker, never K
@@ -51,7 +54,8 @@ contract W4CreditForkTest is Test {
     function setUp() public {
         vm.createSelectFork("xlayer");
         elig = new AllowList();
-        dc = new DepthCert(IERC20(USDG), IEligibility(address(elig)));
+        makers = new AllowList();
+        dc = new DepthCert(IERC20(USDG), IEligibility(address(makers)));
         address[] memory five = new address[](5);
         five[0] = W_TCENT;
         five[1] = W_XIAO;
@@ -62,9 +66,9 @@ contract W4CreditForkTest is Test {
             IMarketClock(CLOCK), IScorecardPrice(SCORECARD), IDepthCert(address(dc)), IEligibility(address(elig)),
             IERC20(USDG), DEPLOYER, five
         );
-        elig.set(agent, true);
-        elig.set(desk, true); // an eligible maker may post certs naming CurbCredit
-        elig.set(fadeMaker, true); // D must be admitted to post the fade cert
+        elig.set(agent, true); // A borrows
+        makers.set(desk, true); // K posts the certs naming CurbCredit
+        makers.set(fadeMaker, true); // D posts the fade cert (naming A)
 
         // Fund from the pool, which holds both sides of wTCENTx/USDG.
         vm.startPrank(POOL_TCENT);
@@ -87,17 +91,19 @@ contract W4CreditForkTest is Test {
 
     // --- helpers ---------------------------------------------------------------------------------------------
 
-    function _attest(IMarketClock.Regime r, uint128 cap) internal {
+    function _attest(IMarketClock.Regime r, uint128 cap, uint64 nextIn) internal {
         vm.prank(HOST_A);
-        MarketClock(CLOCK).attest(W_TCENT, r, cap, uint64(block.timestamp + 1 hours), false, bytes32("w4-fork"));
+        MarketClock(CLOCK).attest(W_TCENT, r, cap, uint64(block.timestamp) + nextIn, false, bytes32("w4-fork"));
     }
 
+    /// @dev Open with the next transition 3 h away (a morning session), as host A publishes it.
     function _openHk() internal {
-        _attest(IMarketClock.Regime.MARKET, 20_000_000);
+        _attest(IMarketClock.Regime.MARKET, 20_000_000, 3 hours);
     }
 
+    /// @dev Shut overnight: the next transition (pre-open) 17 h away.
     function _shutHk() internal {
-        _attest(IMarketClock.Regime.CLOSED, 0);
+        _attest(IMarketClock.Regime.CLOSED, 0, 17 hours);
     }
 
     function _post(uint128 size, uint128 bid, uint64 life, uint128 bond) internal returns (uint256 id) {
@@ -240,6 +246,25 @@ contract W4CreditForkTest is Test {
 
     /// A cert fine for open-market lending (26 h) stops supporting the loan the moment the market shuts: while
     /// shut, only certs that outlive the next reopen plus a full cure count.
+    /// Only DeployW4's maker allowlist may post certs naming CurbCredit: a borrower cannot seed a dust bid.
+    function test_borrower_cannot_post_a_cert_naming_credit() public {
+        vm.startPrank(agent);
+        IERC20(USDG).approve(address(dc), type(uint256).max);
+        vm.expectRevert(DepthCert.IneligibleMaker.selector);
+        dc.post(W_TCENT, address(credit), 1e18, 1e6, uint64(block.timestamp + 5 days), 0.1e6);
+        vm.stopPrank();
+    }
+
+    /// Open, but the close is 30 min away: a 26 h cert cannot see the reopen plus a cure, K's Friday cert can.
+    function test_imminent_close_needs_cert_to_outlive_the_closure() public {
+        _attest(IMarketClock.Regime.MARKET, 20_000_000, 30 minutes);
+        _post(0.028e18, 52e6, 26 hours, 1e6);
+        assertEq(credit.ltvFor(W_TCENT), 0, "open, but about to shut: 26 h is not enough");
+        assertEq(credit.minCertExpiry(W_TCENT), block.timestamp + 30 minutes + 73 hours + 30 minutes);
+        _postDemoCert();
+        assertEq(credit.ltvFor(W_TCENT), 6000);
+    }
+
     function test_short_cert_does_not_count_while_shut() public {
         _openHk();
         vm.prank(agent);
@@ -282,7 +307,7 @@ contract W4CreditForkTest is Test {
 
         // Bids fall before the reopen: the desk adds a cert at 20 USDG a share (1.2 USDG notional), which becomes
         // the book's minimum bid, so the loan stays over its limit even when the market is open.
-        _post(0.06e18, 20e6, 26 hours, 0.12e6);
+        _post(0.06e18, 20e6, 110 hours, 0.12e6);
 
         // Reopen: the first open tick only witnesses; then every open 5-minute gap counts.
         _openHk();
@@ -327,12 +352,39 @@ contract W4CreditForkTest is Test {
         console2.log("realised (USDG units):", cost);
     }
 
-    /// The fade is shown with a separate maker (D), never K: revoking K's allowance would also wipe K's other depth.
+    /// The fade is shown with a separate maker (D), never K, and D's cert names A so A can take it.
+    function test_fade_demo_D_cert_named_to_A() public {
+        (, uint256 kCert) = _demoBorrowWithCert();
+
+        vm.startPrank(fadeMaker);
+        IERC20(USDG).approve(address(dc), type(uint256).max);
+        uint256 dCert = dc.post(W_TCENT, agent, 0.03e18, 52e6, uint64(block.timestamp + 26 hours), 0.2e6);
+        IERC20(USDG).approve(address(dc), 0); // D walks away from the bid
+        vm.stopPrank();
+        assertFalse(dc.isHonourable(fadeMaker));
+        assertTrue(dc.isHonourable(desk), "K's depth is untouched");
+
+        uint256 before = IERC20(USDG).balanceOf(agent);
+        uint256 sharesBefore = IERC20(W_TCENT).balanceOf(agent);
+        vm.startPrank(agent);
+        IERC20(W_TCENT).approve(address(dc), 0.03e18);
+        (bool filled, uint256 amount) = dc.take(dCert, 0.03e18, agent);
+        vm.stopPrank();
+        assertFalse(filled, "faded");
+        assertEq(amount, 0.2e6);
+        assertEq(IERC20(USDG).balanceOf(agent), before + 0.2e6, "D's whole bond to A");
+        assertEq(IERC20(W_TCENT).balanceOf(agent), sharesBefore, "A keeps her shares");
+        assertEq(uint8(dc.certOf(dCert).status), uint8(IDepthCert.Status.FADED));
+        assertEq(uint8(dc.certOf(kCert).status), uint8(IDepthCert.Status.LIVE), "K's cert still live");
+        assertEq(credit.ltvFor(W_TCENT), 6000, "and CurbCredit still prices off it");
+    }
+
+    /// The admin's `realise` fades too when the maker of a cert naming CurbCredit walks away (D, not K).
     function test_realise_fade_on_live_usdg_with_a_separate_maker() public {
         (, uint256 kCert) = _demoBorrowWithCert();
         _shutHk();
         credit.flagBreach(agent, W_TCENT);
-        _post(0.06e18, 20e6, 26 hours, 0.12e6);
+        _post(0.06e18, 20e6, 110 hours, 0.12e6);
         _openHk();
         credit.tick(agent, W_TCENT);
         for (uint256 i = 1; i <= 6; ++i) {
@@ -342,14 +394,11 @@ contract W4CreditForkTest is Test {
         credit.liquidate(agent, W_TCENT);
         uint256 seized = credit.seized(W_TCENT);
 
-        // D posts a cert naming CurbCredit, then revokes its USDG allowance: the bid is no longer payable.
         vm.startPrank(fadeMaker);
         IERC20(USDG).approve(address(dc), type(uint256).max);
         uint256 dCert = dc.post(W_TCENT, address(credit), 0.03e18, 52e6, uint64(block.timestamp + 26 hours), 0.2e6);
         IERC20(USDG).approve(address(dc), 0);
         vm.stopPrank();
-        assertFalse(dc.isHonourable(fadeMaker));
-        assertTrue(dc.isHonourable(desk), "K's depth is untouched");
 
         uint256 r = credit.reserve();
         vm.prank(DEPLOYER);
@@ -358,6 +407,5 @@ contract W4CreditForkTest is Test {
         assertEq(credit.reserve(), r + 0.2e6, "D's whole bond");
         assertEq(uint8(dc.certOf(dCert).status), uint8(IDepthCert.Status.FADED));
         assertEq(uint8(dc.certOf(kCert).status), uint8(IDepthCert.Status.LIVE), "K's cert still live");
-        assertGt(credit.ltvFor(W_TCENT), 0, "and still counted");
     }
 }

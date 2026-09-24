@@ -276,6 +276,7 @@ contract CurbCreditTest is CreditBase {
         assertEq(credit.MAX_TICK_GAP(), 600);
         assertEq(credit.MIN_CERT_LIFE(), 3600);
         assertEq(credit.SHUT_CERT_LIFE(), 73 hours);
+        assertEq(credit.GAS_FLOOR(), 50_000);
         assertEq(credit.reserve(), 100_000e6);
     }
 
@@ -402,7 +403,7 @@ contract CurbCreditTest is CreditBase {
         uint64 LONG = 10 days;
         uint64 SHUT_H = 73 hours + 30 minutes; // SHUT_CERT_LIFE + CURE_OPEN_SECONDS
         uint64 OPEN_H = 1 hours + 30 minutes; // MIN_CERT_LIFE + CURE_OPEN_SECONDS
-        c = new LtvCase[](24);
+        c = new LtvCase[](27);
         c[0] = LtvCase("unknown clock -> 0", IMarketClock.Regime.UNKNOWN, 0, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 0);
         c[1] = LtvCase("open, bid 90% of price -> open cap", MKT, 20_000_000, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 6000);
         c[2] = LtvCase("closed -> shut cap", SHUT, 0, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 3000);
@@ -427,6 +428,9 @@ contract CurbCreditTest is CreditBase {
         c[21] = LtvCase("demo: 52 bid @55.78, open", MKT, 20_000_000, true, 55.78e18, 0.028e18, 52e6, LONG, 0, 0.05e18, 6000);
         c[22] = LtvCase("demo: 52 bid @55.78, shut", SHUT, 0, true, 55.78e18, 0.028e18, 52e6, LONG, 0, 0.05e18, 3000);
         c[23] = LtvCase("dust depth still prices the ratio (realisable bounds it)", MKT, 20_000_000, true, 50e18, 1e15, 45e6, LONG, 0, 1_000e18, 6000);
+        c[24] = LtvCase("open, close in 1 h: a 50 h cert does not count", MKT, 20_000_000, true, 50e18, 200e18, 45e6, 50 hours, 1 hours, 100e18, 0);
+        c[25] = LtvCase("open, close in 1 h: cert outliving close + 73 h + cure counts", MKT, 20_000_000, true, 50e18, 200e18, 45e6, 1 hours + SHUT_H, 1 hours, 100e18, 6000);
+        c[26] = LtvCase("open, next transition in 2 h: the 1 h + cure rule", MKT, 20_000_000, true, 50e18, 200e18, 45e6, OPEN_H, 2 hours, 100e18, 6000);
     }
 
     function test_ltvFor_table() public {
@@ -464,6 +468,14 @@ contract CurbCreditTest is CreditBase {
     function test_minCertExpiry_horizons() public {
         uint256 t = block.timestamp;
         assertEq(credit.minCertExpiry(address(wA)), t + 1 hours + 30 minutes, "open: 1 h + cure");
+        clock.setNextTransition(address(wA), uint64(t + 89 minutes));
+        assertEq(credit.minCertExpiry(address(wA)), t + 89 minutes + 73 hours + 30 minutes, "open, close imminent");
+        clock.setNextTransition(address(wA), uint64(t + 90 minutes));
+        assertEq(credit.minCertExpiry(address(wA)), t + 1 hours + 30 minutes, "open, close 1 h 30 away: normal rule");
+        vm.mockCallRevert(address(clock), abi.encodeWithSelector(IMarketClock.secondsToNextTransition.selector), "x");
+        assertEq(credit.minCertExpiry(address(wA)), t + 73 hours + 30 minutes, "open, clock read fails: shut rule");
+        vm.clearMockedCalls();
+        clock.setNextTransition(address(wA), 0);
         _shut(address(wA));
         assertEq(credit.minCertExpiry(address(wA)), t + 73 hours + 30 minutes, "shut: 73 h + cure");
         clock.setNextTransition(address(wA), uint64(t + 20 hours));
@@ -499,6 +511,136 @@ contract CurbCreditTest is CreditBase {
         assertEq(credit.ltvFor(address(wX)), 0);
         assertEq(credit.realisable(address(wX)), 0);
         assertEq(credit.limitOf(alice, address(wX)), 0);
+    }
+
+    /// Finding (open horizon): a cert that would lapse before the next reopen plus a cure stops counting as soon
+    /// as a close is within 1 h 30 min, even while the market is still open.
+    function test_open_but_closing_requires_cert_to_outlive_the_closure() public {
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 26 hours));
+        _deposit(alice, address(wA), 100e18);
+        clock.setNextTransition(address(wA), uint64(block.timestamp + 3 hours));
+        assertEq(credit.ltvFor(address(wA)), 6000);
+        assertTrue(_borrow(alice, address(wA), 1000e6));
+        vm.warp(block.timestamp + 2 hours); // the close is now 1 h away
+        _open(address(wA)); // still open
+        assertEq(credit.ltvFor(address(wA)), 0, "a 26 h cert cannot see the reopen plus a cure");
+        (bool known, bool breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && breached);
+    }
+
+    // --- effective ratio: depth leaving is a margin call ---------------------------------------------------
+
+    function test_ltvEffective_scales_when_depth_leaves_and_ignores_idle_collateral() public {
+        _deposit(alice, address(wA), 100e18);
+        _deposit(bob, address(wA), 100e18);
+        assertEq(credit.ltvEffective(address(wA)), 6000, "nothing lent: unscaled");
+        assertTrue(_borrow(alice, address(wA), 2000e6));
+        assertTrue(_borrow(bob, address(wA), 2000e6));
+        assertEq(credit.ltvEffective(address(wA)), 6000, "cover 9000 >= 4000 lent");
+
+        // The book shrinks to 50 shares: cover 50 * 45 = 2250 against 4000 lent.
+        dc.setDepth(address(wA), address(credit), 50e18, BID, uint64(block.timestamp + 10 days));
+        assertEq(credit.ltvFor(address(wA)), 6000, "the ratio itself is unchanged");
+        assertEq(credit.ltvEffective(address(wA)), 6000 * 2250 / 4000);
+        assertEq(credit.limitOf(alice, address(wA)), MulDiv.mulDiv(5000e6, 3375, 1e4));
+        (bool known, bool breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && breached, "margin call");
+        (known, breached) = credit.isBreached(bob, address(wA));
+        assertTrue(known && breached, "for everyone, pro rata");
+
+        // Idle collateral changes nothing.
+        uint256 before = credit.limitOf(alice, address(wA));
+        wA.mint(carol, 5_000e18);
+        _deposit(carol, address(wA), 5_000e18);
+        assertEq(credit.ltvEffective(address(wA)), 3375);
+        assertEq(credit.limitOf(alice, address(wA)), before);
+
+        // Repaying restores cover for everyone.
+        vm.prank(bob);
+        credit.repay(bob, address(wA), type(uint256).max);
+        assertEq(credit.ltvEffective(address(wA)), 6000, "2250 cover >= 2000 lent");
+        (known, breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && !breached);
+    }
+
+    function test_no_scaling_right_after_any_borrow() public {
+        dc.setDepth(address(wA), address(credit), 100e18, BID, uint64(block.timestamp + 10 days));
+        _aliceAtLimit();
+        _deposit(bob, address(wA), 100e18);
+        assertTrue(_borrow(bob, address(wA), 1500e6)); // up to realisable 4500
+        assertEq(credit.totalPrincipal(address(wA)), 4500e6);
+        assertEq(credit.ltvEffective(address(wA)), 6000, "a borrow can never leave cover < totalPrincipal");
+    }
+
+    function test_seized_shares_consume_the_book_first() public {
+        _aliceBreachedOpen(40e18);
+        _runCureOpen(alice, address(wA));
+        credit.liquidate(alice, address(wA));
+        uint256 held = credit.seized(address(wA)); // ~75 of the 200-share book
+        assertGt(held, 70e18);
+        _deposit(bob, address(wA), 200e18);
+        assertEq(credit.realisable(address(wA)), MulDiv.mulDiv(DEPTH - held, BID, 1e18), "only what is left after them");
+        // A book no bigger than what is already held supports no new lending (the ratio itself is unchanged).
+        dc.setDepth(address(wA), address(credit), held, BID, uint64(block.timestamp + 10 days));
+        assertEq(credit.ltvFor(address(wA)), 6000);
+        assertEq(credit.realisable(address(wA)), 0);
+        _refuseBorrow(bob, address(wA), 1e6, CurbCredit.ExceedsDepth.selector, 0);
+    }
+
+    // --- gas starvation ------------------------------------------------------------------------------------
+
+    /// Finding (tick starvation): a `tick` sent with just too little gas must revert, never succeed with the depth
+    /// read silently failed -- that would keep a healthy position's cure open and bank open-seconds.
+    function test_starved_tick_reverts_instead_of_leaving_the_cure_open() public {
+        _aliceAtLimit();
+        _shut(address(wA));
+        credit.flagBreach(alice, address(wA));
+        _open(address(wA)); // the reopen: healthy again
+        (bool known, bool breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && !breached);
+        dc.setBurn(4_000); // a heavy book: honouredDepth costs ~0.5-1M gas
+
+        bytes memory cd = abi.encodeCall(CurbCredit.tick, (alice, address(wA)));
+        uint256 snap = vm.snapshotState();
+        bool sawStarvedRevert;
+        uint256 firstOk;
+        for (uint256 g = 60_000; g < 6_000_000; g += 20_000) {
+            vm.revertToState(snap);
+            (bool ok, bytes memory ret) = address(credit).call{gas: g}(cd);
+            if (!ok) {
+                if (ret.length >= 4 && bytes4(ret) == CurbCredit.InsufficientGas.selector) sawStarvedRevert = true;
+                continue;
+            }
+            assertFalse(credit.cureOf(alice, address(wA)).active, "a successful tick on a healthy position clears it");
+            firstOk = g;
+            break;
+        }
+        assertTrue(sawStarvedRevert, "starved ticks revert InsufficientGas");
+        assertGt(firstOk, 0, "enough gas succeeds");
+        vm.revertToState(snap);
+        // A genuinely reverting DepthCert, with gas to spare, still reads as no depth.
+        vm.mockCallRevert(address(dc), abi.encodeWithSelector(IDepthCert.honouredDepth.selector), "boom");
+        credit.tick(alice, address(wA));
+        assertTrue(credit.cureOf(alice, address(wA)).active, "no depth: still breached, cure stays");
+    }
+
+    function test_starved_reads_revert_everywhere() public {
+        _deposit(alice, address(wA), 100e18);
+        dc.setBurn(4_000);
+        bytes memory cd = abi.encodeCall(CurbCredit.borrow, (address(wA), 1e6));
+        bool sawStarvedRevert;
+        for (uint256 g = 60_000; g < 6_000_000; g += 20_000) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(alice);
+            (bool ok, bytes memory ret) = address(credit).call{gas: g}(cd);
+            if (ok) {
+                assertTrue(abi.decode(ret, (bool)), "a starved depth read never becomes Refusal(NoDepth)");
+                break;
+            }
+            if (ret.length >= 4 && bytes4(ret) == CurbCredit.InsufficientGas.selector) sawStarvedRevert = true;
+            vm.revertToState(snap);
+        }
+        assertTrue(sawStarvedRevert);
     }
 
     function test_realisable_is_notional_of_covered_collateral() public {
@@ -1683,6 +1825,28 @@ contract CurbCreditRealDepthTest is Test {
         credit.liquidate(alice, address(wA));
         seized = credit.seized(address(wA));
         assertGt(seized, 75e18);
+    }
+
+    /// Depth leaving through a fade (the maker walks away) is a margin call for everyone still borrowing.
+    function test_real_fade_is_a_margin_call() public {
+        address bob = makeAddr("bob");
+        elig.set(bob, true);
+        wA.mint(bob, 100e18);
+        vm.prank(bob);
+        wA.approve(address(credit), type(uint256).max);
+        _post(desk, address(credit), 120e18, 45e6, 3 days);
+        _deposit(100e18);
+        assertTrue(_borrow(2500e6));
+        vm.prank(bob);
+        credit.deposit(address(wA), 100e18);
+        vm.prank(bob);
+        assertTrue(credit.borrow(address(wA), 2500e6)); // 5000 lent against a 5400 book
+        assertEq(credit.ltvEffective(address(wA)), 6000);
+        vm.prank(desk);
+        usdg.approve(address(depth), 0); // the only maker revokes: no honourable depth at all
+        assertEq(credit.ltvEffective(address(wA)), 0);
+        (bool known, bool breached) = credit.isBreached(bob, address(wA));
+        assertTrue(known && breached);
     }
 
     function test_real_realise_fill() public {

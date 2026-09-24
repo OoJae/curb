@@ -3,7 +3,7 @@
  * rpc.xlayer.tech allows ~7 requests/s per IP and counts each JSON-RPC batch ITEM, so callers take one
  * slot per item. At most RPC_PER_SECOND slots in any 1,000 ms window — a hard bound, no bursts.
  */
-export const RPC_PER_SECOND = 5;
+export const RPC_PER_SECOND = 3;
 const WINDOW_MS = 1000;
 const sent: number[] = [];
 let queue: Promise<void> = Promise.resolve();
