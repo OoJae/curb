@@ -289,6 +289,45 @@ reopen print, or a Scorecard settlement. The deployer called the permissionless
 The ring grows to 256 as trading writes observations into it. Once it exceeds 120, the attack can't
 succeed, because the pool writes at most one observation per second.
 
+## W4 — DepthCert, CurbCredit and the maker allowlist — 24 Sept 2026 ~19:15Z
+
+Deployed from `curb-deployer` with `script/DeployW4.s.sol` (`REGISTRY` = the W3 borrower registry). All
+three are verified **Sourcify `exact_match`**.
+
+| contract | address | tx | block |
+|---|---|---|---|
+| EligibilityRegistry (makers) | `0xbA1aB5027e826D564EA913b3f7acb95Fd651758E` | `0xe41c715c4710c04601a50a04c4640e4f86b05846acb6ccff0ed12aa65b8b4393` | 71,507,846 |
+| setEligible(curb-desk) (maker) | — | `0x385dcc285ed63a0f5577057b5a8164cd2dc20224880cc065803abf6cdb43573e` | 71,507,852 |
+| setEligible(deployer) (maker) | — | `0x3e5f88a6cdf389fe37443c28ebab011b58a7ea6d5ffb0ba4e2cc1ca0b38652f9` | 71,507,854 |
+| DepthCert | `0x702b1a988765f85162F4829175EF4232197e9C6D` | `0x0b1d619895c378e2288100684c6a2359885f997b5a7f497175c44c5f0ca3fd0f` | 71,507,861 |
+| CurbCredit | `0x23c778c88C3ABf0Ad750f703C5F04cB3129ee339` | `0x8ad640d0ed4a9e07d47bb532f59c153621c6714c427c1ceb382def061a868543` | 71,507,867 |
+
+**Makers and borrowers are on separate allowlists.** A maker's bid sets every borrower's LTV, so a borrower
+must never be able to post one. The maker registry holds only curb-desk and the deployer.
+
+**Three adversarial review rounds changed the design before deploy.** Each finding was independently
+verified with a PoC, then fixed and regression-tested.
+
+**DepthCert**
+- An expired but unwithdrawn cert no longer counts toward a maker's commitments, and anyone can withdraw
+  one once it has expired.
+- Open books are uncapped.
+- The minimum notional is 1 USDG, and no fill can leave an unfillable dust remainder.
+- A maker naming a beneficiary must be on the maker allowlist.
+
+**CurbCredit**
+- Bad debt is booked only when every share has been seized. A partial liquidation reduces the debt and
+  leaves the rest owed.
+- LTV is per position: `min(regimeCap, minBid/P)`, scaled down when the honoured book no longer covers
+  everything lent. Idle collateral can't push anyone else into breach.
+- A cert counts only if it outlives the next closure plus a full 30-minute cure. The horizon depends on
+  the asset's hours mode, so a 24/5 name's routine session changes don't margin-call its loans.
+- Every fallback read fails closed when starved of gas, so a starved `tick` can't bank cure time.
+- `borrow` and `withdraw` refuse inside a successful transaction and emit `Refusal`.
+
+Tests on main at deploy: **301/301**, plus fork suites against live mainnet state and the invariant runs
+recorded in `artifacts/w5/`.
+
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 
 `DATA_SUFFIX` set on host A (Railway variable, then a code upload: one restart), host B and the keeper

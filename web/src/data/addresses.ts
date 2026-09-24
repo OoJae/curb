@@ -37,8 +37,8 @@ export const ELIGIBILITY_REGISTRY: Address | null = "0xd7251b562eD07374ccD2436a7
 export const REOPEN_POINTER: Address | null = "0x85AB0FebdFa7201E65eA01bd3e4CC6F9c0Ac4471";
 export const REOPEN_NOTE: Address | null = "0x7B2AcB0Db3316f7B8cf1B287796a2273871F011B";
 export const CLOSED_AUCTION: Address | null = "0xAc74864d69DdB940ADfDB39E69751759a32bb80D";
-export const DEPTH_CERT: Address | null = null;
-export const CURB_CREDIT: Address | null = null;
+export const DEPTH_CERT: Address | null = "0x702b1a988765f85162F4829175EF4232197e9C6D";
+export const CURB_CREDIT: Address | null = "0x23c778c88C3ABf0Ad750f703C5F04cB3129ee339";
 
 /**
  * Ids the demo created (the browser never scans history, so it cannot discover them). LEAD: paste the
