@@ -160,6 +160,8 @@ const METHOD = "curb.scorecard.mark/1";
 function markInputs(): MarkInputs {
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
   return {
+    // Block 71,300,000 is inside mark/1's range, so the row is built and committed as mark/1.
+    method: METHOD,
     chainId: 196, clock: CLOCK, scorecard: SCORECARD, evaluatedAtMs: EVAL_MS, codeDigest: "sha256:test",
     specs: [{ wrapper: W, symbol: "wTCENTx", pool: POOL, equityIsToken0: true, equityDecimals: 18, stableDecimals: 6 }],
     chain: {
