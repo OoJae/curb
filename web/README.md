@@ -181,7 +181,14 @@ slotStrip(el, slots: SlotState[], { nowIndex?, days?, label? }) → { update(slo
 
 // format.ts
 fmtBlock · fmtInt · fmtUsd · fmtBp (signed, "−3.5 bp") · fmtDuration ("65 h 35 m") · fmtAgo · shortHash · shortAddress
+
+// tokens.ts: read tokens at runtime (for the ring, canvases and /brand), never repeat hex values
+COLOUR_TOKENS (the six, with names and roles) · cssVar('--streetlamp', el?) → "#F5A524" · cssHex('--ivory') → 0xf4efe6
 ```
+
+`txButton` puts its status line (`.tx-status`, `role="status"`) directly after the button. When the
+button sits in a flex or grid row, the line goes after the row instead. To place it yourself, pass
+`status`.
 
 ## Checks
 

@@ -103,7 +103,11 @@ export function txButton(el: HTMLButtonElement, run: () => Promise<TxResult>, op
   if (!status) {
     status = document.createElement('p');
     status.className = 'tx-status';
-    el.after(status);
+    // In a flex/grid row of buttons, put the status line under the row, not between buttons.
+    const parent = el.parentElement;
+    const display = parent ? getComputedStyle(parent).display : '';
+    if (parent && parent !== document.body && /flex|grid/.test(display)) parent.after(status);
+    else el.after(status);
   }
   status.setAttribute('role', 'status');
   status.setAttribute('aria-live', 'polite');

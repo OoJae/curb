@@ -79,7 +79,13 @@ for (const file of files) {
     }
     if (/\.(ts|js|mjs)$/.test(file)) code = code.replace(/(^|[^:'"`])\/\/.*$/, '$1');
     if (/\.html$/.test(file)) code = code.replace(/<!--.*?-->/g, '');
-    const scrubbed = code.replace(FRAGMENT_ATTR, '');
+    let scrubbed = code.replace(FRAGMENT_ATTR, '');
+    // In scripts a colour can only live inside a string or template; outside them `#x` is a private field.
+    if (/\.(ts|js|mjs)$/.test(file)) {
+      const strings = scrubbed.match(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g) ?? [];
+      // A line inside a multi-line template has no opening quote: treat markup-looking lines as strings.
+      scrubbed = /^\s*</.test(scrubbed) ? scrubbed : strings.join(' ');
+    }
     for (const m of scrubbed.matchAll(HEX)) {
       failures.push(`${rel}:${i + 1}  raw hex colour ${m[0]} (use a token from tokens.css)`);
     }
