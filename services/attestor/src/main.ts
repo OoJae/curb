@@ -43,6 +43,7 @@ import { TakeoverPlanner, readChainStates } from "./coord.ts";
 import type { Alarm, PlannerSnapshot } from "./coord.ts";
 import { checkRound, compareObservation, signWitness, Observation, isBundleShaped } from "./witness.ts";
 import type { Sample, RoundCheck } from "./witness.ts";
+import { publisherFromEnv } from "./publish.ts";
 
 // ---------------------------------------------------------------------------------------------
 // configuration
@@ -109,6 +110,9 @@ const { cfg: CFG, errors: CONFIG_ERRORS } = loadConfig();
 
 const log = (event: string, fields: Record<string, unknown> = {}) =>
   console.log(JSON.stringify({ t: new Date().toISOString(), host: CFG.hostId, event, ...fields }, (_, v) => (typeof v === "bigint" ? v.toString() : v)));
+
+/** Second copy of every bundle and witness statement, in the locked R2 archive (publish.ts). Off in shadow mode and while R2_* is unset. */
+const publisher = publisherFromEnv(CFG.dataDir, CFG.mode, log);
 
 /** sha256 over this service's own source, so every bundle names the exact code that produced it. */
 function codeDigest(): string {
@@ -294,6 +298,7 @@ async function main() {
     ? { on: true, dataSuffix: CFG.dataSuffix, codes: builderCodes(CFG.dataSuffix), note: "ERC-8021 Builder Code suffix appended to every transaction this host signs" }
     : { on: false, note: "DATA_SUFFIX unset: transactions carry no Builder Code" });
   mkdirSync(join(CFG.dataDir, "outbox"), { recursive: true });
+  publisher.start();
   loadUndelivered();
   const digest = codeDigest();
 
@@ -985,6 +990,8 @@ async function witnessOne(s: Standby, p: PendingRound, me: string, schedules: Ma
   const content = JSON.stringify(doc);
   persistOnce(join(ws.dir, "tx", `${p.txHash}.json`), content);
   persistOnce(rootIndex, content);
+  publisher.enqueue(`witness/tx/${p.txHash}.json`, join(ws.dir, "tx", `${p.txHash}.json`));
+  publisher.enqueue(`witness/${p.inputRoot}.json`, rootIndex);
   ws.state.pending = ws.state.pending.filter((q) => q.txHash !== p.txHash);
 
   health.witness!.last = {
@@ -1038,7 +1045,9 @@ function persistOnce(path: string, content: string) {
 }
 
 function persistBundle(root: string, bundle: unknown) {
-  persistOnce(join(CFG.dataDir, "outbox", `${root}.json`), JSON.stringify(bundle));
+  const path = join(CFG.dataDir, "outbox", `${root}.json`);
+  persistOnce(path, JSON.stringify(bundle));
+  publisher.enqueue(`rounds/${root.toLowerCase()}.json`, path);
 }
 
 async function ping(url: string): Promise<boolean> {
@@ -1113,7 +1122,7 @@ function startHttp(health: Health) {
       const witnessFresh = !health.witness || Date.now() - health.witness.lastOkTickMs < 10 * 60_000;
       const ok = tickFresh && witnessFresh;
       res.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok, ...health, balanceWei: health.balanceWei?.toString() }));
+      res.end(JSON.stringify({ ok, ...health, balanceWei: health.balanceWei?.toString(), archive: publisher.health() }));
       return;
     }
     const m = url.match(/^\/(rounds|witness|witness\/tx)\/(0x[0-9a-f]{64})\.json$/);
