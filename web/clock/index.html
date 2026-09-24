@@ -12,7 +12,7 @@
       <section class="wrap clk-intro grid" aria-labelledby="clk-title">
         <div class="col-ledger clk-intro__text">
           <p class="t-label">MarketClock · X Layer</p>
-          <h1 id="clk-title" class="t-h1 vt-title-clock" data-reveal>Open, or <em>shut</em>, right now.</h1>
+          <h1 id="clk-title" class="t-h1 vt-title-clock" data-reveal>Six assets, open or <em>shut</em> right now</h1>
           <p class="t-lede measure">For each tokenized equity, MarketClock records whether its home market will create and redeem shares right now. An attestor reads the issuer every five minutes and writes the answer to X Layer.</p>
           <p class="t-body muted measure">The contract fails closed. An attestation older than 30 minutes reads as unknown, with a cap of zero, so a dead attestor can never leave an asset looking open.</p>
         </div>
@@ -27,7 +27,7 @@
               <dt>Contract</dt>
               <dd class="clk-addr">
                 <a class="txlink" href="https://www.oklink.com/xlayer/address/0x160Dc415902971a7a9B5ade7f43005b36FE5B09b" target="_blank" rel="noopener" title="0x160Dc415902971a7a9B5ade7f43005b36FE5B09b">0x160D…B09b<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a>
-                <button class="copy" type="button" data-copy="0x160Dc415902971a7a9B5ade7f43005b36FE5B09b">Copy address</button>
+                <button class="copy" type="button" data-copy="0x160Dc415902971a7a9B5ade7f43005b36FE5B09b"><span class="copy__label">Copy address</span><span class="copy__done" aria-hidden="true">Copied</span></button>
               </dd>
             </div>
             <div class="ledger__row">
@@ -93,7 +93,7 @@
           <p class="t-small muted">Rebuilds the root from the bundle, re-runs the derivation, and compares it with what the transaction wrote. Needs Node 22.18 or newer.</p>
           <div class="clk-cmd surface-ink">
             <pre class="clk-cmd__code" tabindex="0" aria-label="Verify command"><code data-round-cmd>npx -y curb-verify tx &lt;round transaction&gt;</code></pre>
-            <button class="copy clk-cmd__copy" type="button" data-copy-cmd>Copy</button>
+            <button class="copy clk-cmd__copy" type="button" data-copy-cmd><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
           </div>
         </div>
       </section>
@@ -108,7 +108,7 @@
           <div class="clk-code surface-ink">
             <div class="clk-code__bar">
               <span class="t-data clk-code__name">UsesTheClock.sol</span>
-              <button class="copy" type="button" data-copy-sol>Copy</button>
+              <button class="copy" type="button" data-copy-sol><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
             </div>
 <pre class="clk-code__pre" tabindex="0" aria-label="Solidity example"><code data-sol><span class="clk-c">// SPDX-License-Identifier: MIT</span>
 pragma solidity ^0.8.28;
@@ -137,7 +137,7 @@ contract UsesTheClock {
           </div>
           <div class="clk-cmd surface-ink">
             <pre class="clk-cmd__code" tabindex="0" aria-label="Command line example"><code data-cast>cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b "primaryCapNow(address)(uint128)" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech</code></pre>
-            <button class="copy clk-cmd__copy" type="button" data-copy-cast>Copy</button>
+            <button class="copy clk-cmd__copy" type="button" data-copy-cast><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
           </div>
           <p class="t-small muted clk-snippet__note">The wrapper above is wTCENTx. The full interface, including <code>isInMultiplierBlackout</code> and <code>rawToShares</code>, is in the <a href="https://www.oklink.com/xlayer/address/0x160Dc415902971a7a9B5ade7f43005b36FE5B09b" target="_blank" rel="noopener">verified source<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a>.</p>
         </div>

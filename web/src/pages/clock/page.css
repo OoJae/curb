@@ -33,7 +33,7 @@
 }
 
 .clk-summary__asof {
-  min-height: calc(var(--t-data) * var(--lh-data));
+  min-height: calc(2 * var(--t-data) * var(--lh-data));
 }
 
 .clk-summary__facts {
@@ -233,7 +233,9 @@
 
 /* Cards below 1024 px: the header row is read by screen readers only; each cell carries its label. */
 @media (max-width: 1023.98px) {
-  .clk-table thead {
+  .clk-table thead,
+  .clk-table thead tr {
+    display: block;
     position: absolute;
     width: 1px;
     height: 1px;
@@ -384,6 +386,7 @@
 
 .clk-snippet {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--s-2);
   margin-top: var(--s-5);
 }

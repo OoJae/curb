@@ -12,13 +12,13 @@
       <section class="wrap api-intro grid" aria-labelledby="api-title">
         <div class="col-ledger api-intro__text">
           <p class="t-label">api.curb.markets · x402 on X Layer</p>
-          <h1 id="api-title" class="t-h1 vt-title-api" data-reveal>What an agent can buy about the hours the market is <em>shut</em>.</h1>
+          <h1 id="api-title" class="t-h1 vt-title-api" data-reveal>What an agent can buy about the <em>shut</em> hours</h1>
           <p class="t-lede measure">Curb sells what MarketClock and Scorecard know, one call at a time. Ask without paying and you get the price and a free preview. Pay from an OKX Agentic Wallet and you get the answer, with a receipt bound to the exact bytes you received.</p>
         </div>
         <aside class="col-instrument api-status" aria-labelledby="api-status-title">
           <h2 id="api-status-title" class="t-label">The service</h2>
           <dl class="ledger">
-            <div class="ledger__row"><dt>Base URL</dt><dd class="api-base"><code>https://api.curb.markets</code><button class="copy" type="button" data-copy="https://api.curb.markets">Copy</button></dd></div>
+            <div class="ledger__row"><dt>Base URL</dt><dd class="api-base"><code>https://api.curb.markets</code><button class="copy" type="button" data-copy="https://api.curb.markets"><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button></dd></div>
             <div class="ledger__row"><dt>Status</dt><dd data-api-health>Reading /healthz…</dd></div>
             <div class="ledger__row"><dt>Payment</dt><dd>USD₮0 on X Layer (<code>eip155:196</code>), scheme <code>exact</code>, verified and settled by the OKX Broker</dd></div>
             <div class="ledger__row"><dt>Marketplace</dt><dd>OKX AI, agent #13869, listing under review</dd></div>
@@ -47,15 +47,15 @@
         </div>
         <div class="api-cmds">
           <div class="api-term surface-ink">
-            <div class="api-term__bar"><span class="t-data api-term__name">1 · Quote (never signs)</span><button class="copy" type="button" data-copy-cmd="quote">Copy</button></div>
+            <div class="api-term__bar"><span class="t-data api-term__name">1 · Quote (never signs)</span><button class="copy" type="button" data-copy-cmd="quote"><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button></div>
             <pre class="api-term__pre" tabindex="0" aria-label="Quote command"><code data-cmd="quote">onchainos payment quote "https://api.curb.markets/v1/closure-calendar?symbol=wTCENTx&amp;horizonDays=7"</code></pre>
           </div>
           <div class="api-term surface-ink">
-            <div class="api-term__bar"><span class="t-data api-term__name">2 · Pay (signs in the TEE, replays, returns the answer)</span><button class="copy" type="button" data-copy-cmd="pay">Copy</button></div>
+            <div class="api-term__bar"><span class="t-data api-term__name">2 · Pay (signs in the TEE, replays, returns the answer)</span><button class="copy" type="button" data-copy-cmd="pay"><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button></div>
             <pre class="api-term__pre" tabindex="0" aria-label="Pay command"><code data-cmd="pay">onchainos payment pay --payment-id &lt;paymentId from the quote&gt;</code></pre>
           </div>
           <div class="api-term surface-ink">
-            <div class="api-term__bar"><span class="t-data api-term__name">Or see the raw 402</span><button class="copy" type="button" data-copy-cmd="curl">Copy</button></div>
+            <div class="api-term__bar"><span class="t-data api-term__name">Or see the raw 402</span><button class="copy" type="button" data-copy-cmd="curl"><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button></div>
             <pre class="api-term__pre" tabindex="0" aria-label="curl command"><code data-cmd="curl">curl -si https://api.curb.markets/v1/closure-calendar</code></pre>
           </div>
         </div>
@@ -96,7 +96,7 @@
         </div>
         <div class="col-instrument api-market__cmd">
           <div class="api-term surface-ink">
-            <div class="api-term__bar"><span class="t-data api-term__name">Look it up</span><button class="copy" type="button" data-copy-cmd="agent">Copy</button></div>
+            <div class="api-term__bar"><span class="t-data api-term__name">Look it up</span><button class="copy" type="button" data-copy-cmd="agent"><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button></div>
             <pre class="api-term__pre" tabindex="0" aria-label="Agent lookup command"><code data-cmd="agent">onchainos agent get-agents --agent-ids 13869</code></pre>
           </div>
         </div>

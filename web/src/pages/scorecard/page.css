@@ -14,8 +14,22 @@
 }
 
 .sc-headline {
-  min-height: calc(2em * var(--lh-h2));
+  min-height: calc(3em * var(--lh-h2));
   max-width: 24ch;
+}
+
+[data-sc-headline-note] {
+  min-height: calc(3em * var(--lh-body));
+}
+
+@media (min-width: 768px) {
+  .sc-headline {
+    min-height: calc(2em * var(--lh-h2));
+  }
+
+  [data-sc-headline-note] {
+    min-height: calc(2em * var(--lh-body));
+  }
 }
 
 .sc-tally {
@@ -29,12 +43,20 @@
   border-bottom-color: var(--hairline);
 }
 
+.sc-tally__table {
+  table-layout: fixed;
+}
+
+.sc-tally__table th:first-child {
+  width: 40%;
+}
+
 .sc-tally__table td.num {
   font-size: var(--t-lede);
 }
 
 .sc-tally__asof {
-  min-height: calc(var(--t-data) * var(--lh-data));
+  min-height: calc(2 * var(--t-data) * var(--lh-data));
 }
 
 .sc-addr {
@@ -305,7 +327,9 @@
 
 /* Cards below 1180 px. The header row stays for screen readers; each cell carries its label. */
 @media (max-width: 1179.98px) {
-  .sc-table thead {
+  .sc-table thead,
+  .sc-table thead tr {
+    display: block;
     position: absolute;
     width: 1px;
     height: 1px;
