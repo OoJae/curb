@@ -6,6 +6,10 @@
  *   GET /healthz               liveness, tick progress, payments configured/ready, cohort, issuer freshness,
  *                              the Scorecard snapshot's block and age, and the RegimeChanged backfill's progress
  *   GET /v1/assets             the cohort MarketClock tracks, and which of it Scorecard can grade
+ *   GET /v1/corporate-actions?symbol=          every version of the issuer's corporate actions kept for a
+ *                              symbol, newest first (corporateActions.ts)
+ *   GET /v1/corporate-actions/lineage?symbol=  a cohort asset's on-chain multiplier nonce steps, each linked to
+ *                              the version that explains it
  *   GET /.well-known/x402      the priced routes and their terms, for discovery
  *   GET /receipts/<id>.json    a paid call's receipt, immutable
  *   GET /issuer/<hash>.json    the exact issuer bytes a calendar was computed from, immutable
@@ -37,6 +41,7 @@ import type { AuthorizationChain } from "./pay/authorization.ts";
 import type { VenueStore } from "./venue.ts";
 import type { ScorecardStatus } from "./index/scorecard.ts";
 import type { ClosureIndexStatus } from "./index/closures.ts";
+import type { CorporateActionsFeed, RouteReply } from "./corporateActions.ts";
 import type { Asset } from "./cohort.ts";
 import type { Log } from "./log.ts";
 import { throttledLog } from "./log.ts";
@@ -64,6 +69,8 @@ export interface AppDeps {
   /** For /healthz only; null when SCORECARD is unset. */
   scorecard?: { status(nowMs: number): ScorecardStatus } | null;
   closures?: { status(): ClosureIndexStatus } | null;
+  /** The corporate-actions feed. Its routes and /healthz block read memory only; null serves 503 on its routes. */
+  corporateActions?: Pick<CorporateActionsFeed, "health" | "versionsRoute" | "lineageRoute"> | null;
   /**
    * The payment ledger (pay/ledger.ts). main.ts builds it, loads what a previous process left pending and
    * runs its reconciler; left out (tests), one is built under dataDir/ledger.
@@ -108,6 +115,10 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
       case "/": return send(res, 200, home, { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" });
       case "/healthz": return healthz(res);
       case "/v1/assets": return assets(res);
+      case "/v1/corporate-actions":
+        return corporate(res, (f) => f.versionsRoute(adapter.getQueryParam("symbol"), d.state.cohort, d.now()));
+      case "/v1/corporate-actions/lineage":
+        return corporate(res, (f) => f.lineageRoute(adapter.getQueryParam("symbol"), d.state.cohort, d.now()));
       case "/.well-known/x402": return send(res, 200, wellKnown, { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" });
     }
     const file = path.match(HASH_FILE);
@@ -150,6 +161,7 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
       cohort: { size: s.cohort.length, asOfMs: s.cohortAsOfMs || null, error: s.cohortError },
       scorecard: scorecardHealth(now),
       regimeIndex: d.closures ? d.closures.status() : null,
+      corporateActions: d.corporateActions ? d.corporateActions.health(now) : null,
       venues: s.cohort.map((a) => {
         const v = d.venues.status(a.wrapper, now);
         return {
@@ -175,6 +187,12 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
       outage: st.outage,
       lastError: st.lastError,
     };
+  }
+
+  function corporate(res: ServerResponse, answer: (f: NonNullable<AppDeps["corporateActions"]>) => RouteReply): void {
+    if (!d.corporateActions) return sendJson(res, 503, { error: "corporate-actions-not-configured" });
+    const r = answer(d.corporateActions);
+    sendJson(res, r.status, r.body, r.headers);
   }
 
   function assets(res: ServerResponse): void {
@@ -262,6 +280,8 @@ ${rows}
 <h2>Free</h2>
 <ul>
 <li><a href="/v1/assets"><code>/v1/assets</code></a>: the assets Curb tracks</li>
+<li><a href="/v1/corporate-actions?symbol=AAPLx"><code>/v1/corporate-actions?symbol=</code></a>: every version of the issuer's corporate actions for a symbol, Cancelled and Corrected included, newest first</li>
+<li><a href="/v1/corporate-actions/lineage?symbol=wAAPLx"><code>/v1/corporate-actions/lineage?symbol=</code></a>: each on-chain multiplier step of a tracked asset, linked to the corporate action that explains it</li>
 <li><a href="/.well-known/x402"><code>/.well-known/x402</code></a>: the paid routes and their terms</li>
 <li><a href="/healthz"><code>/healthz</code></a>: service status</li>
 </ul>
