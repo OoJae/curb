@@ -4,9 +4,10 @@
 # Polls MarketClock.primaryCapNow(wrapper). When capacity returns and the pointer still thinks the market is
 # shut, it sends ReopenPointer.observe(wrapper) (the reopen is then bracketed in (shutSeenAt, openedAt]).
 # At openedAt + 300 s it sends recordPrint(wrapper, epoch), retrying inside the 30-minute print window
-# (Scorecard refuses a print while the pool's spot is >50 ticks off its TWAP). While the market is shut and
-# the pointer still says open, it sends observe once to witness the shut -- without that, the next reopen
-# could not advance the epoch.
+# (Scorecard refuses a print while the pool's spot is >50 ticks off its TWAP). If someone else witnessed the
+# reopen first (a bid or redeem observes too), it still sends the print. While the market is shut and the
+# pointer still says open, it sends observe once to witness the shut -- without that, the next reopen could
+# not advance the epoch.
 #
 # Every transaction carries the ERC-8021 Builder Code: data = `cast calldata ...` || SUFFIX.
 # Passwords and keys are never printed: cast reads the keystore password from $PWFILE itself.
@@ -35,7 +36,7 @@ for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
     --once) ONCE=1 ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -136,6 +137,15 @@ while :; do
       else
         log "observed open with no epoch (the pointer never saw this closure's shut)"
       fi
+    fi
+  elif [[ "$c" != "0" && "$o" == "true" ]]; then
+    # Someone else (a bid, a redeem, another poker) witnessed the reopen first: still owe the print.
+    e="$(epoch_of || echo 0)"
+    if [[ "$e" != "0" && "$(printed "$e")" == "0" ]] \
+      && (( $(date -u +%s) <= $(opened_at "$e") + PRINT_DELAY + PRINT_WINDOW )); then
+      log "epoch $e was opened by another caller and is unprinted"
+      print_epoch "$e" || true
+      [[ $ONCE -eq 1 ]] && exit 0
     fi
   elif [[ "$c" == "0" && "$o" == "true" ]]; then
     log "market shut (regime $r): observe to witness it"
