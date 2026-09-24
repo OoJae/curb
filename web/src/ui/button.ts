@@ -3,7 +3,7 @@
  *
  * txButton(el, run): the transaction states from spec §3 micro-interactions.
  *   pending   → the label becomes a 16 px C whose amber arc turns once every 1.6 s
- *   confirmed → the two C halves rotate ±55° to meet; status: "Confirmed in block N ↗ ·
+ *   confirmed → the two C halves rotate ±62° (MARK.cHalfGapDeg) to meet; status: "Confirmed in block N ↗ ·
  *               Builder Code dd7u50nckt5e729f attached"
  *   reverted  → the arc stops; status: "Reverted: ErrorName()"
  *
