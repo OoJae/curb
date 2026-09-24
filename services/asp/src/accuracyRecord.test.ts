@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getAddress } from "ethers";
 import { buildRecord, recordPreviewOf, RECORD_SCHEMA, RECORD_PREVIEW_SCHEMA, EVIDENCE_BASE_URL } from "./accuracyRecord.ts";
-import { row, settlement, snapshot, TCENT, MARK1 } from "./fixtures/scorecard.ts";
+import { row, settlement, snapshot, hex32, TCENT, MARK1 } from "./fixtures/scorecard.ts";
+import { methodDigestOf } from "./sources/scorecard.ts";
 
 const OTHER = getAddress("0x076cf393e701839fc7a5832d2c68aafa235682ae");
 const SYMBOLS = new Map([[TCENT.toLowerCase(), "wTCENTx"], [OTHER.toLowerCase(), "wHKTWOx"]]);
@@ -121,5 +122,21 @@ test("an empty record is a valid answer, not an error", () => {
   assert.equal(a.totalRows, 0);
   assert.match(a.note, /0 of the 0 settled rows tie/);
   assert.doesNotMatch(a.note, /mark\/1/, "no claim about a method no row uses");
+  assert.doesNotMatch(a.note, /mark\/2/);
   assert.deepEqual(recordPreviewOf(a).rowCount, 0);
+});
+
+test("mark/2 rows are named, and the note says plainly when mark/2 applies no move", () => {
+  const MARK2 = methodDigestOf("curb.scorecard.mark/2").toLowerCase();
+  const snap = snapshot([
+    row({ settlement: s(53, 53, 53) }),                          // an old mark/1 row keeps its method
+    row({ methodDigest: MARK2, settlement: s(7, 31, 31) }),      // mark/2 moved the mark and beat the last print
+    row({ methodDigest: hex32(0xdead), settlement: s(1, 1, 1) }),
+  ]);
+  const a = buildRecord({ snapshot: snap, chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW });
+  assert.deepEqual(a.rows.map((r) => r.method), [null, "curb.scorecard.mark/2", "curb.scorecard.mark/1"]);
+  assert.match(a.note, /curb\.scorecard\.mark\/2 moves the last print by 0\.79 x the mean return/);
+  assert.match(a.note, /lunch recess, and whenever neither signal could be fetched, it applies no move/);
+  assert.match(a.note, /none is re-marked/);
+  assert.match(a.note, /Under curb\.scorecard\.mark\/1/, "both methods are in scope, so both are explained");
 });

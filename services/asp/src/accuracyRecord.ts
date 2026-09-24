@@ -30,7 +30,9 @@ export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 200;
 
 /** Mark methods whose digest this service can name. A row under any other digest reports method null. */
-const KNOWN_METHODS = new Map([methodDigestOf("curb.scorecard.mark/1").toLowerCase()].map((d) => [d, "curb.scorecard.mark/1"]));
+const KNOWN_METHODS = new Map(
+  ["curb.scorecard.mark/1", "curb.scorecard.mark/2"].map((m) => [methodDigestOf(m).toLowerCase(), m]),
+);
 
 export interface RecordRow {
   id: string;
@@ -199,12 +201,19 @@ export function buildRecord(i: RecordInput): RecordAnswer {
   const settledScope = scope.filter((r) => r.settlement !== null);
   const tiesScope = settledScope.filter((r) => grade(r.settlement!).tie).length;
   const underMark1 = scope.some((r) => KNOWN_METHODS.get(r.methodDigest.toLowerCase()) === "curb.scorecard.mark/1");
+  const underMark2 = scope.some((r) => KNOWN_METHODS.get(r.methodDigest.toLowerCase()) === "curb.scorecard.mark/2");
   const note =
     "Wins are strict, exactly as Scorecard.settle() counts them: a settled row beats a baseline only when curbErrorBps is strictly " +
     "less than that baseline's error, and skill() is the contract's own running count of those wins. A tie is not a win. " +
     `${tiesScope} of the ${settledScope.length} settled rows${i.filter ? ` for ${i.filter.symbol}` : ""} tie the last print exactly.` +
     (underMark1
       ? " Under curb.scorecard.mark/1 a closure in which the pool does not trade leaves the mark equal to the last print, so such a row can only tie it."
+      : "") +
+    (underMark2
+      ? " curb.scorecard.mark/2 moves the last print by 0.79 x the mean return of a Binance perpetual on the same share and the US ADR" +
+        " over an overnight or weekend closure. In the 65-minute lunch recess, and whenever neither signal could be fetched, it applies" +
+        " no move: the mark is exactly mark/1's, and the row can only tie. That is deliberate. Measured over 23 recesses, the perpetual's" +
+        " recess move made the mark worse on all three names. Each row keeps the method that produced it, and none is re-marked."
       : "");
 
   return {
