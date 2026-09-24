@@ -5,8 +5,8 @@
 //   node web/og/render.mjs home clock # some
 //
 // A tiny static server roots at web/ and mirrors Vite: /x resolves to web/public/x first, then web/x. So templates
-// load the site's own /src/styles/tokens.css, /fonts/*.woff2 and /brand/*.svg. Until lane A's tokens and fonts exist,
-// it serves og/templates/tokens.fallback.css and the Google Fonts latin subsets instead (and says so). .ts files are
+// load the site's own /src/styles/{tokens,fonts}.css, /fonts/*.woff2 and /brand/*.svg. Where lane A's files are missing
+// it serves og/templates/*.fallback.css and the Google Fonts latin subsets instead (and says so). .ts files are
 // served with their types stripped, so templates import src/certificate/guilloche.ts directly.
 import { createServer } from 'node:http';
 import { readFile, access, mkdir } from 'node:fs/promises';
@@ -49,9 +49,10 @@ export async function serve() {
     for (const cand of [join(WEB, 'public', rel), join(WEB, rel)]) {
       if (cand.startsWith(WEB) && (await exists(cand)) && extname(cand)) { file = cand; break; }
     }
-    if (!file && url === '/src/styles/tokens.css') {
-      file = join(WEB, 'og', 'templates', 'tokens.fallback.css');
-      notes.add('tokens: og/templates/tokens.fallback.css (lane A tokens.css not found)');
+    if (!file && (url === '/src/styles/tokens.css' || url === '/src/styles/fonts.css')) {
+      const name = url.endsWith('tokens.css') ? 'tokens' : 'fonts';
+      file = join(WEB, 'og', 'templates', `${name}.fallback.css`);
+      notes.add(`${name}: og/templates/${name}.fallback.css (lane A's src/styles/${name}.css not found)`);
     }
     if (!file && fontMap[url]) {
       file = fontMap[url].path;
