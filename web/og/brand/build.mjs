@@ -51,13 +51,13 @@ const svg = (w, h, body, label, extra = '') =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(w)} ${fmt(h)}" width="${fmt(w)}" height="${fmt(h)}" role="img" aria-label="${label}"${extra}>${body}</svg>`;
 
 // ── Mark ────────────────────────────────────────────────────────────────────────────────────────────────────────────
-// Standalone mark: the circle's bounding square (outer radius 1.21 R). For ink grounds: ivory C, Streetlamp arc.
+// Standalone mark: the circle's bounding square (outer radius 1.217 R). For ink grounds: ivory C, Streetlamp arc.
 const MR = 100;
-const MS = 2 * MR * (1 + MARK.stroke / 2); // 242
+const MS = 2 * MR * (1 + MARK.stroke / 2); // 243.4
 const m = markPaths(MS / 2, MS / 2, MR);
 const markBody = (c, a) => `<path fill="${c}" d="${m.c}"/><path fill="${a}" d="${m.arc}"/>`;
 
-// Tile = the avatar: 512 square, R 144.
+// Tile = the avatar: 512 square, R 143.875.
 const TS = 512;
 const tR = TS / MARK.tile;
 const t = markPaths(TS / 2, TS / 2, tR);

@@ -77,11 +77,11 @@ function num(n: number, p: number): string {
 
 /** Join numbers SVG-style: a minus sign or a leading "." after a fractional number needs no separator. */
 function joinNums(parts: string[]): string {
-  let out = parts[0] ?? '';
-  for (let i = 1; i < parts.length; i++) {
-    const p = parts[i];
-    const prev = parts[i - 1];
-    out += p.startsWith('-') || (p.startsWith('.') && prev.includes('.')) ? p : ' ' + p;
+  let out = '';
+  let prev = '';
+  for (const p of parts) {
+    out += !out || p.startsWith('-') || (p.startsWith('.') && prev.includes('.')) ? p : ' ' + p;
+    prev = p;
   }
   return out;
 }
@@ -128,18 +128,19 @@ export function guilloche(seedHex: string, opts: GuillocheOptions = {}): Guilloc
   const perLobe = opts.segmentsPerLobe ?? 8;
   const p = opts.precision ?? 1;
   const b = seedBytes(seedHex);
-  const count = 3 + (b[0] % 3);
+  const byte = (i: number) => b[i] ?? 0; // seedBytes always returns 32
+  const count = 3 + (byte(0) % 3);
   const half = size / 2;
   const layers: GuillocheLayer[] = [];
   for (let i = 0; i < count; i++) {
     const o = 1 + 5 * i;
-    const R = 40 + (b[o] % 21);
-    const r = 3 + (b[o + 1] % 7);
-    const d = 2 + (b[o + 2] % 11);
+    const R = 40 + (byte(o) % 21);
+    const r = 3 + (byte(o + 1) % 7);
+    const d = 2 + (byte(o + 2) % 11);
     const lobes = R / gcd(R, r);
-    const phase = (b[o + 3] / 256) * ((2 * Math.PI) / lobes);
+    const phase = (byte(o + 3) / 256) * ((2 * Math.PI) / lobes);
     // concentric bands from the rim inwards, each nudged by up to ±3 % of the radius
-    const jitter = (b[o + 4] / 255 - 0.5) * 0.06;
+    const jitter = (byte(o + 4) / 255 - 0.5) * 0.06;
     const outer = half * (1 - i * (0.5 / count) + (i === 0 ? Math.min(0, jitter) : jitter));
     const scale = outer / (R + r + d);
     const lp = layerPath(R, r, d, phase, scale, perLobe, p);
