@@ -131,18 +131,15 @@ export async function getScorecard(opts: { resolveTx?: boolean } = {}): Promise<
   if (isMock()) return fixture("scorecard");
   const client = publicClient();
   const blockNumber = await client.getBlockNumber();
-  const head = await client.multicall({
-    blockNumber,
-    allowFailure: true,
-    contracts: [
-      { address: SCORECARD, abi: scorecardAbi, functionName: "closureCount" },
-      { address: SCORECARD, abi: scorecardAbi, functionName: "skill" },
-      ...ASSETS.map((a) => ({ address: SCORECARD, abi: scorecardAbi, functionName: "priceNow", args: [a.wrapper] }) as const),
-    ],
-  });
+  const headCalls: any[] = [
+    { address: SCORECARD, abi: scorecardAbi, functionName: "closureCount" },
+    { address: SCORECARD, abi: scorecardAbi, functionName: "skill" },
+    ...ASSETS.map((a) => ({ address: SCORECARD, abi: scorecardAbi, functionName: "priceNow", args: [a.wrapper] })),
+  ];
+  const head = (await client.multicall({ blockNumber, allowFailure: true, contracts: headCalls })) as { status: "success" | "failure"; result?: unknown; error?: unknown }[];
   if (head[0].status !== "success" || head[1].status !== "success") throw new Error("Scorecard: closureCount/skill unreadable");
   const count = Number(head[0].result as bigint);
-  const [settledN, beatLast, beatVwap] = head[1].result as readonly [bigint, bigint, bigint];
+  const [settledN, beatLast, beatVwap] = head[1].result as unknown as readonly [bigint, bigint, bigint];
   const prices: PriceNow[] = ASSETS.map((a, i) => {
     const r = head[2 + i];
     return r.status === "success"

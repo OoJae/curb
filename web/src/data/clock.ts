@@ -2,7 +2,6 @@
  * /clock: the board of six, read from MarketClock in one Multicall3 call at one block, plus the latest
  * attestation round found by scanning back from the head in 100-block steps (at most 4 getLogs calls).
  */
-import type { Log } from "viem";
 import { ASSETS, MARKET_CLOCK, oklinkTx, roundBundleUrl } from "./addresses.ts";
 import { marketClockAbi } from "./abi/marketClock.ts";
 import { MAX_LOG_RANGE, publicClient } from "./chain.ts";
@@ -108,7 +107,7 @@ export async function getLatestRound(opts: { head?: bigint; headTimeMs?: number;
   for (const [fromBlock, toBlock] of windows) {
     const logs = await client.getLogs({ address: MARKET_CLOCK, event: stateAttested as any, fromBlock, toBlock });
     if (!logs.length) continue;
-    const last = logs.reduce((a: Log, b: Log) =>
+    const last = logs.reduce((a, b) =>
       b.blockNumber! > a.blockNumber! || (b.blockNumber === a.blockNumber && b.logIndex! > a.logIndex!) ? b : a);
     const sameTx = logs.filter((l) => l.transactionHash === last.transactionHash);
     const inputRoot = ((last as any).args?.inputRoot ?? "0x") as Hex;

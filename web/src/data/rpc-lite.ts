@@ -9,6 +9,7 @@
  * i.e. exactly six 32-byte words, no offset word (every member is static).
  */
 import { MARKET_CLOCK, RPC_URLS } from "./addresses.ts";
+import { rpcSlot } from "./ratelimit.ts";
 
 export const STATE_OF_SELECTOR = "0x45b4903a";
 
@@ -65,6 +66,7 @@ export async function readStateOf(wrapper: string, signal?: AbortSignal): Promis
   let lastErr: unknown;
   for (const url of RPC_URLS) {
     try {
+      await rpcSlot(batch.length); // the RPC counts each batch item
       const out = await post(url, batch, signal);
       const arr: any[] = Array.isArray(out) ? out : [out];
       const byId = (id: number) => arr.find((r) => r && r.id === id);

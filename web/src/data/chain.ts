@@ -5,11 +5,12 @@
  * fallback. Measured 24 Sep: JSON-RPC batching does not help — rpc.xlayer.tech counts batch ITEMS against
  * its per-second limit (items 6+ of a 10-item getLogs batch fail -32016 "over rate limit"), and drpc's
  * free plan rejects batches of more than 3. So viem's HTTP batching is off, reads are aggregated with
- * Multicall3 instead, and every outgoing request passes a 5/s token bucket, so a page cannot trip the
- * limit on its own.
+ * Multicall3 instead, and every outgoing request takes a slot from ratelimit.ts (≤ 5 in any second,
+ * shared with rpc-lite), so a page cannot trip the limit on its own.
  */
 import { createPublicClient, defineChain, fallback, http, type PublicClient } from "viem";
 import { CHAIN_ID, MULTICALL3, OKLINK, RPC_URLS } from "./addresses.ts";
+import { rpcSlot } from "./ratelimit.ts";
 
 export const xLayer = defineChain({
   id: CHAIN_ID,
@@ -22,46 +23,9 @@ export const xLayer = defineChain({
 
 /** rpc.xlayer.tech caps eth_getLogs at 100 blocks; the browser never asks for more. */
 export const MAX_LOG_RANGE = 100;
-export const REQUESTS_PER_SECOND = 5;
-
-// --- a tiny token bucket shared by every transport ---------------------------------------------
-
-let tokens = REQUESTS_PER_SECOND;
-let refilledAt = Date.now();
-const waiters: (() => void)[] = [];
-let draining = false;
-
-function refill() {
-  const now = Date.now();
-  tokens = Math.min(REQUESTS_PER_SECOND, tokens + ((now - refilledAt) / 1000) * REQUESTS_PER_SECOND);
-  refilledAt = now;
-}
-
-function drain() {
-  if (draining) return;
-  draining = true;
-  const step = () => {
-    refill();
-    while (waiters.length && tokens >= 1) {
-      tokens -= 1;
-      waiters.shift()!();
-    }
-    if (waiters.length) setTimeout(step, Math.ceil(1000 / REQUESTS_PER_SECOND));
-    else draining = false;
-  };
-  step();
-}
-
-/** Resolves when one request may be sent. */
-export function rateLimit(): Promise<void> {
-  return new Promise((resolve) => {
-    waiters.push(resolve);
-    drain();
-  });
-}
 
 const limitedFetch: typeof fetch = async (input, init) => {
-  await rateLimit();
+  await rpcSlot(1);
   return fetch(input, init);
 };
 
