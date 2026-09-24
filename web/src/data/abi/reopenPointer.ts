@@ -1,4 +1,4 @@
-// HAND-WRITTEN from docs/specs/W3W4-contracts.md — provisional until web/scripts/sync-abi.mjs
+// HAND-WRITTEN from docs/specs/W3W4-contracts.md and src/interfaces/*.sol (P0) — provisional until web/scripts/sync-abi.mjs
 // regenerates it from forge out/. IReopenPointer, frozen in the spec (types exact).
 // Source signatures:
 //   struct Epoch { uint64 shutSeenAt; uint64 openedAt; uint64 openedBlock; uint128 print; uint64 printedAt; }

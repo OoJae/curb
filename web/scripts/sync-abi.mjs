@@ -34,6 +34,33 @@ const TARGETS = {
   CurbCredit: ["curbCredit", "curbCreditAbi"],
 };
 
+/**
+ * Frozen P0 interfaces (and the ERC-1155 base) each hand-written ABI must agree with while its
+ * implementation is not yet in out/. Every entry of these artifacts must appear in the hand-written file
+ * with the same canonical signature (hence the same selector / topic) and the same outputs.
+ */
+const FROZEN = {
+  ReopenPointer: ["IReopenPointer"],
+  ReopenNote: ["IReopenNote", "ERC1155Min"],
+  DepthCert: ["IDepthCert"],
+  EligibilityRegistry: ["IEligibility"],
+};
+
+function canonType(p) {
+  if (p.type.startsWith("tuple")) return `(${p.components.map(canonType).join(",")})${p.type.slice(5)}`;
+  return p.type;
+}
+function canonEntry(e) {
+  const ins = (e.inputs ?? []).map((p) => canonType(p) + (e.type === "event" && p.indexed ? " indexed" : "")).join(",");
+  const outs = e.type === "function" ? ` returns (${(e.outputs ?? []).map(canonType).join(",")})` : "";
+  return `${e.type} ${e.name}(${ins})${outs}`;
+}
+function readHandWritten(file) {
+  const src = readFileSync(file, "utf8");
+  const m = src.match(/=\s*(\[[\s\S]*\])\s*as const/);
+  return m ? JSON.parse(m[1]) : [];
+}
+
 function strip(node) {
   if (Array.isArray(node)) return node.map(strip);
   if (node && typeof node === "object") {
@@ -53,6 +80,20 @@ for (const [contract, [stem, exportName]] of Object.entries(TARGETS)) {
   const artifact = join(OUT, `${contract}.sol`, `${contract}.json`);
   if (!existsSync(artifact)) {
     missing.push(contract);
+    const target = join(ABI_DIR, `${stem}.ts`);
+    const have = new Set(readHandWritten(target).map(canonEntry));
+    for (const iface of FROZEN[contract] ?? []) {
+      const ia = join(OUT, `${iface}.sol`, `${iface}.json`);
+      if (!existsSync(ia)) continue;
+      const want = JSON.parse(readFileSync(ia, "utf8")).abi.filter((e) => e.type !== "constructor");
+      const bad = want.map(canonEntry).filter((sig) => !have.has(sig));
+      if (bad.length) {
+        changed++;
+        console.log(`abi/${stem}.ts DISAGREES with frozen ${iface}:\n  ${bad.join("\n  ")}`);
+      } else {
+        console.log(`abi/${stem}.ts  agrees with frozen ${iface} (${want.length} entries)`);
+      }
+    }
     continue;
   }
   const { abi } = JSON.parse(readFileSync(artifact, "utf8"));

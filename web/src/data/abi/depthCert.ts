@@ -1,4 +1,4 @@
-// HAND-WRITTEN from docs/specs/W3W4-contracts.md — provisional until web/scripts/sync-abi.mjs
+// HAND-WRITTEN from docs/specs/W3W4-contracts.md and src/interfaces/*.sol (P0) — provisional until web/scripts/sync-abi.mjs
 // regenerates it from forge out/. IDepthCert, frozen in the spec (types exact). committed/claimableShares getters and event field types are provisional.
 // Source signatures:
 //   struct Cert { address maker; address wrapper; address beneficiary; uint128 sizeShares; uint128 remainingShares; uint128 bidPx; uint128 bond; uint64 postedAt; uint64 expiry; uint8 status; }

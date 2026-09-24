@@ -1,4 +1,4 @@
-// HAND-WRITTEN from docs/specs/W3W4-contracts.md — provisional until web/scripts/sync-abi.mjs
+// HAND-WRITTEN from docs/specs/W3W4-contracts.md and src/interfaces/*.sol (P0) — provisional until web/scripts/sync-abi.mjs
 // regenerates it from forge out/. ClosedAuction. The spec names the functions but not their Solidity types: EVERY type here is a GUESS until sync-abi.mjs regenerates this file from out/.
 // Source signatures:
 //   function list(uint256 noteId, uint128 amount, uint128 startPrice, uint128 floorPrice, uint64 decaySeconds, uint64 endAt) returns (uint256 lotId)

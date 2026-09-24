@@ -1,4 +1,4 @@
-// HAND-WRITTEN from docs/specs/W3W4-contracts.md — provisional until web/scripts/sync-abi.mjs
+// HAND-WRITTEN from docs/specs/W3W4-contracts.md and src/interfaces/*.sol (P0) — provisional until web/scripts/sync-abi.mjs
 // regenerates it from forge out/. IReopenNote, frozen in the spec (types exact) + ERC1155Min. Event indexing and the two GUESS getters are provisional.
 // Source signatures:
 //   struct Unit { address wrapper; address issuer; uint128 wrapperShares; uint128 underlyingAtMint; uint32 multiplierNonce; uint32 epochAtMint; uint64 mintedAt; uint64 mintedBlock; }
@@ -14,6 +14,15 @@
 //   function isApprovedForAll(address account, address operator) view returns (bool)
 //   function setApprovalForAll(address operator, bool approved)
 //   function uri(uint256 id) view returns (string)
+//   function safeBatchTransferFrom(address from, address to, uint256[] ids, uint256[] values, bytes data)
+//   function supportsInterface(bytes4 interfaceId) view returns (bool)
+//   event ApprovalForAll(address indexed account, address indexed operator, bool approved)
+//   event TransferBatch(address indexed operator, address indexed from, address indexed to, uint256[] ids, uint256[] values)
+//   error ERC1155NotAuthorized(address operator, address from)
+//   error ERC1155ZeroAddress()
+//   error ERC1155InsufficientBalance(address from, uint256 id, uint256 balance, uint256 needed)
+//   error ERC1155LengthMismatch()
+//   error ERC1155UnsafeRecipient(address to)
 //   function name() view returns (string)
 //   function symbol() view returns (string)
 //   function capShares(address wrapper) view returns (uint256)
@@ -287,6 +296,155 @@ export const reopenNoteAbi = [
     "outputs": [
       {
         "type": "string"
+      }
+    ]
+  },
+  {
+    "name": "safeBatchTransferFrom",
+    "type": "function",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "from"
+      },
+      {
+        "type": "address",
+        "name": "to"
+      },
+      {
+        "type": "uint256[]",
+        "name": "ids"
+      },
+      {
+        "type": "uint256[]",
+        "name": "values"
+      },
+      {
+        "type": "bytes",
+        "name": "data"
+      }
+    ],
+    "outputs": []
+  },
+  {
+    "name": "supportsInterface",
+    "type": "function",
+    "stateMutability": "view",
+    "inputs": [
+      {
+        "type": "bytes4",
+        "name": "interfaceId"
+      }
+    ],
+    "outputs": [
+      {
+        "type": "bool"
+      }
+    ]
+  },
+  {
+    "name": "ApprovalForAll",
+    "type": "event",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "account",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "operator",
+        "indexed": true
+      },
+      {
+        "type": "bool",
+        "name": "approved"
+      }
+    ]
+  },
+  {
+    "name": "TransferBatch",
+    "type": "event",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "operator",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "from",
+        "indexed": true
+      },
+      {
+        "type": "address",
+        "name": "to",
+        "indexed": true
+      },
+      {
+        "type": "uint256[]",
+        "name": "ids"
+      },
+      {
+        "type": "uint256[]",
+        "name": "values"
+      }
+    ]
+  },
+  {
+    "name": "ERC1155NotAuthorized",
+    "type": "error",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "operator"
+      },
+      {
+        "type": "address",
+        "name": "from"
+      }
+    ]
+  },
+  {
+    "name": "ERC1155ZeroAddress",
+    "type": "error",
+    "inputs": []
+  },
+  {
+    "name": "ERC1155InsufficientBalance",
+    "type": "error",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "from"
+      },
+      {
+        "type": "uint256",
+        "name": "id"
+      },
+      {
+        "type": "uint256",
+        "name": "balance"
+      },
+      {
+        "type": "uint256",
+        "name": "needed"
+      }
+    ]
+  },
+  {
+    "name": "ERC1155LengthMismatch",
+    "type": "error",
+    "inputs": []
+  },
+  {
+    "name": "ERC1155UnsafeRecipient",
+    "type": "error",
+    "inputs": [
+      {
+        "type": "address",
+        "name": "to"
       }
     ]
   },

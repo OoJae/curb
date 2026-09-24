@@ -1,4 +1,4 @@
-// HAND-WRITTEN from docs/specs/W3W4-contracts.md — provisional until web/scripts/sync-abi.mjs
+// HAND-WRITTEN from docs/specs/W3W4-contracts.md and src/interfaces/*.sol (P0) — provisional until web/scripts/sync-abi.mjs
 // regenerates it from forge out/. CurbCredit. Names from the spec; types are GUESSES except Refusal (typed in the spec). Regenerate with sync-abi.mjs.
 // Source signatures:
 //   struct Cure { bool active; bool lastOpen; uint64 openedAt; uint64 lastTickAt; uint64 openSecondsUsed; uint128 priceAtBreach; }
