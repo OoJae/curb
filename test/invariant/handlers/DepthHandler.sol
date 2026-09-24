@@ -21,12 +21,17 @@ import {MockEligibility} from "../../DepthCert.t.sol";
 ///  - remainingIncreased / statusRegressed: a cert's `remainingShares` went up, or it left FADED/CLOSED;
 ///  - bondLeftEarly: a cert went LIVE -> CLOSED (bond back to the maker) before expiry while shares were
 ///    still owed. The only other way out for a bond is LIVE -> FADED;
-///  - ineligibleGatedPosts: a cert naming a beneficiary was posted by a maker not eligible just before.
+///  - ineligibleGatedPosts: a cert naming a beneficiary was posted by a maker not eligible just before;
+///  - earlyWithdrawByOther / bondNotToMaker: someone other than the maker withdrew before expiry, or a
+///    withdrawal paid the bond to anyone but the maker (withdraw is permissionless from expiry on);
+///  - unfillable: a LIVE cert holds a remainder whose cost rounds to zero, or a cert's size is below
+///    MIN_NOTIONAL -- i.e. some cert could not be filled to the last share.
 contract DepthHandler is CommonBase, StdCheats, StdUtils {
     DepthCert public immutable dc;
     MockERC20 public immutable usdg;
     MockEligibility public immutable elig;
     uint256 public constant MAKERS = 4;
+    uint256 internal constant MIN_NOTIONAL = 1e6; // DepthCert.MIN_NOTIONAL, checked equal in the invariant
     MockERC20[2] internal _wrappers;
     address[4] internal _makers;
     address[3] internal _takers;
@@ -42,6 +47,9 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
     uint256 public statusRegressed;
     uint256 public bondLeftEarly;
     uint256 public ineligibleGatedPosts;
+    uint256 public earlyWithdrawByOther;
+    uint256 public bondNotToMaker;
+    uint256 public unfillable;
 
     // --- call statistics (reported, not asserted) ---
     uint256 public posts;
@@ -55,6 +63,8 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
     uint256 public starved; // InsufficientGas
     uint256 public takeReverts;
     uint256 public withdraws;
+    uint256 public withdrawsByOthers;
+    uint256 public dustRefusals;
     uint256 public claims;
     uint256 public prunes;
 
@@ -98,10 +108,9 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
         address w = address(_wrappers[wSeed % 2]);
         address ben = gated ? _takers[0] : address(0);
         bool eligible = elig.isEligible(m);
-        size = bound(size, 1e15, 20e18);
         px = bound(px, 1e5, 500e6);
+        size = bound(size, (1e24 + px - 1) / px, 20e18); // notional >= MIN_NOTIONAL
         uint256 n = size * px / 1e18;
-        if (n == 0) return;
         uint256 bond = (n * 1000 + 9999) / 10_000 + bound(extra, 0, n);
         life = bound(life, dc.MIN_LIFE(), 3 days);
 
@@ -138,6 +147,9 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
         address t = _takers[tSeed % 3];
         if (c.beneficiary != address(0) && tSeed % 4 != 0) t = c.beneficiary; // mostly the right taker
         uint128 shares = uint128(bound(sharesSeed, 1, c.remainingShares == 0 ? 1 : c.remainingShares));
+        // A take leaving a dust remainder is refused; half the time take the whole rest instead.
+        uint128 left = c.remainingShares > shares ? c.remainingShares - shares : 0;
+        if (left != 0 && uint256(left) * c.bidPx / 1e18 == 0 && sharesSeed % 2 == 0) shares = c.remainingShares;
         MockERC20(c.wrapper).mint(t, shares); // the taker can always deliver
 
         // The maker's state just before the call.
@@ -164,6 +176,8 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
             if (!filled && able) ++fadeWhileAble;
         } else if (ret.length == 4 && bytes4(ret) == DepthCert.InsufficientGas.selector) {
             ++starved;
+        } else if (ret.length >= 4 && bytes4(ret) == DepthCert.DustRemainder.selector) {
+            ++dustRefusals;
         } else {
             ++takeReverts;
         }
@@ -171,13 +185,21 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
         _sweep();
     }
 
-    function withdraw(uint256 idSeed) external {
+    /// Withdraw by the maker, or (half the time) by a taker: permissionless from expiry on.
+    function withdraw(uint256 idSeed, uint256 callerSeed) external {
         if (_ids.length == 0) return;
-        uint256 id = _ids[idSeed % _ids.length];
-        address m = dc.certOf(id).maker;
-        vm.prank(m);
+        uint256 id = _pickWithdrawable(idSeed);
+        IDepthCert.Cert memory c = dc.certOf(id);
+        address caller = callerSeed % 2 == 0 ? c.maker : _takers[callerSeed % 3];
+        uint256 makerBal0 = usdg.balanceOf(c.maker);
+        vm.prank(caller);
         try dc.withdraw(id) {
             ++withdraws;
+            if (caller != c.maker) {
+                ++withdrawsByOthers;
+                if (block.timestamp < c.expiry) ++earlyWithdrawByOther;
+            }
+            if (usdg.balanceOf(c.maker) != makerBal0 + c.bond) ++bondNotToMaker;
         } catch {}
         _sweep();
     }
@@ -247,6 +269,20 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
 
     // --- bookkeeping ---------------------------------------------------------------------------
 
+    /// Mostly a LIVE cert whose bond may come back (expired, or filled in full), one time in four any cert.
+    function _pickWithdrawable(uint256 seed) internal view returns (uint256) {
+        uint256 n = _ids.length;
+        if (seed % 4 == 0) return _ids[seed % n];
+        for (uint256 k; k < n; ++k) {
+            uint256 id = _ids[(seed % n + k) % n];
+            IDepthCert.Cert memory c = dc.certOf(id);
+            if (c.status == IDepthCert.Status.LIVE && (block.timestamp >= c.expiry || c.remainingShares == 0)) {
+                return id;
+            }
+        }
+        return _ids[seed % n];
+    }
+
     /// Mostly a takeable cert (searching from the seed), one time in five any cert at all.
     function _pick(uint256 seed) internal view returns (uint256) {
         uint256 n = _ids.length;
@@ -276,6 +312,11 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
             IDepthCert.Cert memory c = dc.certOf(id);
             IDepthCert.Status was = _lastStatus[id];
             if (c.remainingShares > _lastRemaining[id]) ++remainingIncreased;
+            if (uint256(c.sizeShares) * c.bidPx / 1e18 < MIN_NOTIONAL) ++unfillable;
+            if (
+                c.status == IDepthCert.Status.LIVE && c.remainingShares != 0
+                    && uint256(c.remainingShares) * c.bidPx / 1e18 == 0
+            ) ++unfillable;
             if (was != IDepthCert.Status.LIVE && c.status != was) ++statusRegressed;
             if (was == IDepthCert.Status.LIVE && c.status == IDepthCert.Status.CLOSED) {
                 // The bond went back to the maker: only after expiry, or once nothing is owed.
