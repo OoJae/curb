@@ -353,9 +353,10 @@ lib/forge-std/       vendored (MIT / Apache-2.0)
 
 ## Licence
 
-The Solidity in `src/` is MIT: each file carries an SPDX header. MarketClock is deliberately free to read and
-integrate, with no key and no fee. See [`docs/MARKETCLOCK.md`](docs/MARKETCLOCK.md).
-<!-- lead: a repository-wide LICENSE file is not in the tree yet; until it lands, only files with an SPDX header are licensed -->
+MIT, for the whole repository ([`LICENSE`](LICENSE)): the contracts, the services, the verifier, the site and the
+video tooling. Every Solidity file in `src/` also carries an SPDX header. MarketClock is deliberately free to read
+and integrate, with no key and no fee. See [`docs/MARKETCLOCK.md`](docs/MARKETCLOCK.md). Vendored code keeps its
+own licence: `lib/forge-std/` is MIT or Apache-2.0.
 
 ## Further reading
 

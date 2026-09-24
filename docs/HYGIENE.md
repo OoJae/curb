@@ -130,6 +130,7 @@ None of these is a credential. Each one tells a reader something about the infra
 - There is **no top-level LICENSE file.** Every Solidity file in `src/` carries `SPDX-License-Identifier: MIT`,
   but `services/`, `tools/` and `web/` have no licence statement, so they are "all rights reserved" by default.
   If they are meant to be open, add a LICENSE file (MIT, matching `src/`).
+  **Resolved 24 Sept ~22:30Z:** the user chose MIT for the whole repository; `LICENSE` added at the root.
 
 ## Checked and clean
 

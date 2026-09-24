@@ -172,8 +172,9 @@ configuration, so none can lift a lock): `curb-archive-a` (host A), `curb-archiv
 against the chain (`curb-verify tx`'s own pipeline) before it uploads it; log in `artifacts/archive/`.
 
 **A superseded token.** A first token, `curb-archive-host-a`, was created on 24 Sep ~14:00Z. Its value was
-exposed in an automation log while the dashboard was being read, so it was never used and is to be deleted;
-it had the same object-only scope on this one bucket.
+exposed in an automation log while the dashboard was being read, so it was never used; it had the same
+object-only scope on this one bucket. **Deleted by the user in the dashboard, 24 Sep ~22:30Z** (the dashboard
+refuses deletes from automation).
 
 ## X Layer Builder Code — `dd7u50nckt5e729f`, 24 Sept 2026
 
