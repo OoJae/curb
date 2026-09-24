@@ -9,9 +9,133 @@
   <body data-page="scorecard">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
     <main id="main" class="page page--scorecard" tabindex="-1">
-      <section class="wrap section stub">
-        <h1 class="t-h1 vt-title-scorecard" data-reveal>Scorecard</h1>
-        <p class="t-lede muted measure stub__note">This page is in build. The shell around it is live.</p>
+      <section class="wrap sc-intro grid" aria-labelledby="sc-title">
+        <div class="col-ledger sc-intro__text">
+          <p class="t-label">Scorecard · X Layer</p>
+          <h1 id="sc-title" class="t-h1 vt-title-scorecard" data-reveal>Marked before the <em>reopen</em> and graded after it</h1>
+          <p class="t-h2 sc-headline" data-sc-headline>Reading the Scorecard…</p>
+          <p class="t-body muted measure" data-sc-headline-note>&nbsp;</p>
+        </div>
+        <aside class="col-instrument sc-tally" aria-labelledby="sc-tally-title">
+          <h2 id="sc-tally-title" class="t-label">The contract's own tally</h2>
+          <table class="table sc-tally__table">
+            <caption class="visually-hidden">Scorecard.skill(): graded rows, and strict wins, ties and losses against each baseline.</caption>
+            <thead>
+              <tr><th scope="col">Against</th><th scope="col" class="num">Wins</th><th scope="col" class="num">Ties</th><th scope="col" class="num">Losses</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Last print</th><td class="num" data-t="bl">…</td><td class="num" data-t="tl">…</td><td class="num" data-t="ll">…</td></tr>
+              <tr><th scope="row">Closing VWAP</th><td class="num" data-t="bv">…</td><td class="num" data-t="tv">…</td><td class="num" data-t="lv">…</td></tr>
+            </tbody>
+          </table>
+          <p class="t-data muted sc-tally__asof" data-sc-asof>&nbsp;</p>
+          <dl class="ledger sc-tally__facts">
+            <div class="ledger__row">
+              <dt>Contract</dt>
+              <dd class="sc-addr">
+                <a class="txlink" href="https://www.oklink.com/xlayer/address/0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f" target="_blank" rel="noopener" title="0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f">0x3b40…Bf1f<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a>
+                <button class="copy" type="button" data-copy="0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f"><span class="copy__label">Copy address</span><span class="copy__done" aria-hidden="true">Copied</span></button>
+              </dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section class="wrap section sc-rules" aria-labelledby="sc-rules-title">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 id="sc-rules-title" class="t-h2">How a row is graded</h2>
+          </div>
+        </div>
+        <ol class="sc-steps grid" role="list">
+          <li class="sc-step"><span class="sc-step__n t-data">1</span><h3 class="t-h3">Commit before the reopen</h3><p class="t-small muted">While the home market is shut, the keeper commits a mark, the two baselines and an input root to Scorecard. The block and its time are on chain.</p></li>
+          <li class="sc-step"><span class="sc-step__n t-data">2</span><h3 class="t-h3">Settle after it</h3><p class="t-small muted">At least 300 seconds after the scheduled reopen, anyone can settle the row. Scorecard reads the reopen price from the pool itself. Nobody supplies it.</p></li>
+          <li class="sc-step"><span class="sc-step__n t-data">3</span><h3 class="t-h3">Count strictly</h3><p class="t-small muted">Each estimate's error is its distance from the reopen, in basis points. Curb wins only with a strictly smaller error. Equal errors are a tie, and a tie is not a win.</p></li>
+        </ol>
+      </section>
+
+      <section class="wrap section sc-ledger" aria-labelledby="sc-ledger-title">
+        <div class="sc-ledger__head">
+          <div>
+            <h2 id="sc-ledger-title" class="t-h2">The ledger</h2>
+            <p class="t-body muted measure">Newest first. Prices are USD per wrapper share. Errors are signed: plus means the estimate was above the reopen print. The three bars are the three errors on one scale, so a tie draws three identical bars.</p>
+          </div>
+          <div class="sc-filter" role="group" aria-label="Filter the ledger by asset" data-sc-filter>
+            <button type="button" class="sc-chip" aria-pressed="true" data-asset="all">All</button>
+          </div>
+        </div>
+        <p class="t-small muted sc-count" data-sc-count>&nbsp;</p>
+        <p class="t-small muted sc-prices" data-sc-prices>&nbsp;</p>
+        <table class="table sc-table">
+          <caption class="visually-hidden" data-sc-caption>Every Scorecard row, newest first.</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="sc-col-closure">Closure</th>
+              <th scope="col" class="sc-col-blocks">Committed, then settled</th>
+              <th scope="col" class="sc-col-px num">Mark</th>
+              <th scope="col" class="sc-col-px num">Last print</th>
+              <th scope="col" class="sc-col-px num">Closing VWAP</th>
+              <th scope="col" class="sc-col-px num">Reopen print</th>
+              <th scope="col" class="sc-col-err">Error, signed</th>
+              <th scope="col" class="sc-col-grade">Grade</th>
+              <th scope="col" class="sc-col-method">Method</th>
+            </tr>
+          </thead>
+          <tbody data-sc-rows>
+            <tr class="sc-row sc-row--empty"><td colspan="9" class="muted">Reading every row from Scorecard storage at one block…</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="wrap section sc-method" aria-labelledby="sc-method-title">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 id="sc-method-title" class="t-h2">The method, and why it changed</h2>
+            <p class="t-body measure sc-method__lede">Each row commits the digest of the method that produced it. No row is ever re-marked: a row keeps its method after the method changes.</p>
+          </div>
+        </div>
+        <div class="grid sc-methods">
+          <article class="col-half-left sc-m" aria-labelledby="sc-m1">
+            <p class="t-label"><span data-sc-m1-count>&nbsp;</span></p>
+            <h3 id="sc-m1" class="t-h3"><code>curb.scorecard.mark/1</code></h3>
+            <p class="t-body">The last print before the cut, moved by half of what the wrapper's own pool did during the closure.</p>
+            <div class="sc-formula surface-ink"><code>mark = lastPrint × (1 + 0.5 × poolDrift)</code></div>
+            <p class="t-body muted">When the pool does not trade while the home market is shut, there is no drift. The mark is then exactly the last print, and the row can only tie. With creation and redemption off, the pool carries no news about the reopen, however far the reopen moves.</p>
+            <p class="t-body sc-m__live" data-sc-m1-live>&nbsp;</p>
+          </article>
+          <article class="col-half-right sc-m" aria-labelledby="sc-m2">
+            <p class="t-label"><span data-sc-m2-count>&nbsp;</span></p>
+            <h3 id="sc-m2" class="t-h3"><code>curb.scorecard.mark/2</code></h3>
+            <p class="t-body">Adds a signal from markets that trade while Hong Kong is shut: the Binance USD-M perpetual on the same share, and the US ADR at USD/HKD.</p>
+            <div class="sc-formula surface-ink"><code>mark = lastPrint × (1 + 0.79 × r)</code></div>
+            <ul class="sc-facts t-body" role="list">
+              <li><span class="sc-facts__k">r</span> The mean of the two returns from the cut to the commit. If one leg is missing, the other is used alone.</li>
+              <li><span class="sc-facts__k">β 0.79</span> Fitted at 0.983 on 118 overnight and weekend closures, 22 Jul to 22 Sep, all before these rows. Published damped: round(0.8 × 0.983, 2).</li>
+              <li><span class="sc-facts__k">Overnight, weekend</span> The signal applies.</li>
+              <li><span class="sc-facts__k">Lunch recess</span> Weight zero, so the mark stays the last print. In backtests over 23 recesses, the perp-adjusted mark lost to the last print on all three names, and half weight was still worse. The perp's move is still committed as evidence.</li>
+              <li><span class="sc-facts__k">Nasdaq names</span> No proxy trades while they are shut, so mark/2 marks them as mark/1 would.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="wrap section sc-verify grid" aria-labelledby="sc-verify-title">
+        <div class="col-ledger">
+          <h2 id="sc-verify-title" class="t-h2">Verify a row</h2>
+          <p class="t-body measure">Pick a row. The command fetches its evidence bundle and rebuilds the committed input root. It re-runs the committed method on the committed inputs and checks the result against the mark, band and baselines the transaction wrote. It also checks that the row was committed before the reopen it predicts.</p>
+          <p class="t-small muted measure">Needs Node 22.18 or newer, and nothing else: no key, no account. Exit code 0 means verified. Exit code 3 means the evidence was unreachable, which is never an accusation.</p>
+        </div>
+        <div class="col-instrument sc-verify__tool">
+          <label class="t-label sc-verify__label" for="sc-verify-row">Row</label>
+          <select id="sc-verify-row" class="sc-select" data-sc-verify-row>
+            <option>Reading rows…</option>
+          </select>
+          <div class="sc-cmd surface-ink">
+            <pre class="sc-cmd__code"><code data-sc-verify-cmd>npx -y curb-verify tx &lt;commit transaction&gt;</code></pre>
+            <button class="copy sc-cmd__copy" type="button" data-sc-copy-verify><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
+          </div>
+          <p class="t-small muted" data-sc-verify-note>&nbsp;</p>
+        </div>
       </section>
     </main>
     <script type="module" src="/src/pages/scorecard/page.ts"></script>
