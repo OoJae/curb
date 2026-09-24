@@ -1,2 +1,221 @@
-/* Notes page styles: STUB from lane A. The page owner replaces this file.
-   Rules: every class starts with .nt- ; tokens only (no raw hex, no px font sizes). */
+/* /notes (lane E). Every class starts with .nt- ; tokens only. Shared instrument UI lives in
+   instrument.css, the certificate in src/certificate/certificate.css. */
+
+/* ── 1. Hero: ledger left, the certificate right ─────────────────────────────────────────── */
+.nt-hero {
+  padding-block: var(--s-8) var(--section);
+}
+
+.nt-hero .grid {
+  row-gap: var(--s-6);
+  align-items: start;
+}
+
+.nt-hero__text {
+  display: grid;
+  align-content: start;
+  gap: var(--s-3);
+}
+
+.nt-hero__text .nt-kicker {
+  margin-bottom: 0;
+}
+
+.nt-lede {
+  max-width: 40ch;
+}
+
+.nt-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  min-height: var(--s-3);
+}
+
+.nt-disclose {
+  max-width: 52ch;
+}
+
+/* Reserve the card's height before the data arrives (no layout shift). */
+.nt-hero__cert {
+  min-height: 34rem;
+}
+
+@media (min-width: 1024px) {
+  .nt-hero__cert {
+    padding-top: var(--s-2);
+  }
+}
+
+/* ── 2. The descending clock ─────────────────────────────────────────────────────────────── */
+.nt-clock .grid,
+.nt-lots .grid,
+.nt-pointer .grid {
+  row-gap: var(--s-5);
+}
+
+.nt-clock__now {
+  display: grid;
+  gap: var(--s-half);
+}
+
+.nt-clock__label {
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.nt-clock__price {
+  font-family: var(--font-data);
+  font-size: var(--t-h2);
+  line-height: 1.1;
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-height: 1.1em;
+}
+
+.nt-clock__chart {
+  position: relative;
+  height: 15rem;
+  margin-block: var(--s-2);
+}
+
+.nt-chart {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.nt-chart__axis {
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.nt-chart__ref {
+  stroke: var(--slate);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.nt-chart__future {
+  fill: none;
+  stroke: var(--hairline-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.nt-chart__path {
+  fill: none;
+  stroke: var(--streetlamp);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.nt-chart__label,
+.nt-chart__tick {
+  fill: var(--slate);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+}
+
+.nt-chart__now line {
+  stroke: var(--ivory);
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.nt-chart__now circle {
+  fill: var(--streetlamp);
+}
+
+.nt-chart__empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  text-align: center;
+}
+
+.nt-clock__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-1-5) var(--s-2);
+  padding-top: var(--s-2);
+  border-top: var(--rule) solid var(--hairline);
+}
+
+@media (min-width: 560px) {
+  .nt-clock__stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.nt-clock__stats dt {
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.nt-clock__stats dd {
+  margin: 0;
+  min-height: calc(var(--t-data) * 1.4);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 3. The flow ─────────────────────────────────────────────────────────────────────────── */
+.nt-flow__lede {
+  margin-bottom: var(--s-4);
+}
+
+.nt-flow__asset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-1) var(--s-3);
+  padding-block: var(--s-2);
+}
+
+.nt-flow__asset p {
+  flex: 1 1 28ch;
+  max-width: 72ch;
+  padding-bottom: var(--s-1);
+}
+
+.nt-flow__hint {
+  padding: var(--s-1-5) 0;
+  max-width: 72ch;
+}
+
+/* ── 4 / 5. Tables ───────────────────────────────────────────────────────────────────────── */
+.nt-pointer .nt-scroll,
+.nt-lots .nt-scroll {
+  margin-top: var(--s-5);
+}
+
+.nt-table {
+  min-width: 46rem;
+}
+
+.nt-table th[scope='row'] {
+  font-weight: 500;
+  color: var(--figure);
+  padding: var(--s-1) var(--s-2) var(--s-1) 0;
+  border-bottom: var(--rule) solid var(--hairline);
+  text-align: start;
+}
+
+.nt-table td,
+.nt-table th {
+  white-space: nowrap;
+}
+
+.nt-lots__stat {
+  align-self: end;
+}
+
+/* ── 6. Provenance ───────────────────────────────────────────────────────────────────────── */
+.nt-prov__h {
+  margin-bottom: var(--s-3);
+}

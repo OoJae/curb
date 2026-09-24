@@ -186,7 +186,7 @@
 /* A specimen is overprinted, as a banknote specimen is. */
 .crt__specimen {
   position: absolute;
-  top: var(--s-6);
+  top: calc(var(--s-10) + var(--s-1));
   right: var(--s-3);
   padding: var(--s-half) var(--s-1);
   border: var(--rule-strong) solid var(--figure);

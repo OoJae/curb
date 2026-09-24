@@ -18,7 +18,7 @@
         <div class="grid">
           <div class="col-ledger nt-hero__text">
             <p class="t-label nt-kicker">Reopen notes · ReopenNote, ClosedAuction, ReopenPointer</p>
-            <h1 class="t-h1 vt-title-notes" id="nt-title" data-reveal>Sell the <em>reopen</em>, not the asset.</h1>
+            <h1 class="t-h1 vt-title-notes" id="nt-title" data-reveal>Sell the <em>reopen,</em> not the asset.</h1>
             <p class="t-lede measure nt-lede">While Hong Kong is shut, a holder who needs out can only hit a thin pool. A reopen note lets them sell a claim instead: wrapper shares locked in escrow tonight, delivered share for share once the market has verifiably reopened. The buyer prices the reopen; the seller keeps the stock’s upside out of a fire sale.</p>
             <p class="nt-status" data-nt-status><span class="tag tag--specimen">Specimen · in build</span></p>
             <p class="t-small muted nt-disclose">Demo counterparties are team wallets: curb-desk sells, the Agentic Wallet buys. No third party has traded a note.</p>
@@ -91,7 +91,7 @@
           <li class="nt-step">
             <div class="nt-step__body">
               <h3 class="nt-step__title">Mint the note</h3>
-              <p class="nt-step__text">Allowed only while MarketClock says the market is <strong>closed with zero primary capacity</strong>, outside a multiplier blackout, and under the asset’s open-interest cap. The pointer witnesses the market shut in the same call and stamps the note with that epoch.</p>
+              <p class="nt-step__text">Allowed only while MarketClock says the market is <strong>closed with zero primary capacity</strong>, outside a multiplier blackout, and under the asset’s cap for this closure. <span data-nt-capused></span> The pointer witnesses the market shut in the same call and stamps the note with that epoch.</p>
               <div class="nt-step__row"><button type="button" class="btn btn--primary" data-nt-tx="mint">Mint</button></div>
               <p class="tx-status" data-nt-status-for="mint"></p>
             </div>
@@ -166,8 +166,8 @@
         <div class="nt-scroll" tabindex="0" role="region" aria-labelledby="nt-pointer-cap">
           <table class="table nt-table">
             <caption id="nt-pointer-cap" data-nt-pointer-cap>ReopenPointer, per note asset</caption>
-            <thead><tr><th scope="col">Asset</th><th scope="col" class="num">Epoch</th><th scope="col">Pointer sees</th><th scope="col">Last reopen bracket (HKT)</th><th scope="col">Print</th><th scope="col">Next scheduled reopen</th></tr></thead>
-            <tbody data-nt-pointer><tr><td colspan="6" class="muted">Reading ReopenPointer…</td></tr></tbody>
+            <thead><tr><th scope="col">Asset</th><th scope="col" class="num">Epoch</th><th scope="col">Pointer sees</th><th scope="col">Last reopen bracket (HKT)</th><th scope="col">Print</th><th scope="col">Next scheduled reopen</th><th scope="col" class="num">Cap used this closure, shares</th></tr></thead>
+            <tbody data-nt-pointer><tr><td colspan="7" class="muted">Reading ReopenPointer…</td></tr></tbody>
           </table>
         </div>
       </section>

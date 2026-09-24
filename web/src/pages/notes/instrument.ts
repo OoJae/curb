@@ -63,9 +63,9 @@ export function fmtPct(bps: number | null | undefined, dp = 2): string {
 }
 
 /** Signed bp in words: 281 → "281 bp under the reference", −23 → "23 bp over the reference". */
-export function vsReference(bps: number): string {
+export function vsReference(bps: number, short = false): string {
   if (bps === 0) return 'at the reference';
-  return `${Math.abs(bps).toLocaleString('en-US')} bp ${bps > 0 ? 'under' : 'over'} the reference`;
+  return `${Math.abs(bps).toLocaleString('en-US')} bp ${bps > 0 ? 'under' : 'over'}${short ? '' : ' the reference'}`;
 }
 
 // --- the specimen / live tag ------------------------------------------------------------------
@@ -268,7 +268,7 @@ export function mountWalletBar(el: HTMLElement, opts: { live: boolean }): Wallet
 /** "0x055b…7105 (team: Agentic Wallet)" when the address is one of the disclosed team wallets. */
 export function whoHTML(addr: Address, team: Record<string, string>): SafeHTML {
   const tag = team[addr.toLowerCase()];
-  return html`${addressLinkHTML(addr)}${tag ? html` <span class="muted">(${tag})</span>` : ''}`;
+  return html`${addressLinkHTML(addr)}${tag ? html` <span class="muted nt-team">(${tag})</span>` : ''}`;
 }
 
 export { shortAddress };

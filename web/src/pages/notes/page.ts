@@ -7,7 +7,7 @@ import './page.css';
 
 import { parseUnits } from 'viem';
 import {
-  approveNotesForAuction, approveUsdgForAuction, approveWrapperForNote, auctionLive, bidLot, getLot, getLotCount,
+  approveNotesForAuction, approveUsdgForAuction, approveWrapperForNote, auctionLive, bidLot, getClosureCap, getLot, getLotCount,
   getNote, getNoteCount, getNotes, getPointer, knownIds, listNote, lotPriceAt, mintNote, notesLive, observe,
   recordPrint, redeemNote, type LotView, PRINT_DELAY_S, PRINT_WINDOW_S,
 } from '../../data/notes';
@@ -21,12 +21,12 @@ import { nextReopenMs, venueFor } from '../../data/schedule';
 import type { Address, NoteView, PointerEpoch, RegimeState } from '../../data/types';
 import { certificateHTML, enableTilt } from '../../certificate/certificate';
 import { countdown, type CountdownHandle } from '../../ui/countdown';
-import { fmtBlock, fmtBp } from '../../ui/format';
+import { fmtAgo, fmtBlock, fmtBp } from '../../ui/format';
 import { html, raw, render, type SafeHTML } from '../../ui/html';
 import { statHTML } from '../../ui/stat';
 import { addressLinkHTML, blockLinkHTML } from '../../ui/txlink';
 import {
-  fmtShares, fmtUsdg, gate, hktDate, hktShort, mountWalletBar, statusTagHTML, txAction, usdgFixed, vsReference, whoHTML,
+  fmtShares, gate, hktDate, hktShort, mountWalletBar, statusTagHTML, txAction, usdgFixed, vsReference, whoHTML,
 } from './instrument';
 
 const shell = boot({ page: 'notes' });
@@ -44,10 +44,12 @@ const ANY_LIVE = LIVE.notes || LIVE.auction;
 // state
 // ---------------------------------------------------------------------------------------------
 
+type Cap = Awaited<ReturnType<typeof getClosureCap>>;
 interface State {
   notes: NoteView[];
   lots: LotView[];
   pointers: PointerEpoch[];
+  caps: Map<string, Cap>;
   featuredLot: LotView | null;
   featuredNote: NoteView | null;
   block: number | null;
@@ -90,6 +92,10 @@ async function load(): Promise<State> {
   let lots = lotResults.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
   const assets = LIVE.notes ? NOTE_ASSETS : NOTE_ASSETS.slice(0, 1);
   const pointers = (await Promise.allSettled(assets.map((a) => getPointer(a.wrapper)))).flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  const caps = new Map<string, Cap>();
+  (await Promise.allSettled(assets.map((a) => getClosureCap(a.wrapper)))).forEach((r, i) => {
+    if (r.status === 'fulfilled') caps.set(assets[i]!.wrapper.toLowerCase(), r.value);
+  });
 
   if (!LIVE.auction && lots.length) {
     const r = await getRegime({ wrapper: lots[0]!.wrapper }).catch(() => null);
@@ -99,7 +105,7 @@ async function load(): Promise<State> {
   const featuredLot = lots.find((l) => l.status === 'LIVE' && Date.now() <= l.endAtMs) ?? lots[0] ?? null;
   const featuredNote = (featuredLot && notes.find((n) => n.id === featuredLot.noteId)) ?? notes[0] ?? null;
   const block = [...notes, ...lots].map((x) => x.block).find((b): b is number => typeof b === 'number') ?? null;
-  return { notes, lots, pointers, featuredLot, featuredNote, block };
+  return { notes, lots, pointers, caps, featuredLot, featuredNote, block };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -156,9 +162,7 @@ function drawCertificate(n: NoteView | null): void {
 // 2. the descending clock
 // ---------------------------------------------------------------------------------------------
 
-const W = 600;
-const H = 240;
-const PAD = { l: 8, r: 8, t: 22, b: 30 };
+const PAD = { l: 2, r: 2, t: 26, b: 30 };
 let cd: CountdownHandle | null = null;
 let tickTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -175,6 +179,9 @@ function chartWindow(l: LotView): [number, number] {
 function drawChart(l: LotView): void {
   const el = $('[data-nt-chart]');
   if (!el) return;
+  // Drawn at the box's real pixel size, so the type in the SVG stays at its CSS size.
+  const W = Math.max(240, Math.round(el.clientWidth || 600));
+  const H = Math.max(160, Math.round(el.clientHeight || 240));
   const [t0, t1] = chartWindow(l);
   const start = Number(l.startPriceRaw);
   const floor = Number(l.floorPriceRaw);
@@ -194,7 +201,7 @@ function drawChart(l: LotView): void {
   const axis = `<line class="nt-chart__axis" x1="${PAD.l}" x2="${W - PAD.r}" y1="${H - PAD.b}" y2="${H - PAD.b}"/>
     <text class="nt-chart__tick" x="${PAD.l}" y="${H - 8}">${hktShort(t0)}</text>
     <text class="nt-chart__tick" x="${x(Math.min(tDecay, t1)).toFixed(1)}" y="${H - 8}" text-anchor="middle">${hktShort(Math.min(tDecay, t1))}</text>`;
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="nt-chart" preserveAspectRatio="none" focusable="false" aria-hidden="true">
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="nt-chart" focusable="false" aria-hidden="true">
     ${axis}${refLine}
     <path class="nt-chart__future" d="${path}"/>
     <clipPath id="nt-past"><rect data-nt-past x="0" y="0" width="0" height="${H}"/></clipPath>
@@ -220,7 +227,7 @@ function tickClock(l: LotView): void {
   if (priceEl) priceEl.textContent = sold && l.clearedPrice !== null ? `${usdgFixed(BigInt(Math.round(l.clearedPrice * 1e6)), 4)} USDG` : `${usdgFixed(p, 4)} USDG`;
   const ref = BigInt(l.refPriceRaw);
   const disc = $('[data-nt-disc]');
-  if (disc) disc.textContent = ref > 0n ? vsReference(Number(((ref - p) * 10_000n) / ref)) : 'no reference (price unreadable at listing)';
+  if (disc) disc.textContent = ref > 0n ? vsReference(Number(((ref - p) * 10_000n) / ref), true) : 'no reference (price unreadable at listing)';
   const st = $('[data-nt-lotstatus]');
   if (st) {
     st.textContent = sold
@@ -279,18 +286,38 @@ function drawClock(l: LotView | null): void {
   if (l.status === 'LIVE') tickTimer = setInterval(() => tickClock(l), 1000);
 }
 
+// Redraw the chart when its box changes width (rotation, resize).
+let lastW = 0;
+const chartBox = document.querySelector<HTMLElement>('[data-nt-chart]');
+if (chartBox && 'ResizeObserver' in window) {
+  new ResizeObserver(() => {
+    const w = Math.round(chartBox.clientWidth);
+    if (w === lastW || !state?.featuredLot) return;
+    lastW = w;
+    drawChart(state.featuredLot);
+    tickClock(state.featuredLot);
+  }).observe(chartBox);
+}
+
 // ---------------------------------------------------------------------------------------------
 // 4. pointer, 5. lots, 6. provenance
 // ---------------------------------------------------------------------------------------------
 
-function drawPointer(ps: PointerEpoch[]): void {
+function capText(c: Cap | undefined): string {
+  if (!c) return '—';
+  const used = Number(c.usedRaw) / 1e18;
+  const cap = Number(c.capRaw) / 1e18;
+  return `${fmtShares(used)} of ${fmtShares(cap)}`;
+}
+
+function drawPointer(ps: PointerEpoch[], caps: Map<string, Cap>): void {
   const body = $('[data-nt-pointer]');
   const cap = $('[data-nt-pointer-cap]');
   if (!body) return;
   const now = Date.now();
   if (cap) cap.textContent = LIVE.notes ? 'ReopenPointer, per note asset, read now' : 'ReopenPointer, per note asset · Specimen, in build';
   if (!ps.length) {
-    render(body, html`<tr><td colspan="6" class="muted">ReopenPointer is unreadable just now.</td></tr>`);
+    render(body, html`<tr><td colspan="7" class="muted">ReopenPointer is unreadable just now.</td></tr>`);
     return;
   }
   render(
@@ -315,6 +342,7 @@ function drawPointer(ps: PointerEpoch[]): void {
         <td>${bracket}</td>
         <td>${print}</td>
         <td>${reopen ? hktShort(reopen, now) : '—'}</td>
+        <td class="num">${capText(caps.get(p.wrapper.toLowerCase()))}</td>
       </tr>`;
     })}`,
   );
@@ -528,8 +556,13 @@ async function readFlowRegime(): Promise<void> {
   el.textContent = r.stale
     ? `${flowAsset.symbol}: the clock is stale (no attestation for ${r.attestedAgoMin ?? '?'} min). Everything refuses until it is fresh.`
     : shut
-      ? `${flowAsset.symbol}: shut, primary capacity $0 (attested ${r.attestedAgoMin ?? 0} min ago). Mint, list and bid are open.${cutoff ? ` Next attested transition ${hktShort(cutoff)}.` : ''}`
+      ? `${flowAsset.symbol}: shut, primary capacity $0 (attested ${fmtAgo(r.asOfMs)}). Mint, list and bid are open.${cutoff ? ` Next attested transition ${hktShort(cutoff)}.` : ''}`
       : `${flowAsset.symbol}: ${r.regime.toLowerCase()}, primary capacity $${r.cap.toLocaleString('en-US')}. Notes mint and trade only while the market is shut; observe, print and redeem work now.`;
+  const capEl = $('[data-nt-capused]');
+  if (capEl) {
+    const c = state?.caps.get(flowAsset.wrapper.toLowerCase()) ?? (await getClosureCap(flowAsset.wrapper).catch(() => undefined));
+    capEl.textContent = c ? `Cap used this closure for ${flowAsset.symbol}: ${capText(c)} shares (epoch ${c.epoch}).` : '';
+  }
   const cutEl = $('[data-nt-cutoff]');
   if (cutEl) cutEl.textContent = cutoff ? `For ${flowAsset.symbol} that is ${hktDate(cutoff)}, and the lot will end then.` : '';
 }
@@ -565,7 +598,7 @@ async function refresh(): Promise<void> {
   drawStatus(state.block);
   drawCertificate(state.featuredNote);
   drawClock(state.featuredLot);
-  drawPointer(state.pointers);
+  drawPointer(state.pointers, state.caps);
   drawLots(state.lots);
   fillDefaults(state);
 }

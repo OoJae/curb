@@ -234,13 +234,20 @@ select.nt-input {
 .nt-window {
   position: relative;
   padding: var(--s-3);
+  border: var(--rule) solid var(--hairline);
   border-radius: var(--radius);
   background: var(--ground);
   color: var(--figure);
 }
 
 [data-regime='open'] .nt-window {
-  border: var(--rule) solid var(--ink);
+  border-color: var(--ink);
+}
+
+.nt-team {
+  font-family: var(--font-text);
+  font-stretch: normal;
+  white-space: nowrap;
 }
 
 .nt-window__head {
