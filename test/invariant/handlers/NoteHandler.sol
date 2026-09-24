@@ -7,130 +7,25 @@ import {ReopenPointer} from "../../../src/ReopenPointer.sol";
 import {IReopenNote} from "../../../src/interfaces/IReopenNote.sol";
 import {IReopenPointer} from "../../../src/interfaces/IReopenPointer.sol";
 import {IMarketClock} from "../../../src/interfaces/IMarketClock.sol";
+import {ClosedAuction} from "../../../src/ClosedAuction.sol";
 import {MulDiv} from "../../../src/lib/MulDiv.sol";
-import {SafeTransfer} from "../../../src/lib/SafeTransfer.sol";
 import {MockClock} from "../../mocks/MockClock.sol";
 import {MockERC20} from "../../mocks/MockERC20.sol";
 import {MockWrapper4626} from "../../mocks/MockWrapper4626.sol";
 
-/// @notice The auction surface the handler drives (ClosedAuction's, per the W3 spec).
-interface IAuctionPath {
-    function list(uint256 noteId, uint128 amount, uint128 startPrice, uint128 floorPrice, uint64 decaySeconds, uint64 endAt)
-        external
-        returns (uint256 lotId);
-    function bid(uint256 lotId, uint128 maxPrice) external returns (uint256 price);
-    function withdraw(uint256 lotId) external;
-}
-
-/// @notice Stage-1 stand-in for ClosedAuction: the spec's list/bid gates and price curve, no eligibility,
-///         no refPrice. It exists so notes flow through a third-party escrow while the pointer and note
-///         properties are checked; the real ClosedAuction replaces it once P2 lands.
-contract MiniAuction is IAuctionPath {
-    using SafeTransfer for address;
-
-    enum Status { NONE, LIVE, SOLD, WITHDRAWN }
-
-    struct Lot {
-        address seller;
-        address wrapper;
-        uint256 noteId;
-        uint128 amount;
-        uint128 startPrice;
-        uint128 floorPrice;
-        uint64 startAt;
-        uint64 endAt;
-        uint64 decaySeconds;
-        uint32 epochAtMint;
-        Status status;
-        address buyer;
-        uint128 clearedPrice;
-    }
-
-    ReopenNote public immutable note;
-    IReopenPointer public immutable pointer;
-    IMarketClock public immutable clock;
-    address public immutable usdg;
-    Lot[] internal _lots;
-
-    constructor(ReopenNote note_, IReopenPointer pointer_, IMarketClock clock_, address usdg_) {
-        (note, pointer, clock, usdg) = (note_, pointer_, clock_, usdg_);
-    }
-
-    function lotCount() external view returns (uint256) { return _lots.length; }
-    function lotOf(uint256 lotId) external view returns (Lot memory) { return _lots[lotId - 1]; }
-
-    function list(uint256 noteId, uint128 amount, uint128 startPrice, uint128 floorPrice, uint64 decaySeconds, uint64 endAt)
-        external
-        returns (uint256 lotId)
-    {
-        IReopenNote.Unit memory u = note.unitOf(noteId);
-        require(u.wrapper != address(0) && amount > 0, "BadParams");
-        require(clock.regime(u.wrapper) == IMarketClock.Regime.CLOSED && clock.primaryCapNow(u.wrapper) == 0, "MarketNotClosed");
-        require(pointer.epochOf(u.wrapper) == u.epochAtMint, "ReopenedSinceMint");
-        require(floorPrice > 0 && floorPrice <= startPrice, "BadParams");
-        require(decaySeconds >= 60 && decaySeconds <= 6 hours, "BadParams");
-        require(block.timestamp < endAt && endAt <= block.timestamp + 4 days, "BadParams");
-        _lots.push(Lot(msg.sender, u.wrapper, noteId, amount, startPrice, floorPrice, uint64(block.timestamp), endAt,
-            decaySeconds, u.epochAtMint, Status.LIVE, address(0), 0));
-        lotId = _lots.length;
-        note.safeTransferFrom(msg.sender, address(this), noteId, amount, "");
-    }
-
-    function priceAt(uint256 lotId, uint256 t) public view returns (uint256) {
-        Lot storage l = _lots[lotId - 1];
-        uint256 dt = t > l.startAt ? t - l.startAt : 0;
-        if (dt > l.decaySeconds) dt = l.decaySeconds;
-        return l.startPrice - MulDiv.mulDiv(l.startPrice - l.floorPrice, dt, l.decaySeconds);
-    }
-
-    function bid(uint256 lotId, uint128 maxPrice) external returns (uint256 price) {
-        Lot storage l = _lots[lotId - 1];
-        require(l.status == Status.LIVE, "LotNotLive");
-        require(block.timestamp <= l.endAt, "LotExpired");
-        require(clock.regime(l.wrapper) == IMarketClock.Regime.CLOSED && clock.primaryCapNow(l.wrapper) == 0, "MarketNotClosed");
-        (uint32 e,) = pointer.observe(l.wrapper);
-        require(e == l.epochAtMint, "ReopenedSinceMint");
-        price = priceAt(lotId, block.timestamp);
-        require(price <= maxPrice, "PriceAboveMax");
-        l.status = Status.SOLD;
-        l.buyer = msg.sender;
-        l.clearedPrice = uint128(price);
-        usdg.safeTransferFrom(msg.sender, l.seller, price);
-        note.safeTransferFrom(address(this), msg.sender, l.noteId, l.amount, "");
-    }
-
-    function withdraw(uint256 lotId) external {
-        Lot storage l = _lots[lotId - 1];
-        require(l.status == Status.LIVE && msg.sender == l.seller, "NotSeller");
-        l.status = Status.WITHDRAWN;
-        note.safeTransferFrom(address(this), l.seller, l.noteId, l.amount, "");
-    }
-
-    function onERC1155Received(address operator, address, uint256, uint256, bytes calldata) external view returns (bytes4) {
-        require(msg.sender == address(note) && operator == address(this), "unsolicited");
-        return this.onERC1155Received.selector;
-    }
-
-    function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
-        external
-        pure
-        returns (bytes4)
-    {
-        revert("batch");
-    }
-}
-
 /// @notice Bounded random driver for NoteInvariant: moves the clock (regime, cap, blackout, nonce), the 4626
-///         rate and time, pokes the pointer, and makes actors mint, move, list, bid on, redeem and cancel notes.
-///         Every action is try/caught; ghosts record what each SUCCESSFUL call must have satisfied.
+///         rate and time, pokes the pointer, and makes actors mint, move, list on the real ClosedAuction, bid,
+///         withdraw, grade, redeem and cancel notes. Actors 0-2 are eligible bidders; actor 3 is not.
+///         Every action is try/caught; ghosts record what each SUCCESSFUL call must have satisfied, and
+///         what every refusal that must happen did happen.
 contract NoteHandler is Test {
     ReopenNote public note;
     ReopenPointer public pointer;
     MockClock public clock;
-    MiniAuction public auction;
+    ClosedAuction public auction;
     MockERC20 public usdg;
     MockWrapper4626[2] public wrappers;
-    address[3] public actors;
+    address[4] public actors; // [3] is ineligible
 
     // --- ghosts ---------------------------------------------------------------------------------
     uint256[] public ids;
@@ -147,6 +42,10 @@ contract NoteHandler is Test {
     bool public lockedRedeem;       // a redeem succeeded although neither unlock held afterwards
     bool public inexactDelivery;    // a redeem/cancel delivered other than exactly its amount
     bool public badBid;             // a bid cleared while open, in a later epoch, or outside [floor, start]
+    bool public badPayment;         // a clearing moved USDG other than exactly `price` from buyer to seller
+    bool public ineligibleCleared;  // the ineligible actor won a lot
+    bool public unsolicitedAccepted; // the auction accepted a note it did not pull itself
+    bool public badGrade;           // realisedDiscountBps disagreed with the print, or graded an unprintable lot
     mapping(uint256 lotId => uint256) public sales;
 
     uint256 public mints;
@@ -156,15 +55,18 @@ contract NoteHandler is Test {
     uint256 public prints;
     uint256 public reopens;
     uint256 public bids;
+    uint256 public ineligibleRefusals;
+    uint256 public withdrawals;
+    uint256 public grades;
 
     constructor(
         ReopenNote note_,
         ReopenPointer pointer_,
         MockClock clock_,
-        MiniAuction auction_,
+        ClosedAuction auction_,
         MockERC20 usdg_,
         MockWrapper4626[2] memory wrappers_,
-        address[3] memory actors_
+        address[4] memory actors_
     ) {
         (note, pointer, clock, auction, usdg) = (note_, pointer_, clock_, auction_, usdg_);
         wrappers = wrappers_;
@@ -187,7 +89,7 @@ contract NoteHandler is Test {
     function idCount() external view returns (uint256) { return ids.length; }
 
     function _w(uint256 seed) internal view returns (address) { return address(wrappers[seed % 2]); }
-    function _actor(uint256 seed) internal view returns (address) { return actors[seed % 3]; }
+    function _actor(uint256 seed) internal view returns (address) { return actors[seed % 4]; }
 
     function _id(uint256 seed) internal view returns (uint256) {
         return ids.length == 0 ? 0 : ids[seed % ids.length];
@@ -195,8 +97,8 @@ contract NoteHandler is Test {
 
     /// The first actor, starting from `seed`, holding units of `id` (address(0) if none does).
     function _holder(uint256 seed, uint256 id) internal view returns (address) {
-        for (uint256 i; i < 3; ++i) {
-            address a = actors[(seed % 3 + i) % 3];
+        for (uint256 i; i < 4; ++i) {
+            address a = actors[(seed % 4 + i) % 4];
             if (note.balanceOf(a, id) > 0) return a;
         }
         return address(0);
@@ -343,7 +245,7 @@ contract NoteHandler is Test {
         note.safeTransferFrom(from, _actor(toSeed), id, bound(amount, 1, bal), "");
     }
 
-    // --- auction path ------------------------------------------------------------------------------
+    // --- auction path (the real ClosedAuction) -------------------------------------------------------
 
     function list(uint256 actorSeed, uint256 idSeed, uint256 amount, uint256 start, uint256 floorBps, uint256 decay, uint256 life)
         external
@@ -358,9 +260,9 @@ contract NoteHandler is Test {
         uint256 floor_ = start * bound(floorBps, 1, 10_000) / 10_000;
         if (floor_ == 0) floor_ = 1;
         decay = bound(decay, 60, 6 hours);
-        vm.prank(seller);
         life = bound(life, 10 minutes, 4 days);
-        try auction.list(id, uint128(amount), uint128(start), uint128(floor_), uint64(decay), uint64(block.timestamp + life)) {}
+        vm.prank(seller);
+        try auction.list(id, uint128(amount), uint128(start), uint128(floor_), uint32(decay), uint64(block.timestamp + life)) {}
         catch {}
     }
 
@@ -369,19 +271,36 @@ contract NoteHandler is Test {
         if (n == 0) return;
         uint256 lotId = 1 + lotSeed % n;
         address bidder = _actor(actorSeed);
-        MiniAuction.Lot memory l = auction.lotOf(lotId);
+        ClosedAuction.Lot memory l = auction.lotOf(lotId);
         uint256 maxPrice = uint256(l.startPrice) + bound(slack, 0, 1e6);
+        uint256 sellerBefore = usdg.balanceOf(l.seller);
+        uint256 bidderBefore = usdg.balanceOf(bidder);
         vm.prank(bidder);
-        try auction.bid(lotId, uint128(maxPrice)) returns (uint256 price) {
+        try auction.bid(lotId, maxPrice) returns (uint256 price) {
             bids++;
             sales[lotId]++;
+            if (bidder == actors[3]) ineligibleCleared = true;
             bool shut = clock.regime(l.wrapper) == IMarketClock.Regime.CLOSED && clock.primaryCapNow(l.wrapper) == 0
                 && !pointer.isOpen(l.wrapper);
             bool sameEpoch = pointer.epochOf(l.wrapper) == l.epochAtMint
                 && note.unitOf(l.noteId).epochAtMint == l.epochAtMint;
-            bool inBounds = price >= l.floorPrice && price <= l.startPrice;
+            bool inBounds = price >= l.floorPrice && price <= l.startPrice && price <= maxPrice;
             if (!shut || !sameEpoch || !inBounds) badBid = true;
-        } catch {}
+            ClosedAuction.Lot memory after_ = auction.lotOf(lotId);
+            if (after_.status != ClosedAuction.Status.SOLD || after_.buyer != bidder || after_.clearedPrice != price) {
+                badBid = true;
+            }
+            if (bidder == l.seller) {
+                if (usdg.balanceOf(bidder) != bidderBefore) badPayment = true;
+            } else if (usdg.balanceOf(l.seller) != sellerBefore + price || usdg.balanceOf(bidder) + price != bidderBefore) {
+                badPayment = true;
+            }
+        } catch (bytes memory err) {
+            if (bidder == actors[3]) {
+                if (bytes4(err) != ClosedAuction.Ineligible.selector) ineligibleCleared = true; // wrong refusal
+                ineligibleRefusals++;
+            }
+        }
     }
 
     function withdrawLot(uint256 lotSeed) external tracked {
@@ -389,6 +308,38 @@ contract NoteHandler is Test {
         if (n == 0) return;
         uint256 lotId = 1 + lotSeed % n;
         vm.prank(auction.lotOf(lotId).seller);
-        try auction.withdraw(lotId) {} catch {}
+        try auction.withdraw(lotId) {
+            withdrawals++;
+        } catch {}
+    }
+
+    /// Grade a lot: a sold lot whose next epoch is printed must grade to (V - cleared)·1e4 / V; anything
+    /// else must be refused.
+    function grade(uint256 lotSeed) external tracked {
+        uint256 n = auction.lotCount();
+        if (n == 0) return;
+        uint256 lotId = 1 + lotSeed % n;
+        ClosedAuction.Lot memory l = auction.lotOf(lotId);
+        uint128 print = pointer.epochInfo(l.wrapper, l.epochAtMint + 1).print;
+        uint256 v = MulDiv.mulDiv(l.amount, print, 1e30);
+        bool gradable = l.status == ClosedAuction.Status.SOLD && print != 0 && v != 0;
+        try auction.realisedDiscountBps(lotId) returns (int256 bps) {
+            grades++;
+            if (!gradable || bps != (int256(v) - int256(uint256(l.clearedPrice))) * 1e4 / int256(v)) badGrade = true;
+        } catch {
+            if (gradable) badGrade = true;
+        }
+    }
+
+    /// Push a note straight at the auction, as an operator-less gift: it must be refused.
+    function unsolicited(uint256 actorSeed, uint256 idSeed) external tracked {
+        uint256 id = _id(idSeed);
+        if (id == 0) return;
+        address from = _holder(actorSeed, id);
+        if (from == address(0)) return;
+        vm.prank(from);
+        try note.safeTransferFrom(from, address(auction), id, 1, "") {
+            unsolicitedAccepted = true;
+        } catch {}
     }
 }
