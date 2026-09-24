@@ -41,7 +41,7 @@
   width: 40%;
 }
 
-.sc-tally__table td.num {
+.sc-tally__table td {
   font-size: var(--t-lede);
 }
 
@@ -56,7 +56,7 @@
   column-gap: var(--s-2);
 }
 
-.sc-addr .copy {
+.sc-addr > button {
   margin-block: calc(-1 * var(--s-1-5));
 }
 
@@ -467,7 +467,7 @@
   row-gap: var(--s-5);
 }
 
-.sc-verify .col-ledger > * + * {
+.sc-verify > :first-child > * + * {
   margin-top: var(--s-2);
 }
 

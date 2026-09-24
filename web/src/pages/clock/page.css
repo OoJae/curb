@@ -47,7 +47,7 @@
   column-gap: var(--s-2);
 }
 
-.clk-addr .copy {
+.clk-addr > button {
   margin-block: calc(-1 * var(--s-1-5));
 }
 
@@ -63,8 +63,8 @@
   margin-bottom: var(--s-2);
 }
 
-.clk-round .col-ledger > p,
-.clk-integrate .col-ledger > p + p {
+.clk-round > :first-child > p,
+.clk-integrate > :first-child > p + p {
   margin-top: var(--s-2);
 }
 
@@ -408,7 +408,7 @@
   color: var(--muted);
 }
 
-.clk-code__bar .copy {
+.clk-code__bar > button {
   padding-inline: var(--s-2);
   border-inline-start: var(--rule) solid var(--hairline);
 }
@@ -443,6 +443,6 @@
   border-top: var(--rule-strong) solid var(--figure);
 }
 
-.clk-host .ledger {
+.clk-host > dl {
   margin-top: var(--s-2);
 }

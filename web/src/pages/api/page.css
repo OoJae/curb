@@ -24,7 +24,7 @@
   column-gap: var(--s-2);
 }
 
-.api-base .copy {
+.api-base > button {
   margin-block: calc(-1 * var(--s-1-5));
 }
 
@@ -243,9 +243,9 @@
   row-gap: var(--s-5);
 }
 
-.api-agent .col-ledger > * + *,
-.api-proof .col-ledger > * + *,
-.api-market .col-ledger > * + * {
+.api-agent > :first-child > * + *,
+.api-proof > :first-child > * + *,
+.api-market > :first-child > * + * {
   margin-top: var(--s-2);
 }
 
@@ -274,7 +274,7 @@
   color: var(--muted);
 }
 
-.api-term__bar .copy {
+.api-term__bar > button {
   flex: none;
   padding-inline: var(--s-2);
   border-inline-start: var(--rule) solid var(--hairline);
