@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Home preview (lab)</title>
+    <!-- Lab only: local @fontsource files, preloaded and render-blocking like lane A's self-hosted subsets, so CLS
+         here measures the page rather than a late font swap. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/bodoni-moda/files/bodoni-moda-latin-opsz-normal.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/bodoni-moda/files/bodoni-moda-latin-opsz-italic.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/libre-franklin/files/libre-franklin-latin-wght-normal.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/martian-mono/files/martian-mono-latin-standard-normal.woff2" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/bodoni-moda/opsz.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/bodoni-moda/opsz-italic.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/libre-franklin/wght.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/libre-franklin/wght-italic.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/martian-mono/standard.css" />
+    <link rel="stylesheet" href="./stubs/tokens.css" />
+    <style>
+      html { background: var(--ground); color: var(--figure); }
+      body { margin: 0; }
+      .lab-masthead {
+        position: fixed; inset: 0 0 auto; z-index: 10; height: 64px; display: flex; align-items: center; gap: 28px;
+        padding: 0 var(--margin); font: 500 var(--t-small) / 1 var(--f-text);
+        background: color-mix(in oklab, var(--ground) 88%, transparent); backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--hairline);
+      }
+      .lab-masthead b { font: 500 1.375rem/1 var(--f-display); margin-right: auto; }
+      .lab-masthead span { font-family: var(--f-data); color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <header class="lab-masthead"><b>Curb</b> Clock Scorecard Notes Depth API <span>[lab masthead stub]</span></header>
+    <main id="main"></main>
+    <script type="module" src="./home.ts"></script>
+  </body>
+</html>

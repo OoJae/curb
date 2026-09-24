@@ -229,24 +229,33 @@ contract DepthCertTest is Test {
         vm.stopPrank();
     }
 
-    function test_post_rejects_zero_notional() public {
+    function test_post_rejects_below_min_notional() public {
+        assertEq(dc.MIN_NOTIONAL(), 1e6);
         vm.startPrank(maker);
-        vm.expectRevert(DepthCert.ZeroNotional.selector);
+        vm.expectRevert(DepthCert.BelowMinNotional.selector);
         dc.post(address(wrapper), address(0), 0, PX, t0 + 1 days, BOND);
-        vm.expectRevert(DepthCert.ZeroNotional.selector);
+        vm.expectRevert(DepthCert.BelowMinNotional.selector);
         dc.post(address(wrapper), address(0), SIZE, 0, t0 + 1 days, BOND);
-        // 0.5 share at 1 unit per share rounds to zero USDG units.
-        vm.expectRevert(DepthCert.ZeroNotional.selector);
-        dc.post(address(wrapper), address(0), 0.5e18, 1, t0 + 1 days, BOND);
+        // One unit short of 1 USDG, and the 1-unit dust that used to lock a book, in either kind of book.
+        vm.expectRevert(DepthCert.BelowMinNotional.selector);
+        dc.post(address(wrapper), address(0), 1e18, 1e6 - 1, t0 + 1 days, 1e5);
+        vm.expectRevert(DepthCert.BelowMinNotional.selector);
+        dc.post(address(wrapper), address(0), 1e18, 1, t0 + 30 days, 1);
+        vm.expectRevert(DepthCert.BelowMinNotional.selector);
+        dc.post(address(wrapper), credit, 1e18, 1, t0 + 30 days, 1);
+        // Exactly 1 USDG is enough.
+        uint256 id = dc.post(address(wrapper), address(0), 1e18, 1e6, t0 + 1 days, 1e5);
         vm.stopPrank();
+        assertEq(dc.committed(maker), 1e6);
+        assertEq(dc.certOf(id).bond, 1e5);
     }
 
     function test_post_min_bond_is_ten_percent_rounded_up() public {
-        // notional 11 units -> 10% = 1.1 -> minimum bond 2.
+        // notional 1_000_001 units -> 10% = 100_000.1 -> minimum bond 100_001.
         vm.startPrank(maker);
-        vm.expectRevert(abi.encodeWithSelector(DepthCert.BondTooSmall.selector, 1, 2));
-        dc.post(address(wrapper), address(0), 11e18, 1, t0 + 1 days, 1);
-        dc.post(address(wrapper), address(0), 11e18, 1, t0 + 1 days, 2);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BondTooSmall.selector, 100_000, 100_001));
+        dc.post(address(wrapper), address(0), 1_000_001e18, 1, t0 + 1 days, 100_000);
+        dc.post(address(wrapper), address(0), 1_000_001e18, 1, t0 + 1 days, 100_001);
         // Exactly 10% of the default is enough, one unit less is not.
         vm.expectRevert(abi.encodeWithSelector(DepthCert.BondTooSmall.selector, BOND - 1, BOND));
         dc.post(address(wrapper), address(0), SIZE, PX, t0 + 1 days, BOND - 1);
@@ -255,10 +264,10 @@ contract DepthCertTest is Test {
     }
 
     function testFuzz_post_min_bond(uint128 size, uint128 px) public {
-        size = uint128(bound(size, 1, 1_000e18));
-        px = uint128(bound(px, 1, 10_000e6));
+        px = uint128(bound(px, 1e3, 10_000e6));
+        size = uint128(bound(size, (1e24 + px - 1) / px, 1_000e18)); // notional >= MIN_NOTIONAL
         uint256 n = _notional(size, px);
-        vm.assume(n > 0);
+        assertGe(n, 1e6);
         uint256 minBond = (n * 1000 + 9999) / 10_000;
         assertGe(minBond * 10, n, "never under 10%");
         usdg.mint(maker, minBond);
@@ -408,23 +417,22 @@ contract DepthCertTest is Test {
         dc.claimShares(address(wrapper), address(dc));
     }
 
-    function test_committed_is_recomputed_not_decremented() public {
-        // 10 shares at 3 units per share: notional 30. A 1.5-share fill costs floor(4.5) = 4, and what
-        // is left, 8.5 shares, is worth floor(25.5) = 25 -- not 30 - 4 = 26.
-        uint256 id = _post(maker, address(0), 10e18, 3, 1 days, 3);
+    function test_committed_is_the_notional_of_what_is_left() public {
+        // 10 shares at 0.300001 USDG: notional 3_000_010. A 1.5-share fill costs floor(450_001.5) = 450_001,
+        // and what is left, 8.5 shares, is worth floor(2_550_008.5) = 2_550_008 -- not 3_000_010 - 450_001.
+        uint256 id = _post(maker, address(0), 10e18, 300_001, 1 days, 300_001);
         (, uint256 paid) = _take(taker, id, 1.5e18, to);
-        assertEq(paid, 4);
-        assertEq(dc.committed(maker), 25);
-        assertEq(dc.committed(maker), _notional(dc.certOf(id).remainingShares, 3));
+        assertEq(paid, 450_001);
+        assertEq(dc.committed(maker), 2_550_008);
+        assertEq(dc.committed(maker), _notional(dc.certOf(id).remainingShares, 300_001));
     }
 
     function testFuzz_committed_tracks_notional_of_remaining(uint128 size, uint128 px, uint128[4] memory fills)
         public
     {
-        size = uint128(bound(size, 1e12, 50e18));
-        px = uint128(bound(px, 1, 5_000e6));
+        px = uint128(bound(px, 1e5, 5_000e6));
+        size = uint128(bound(size, (1e24 + px - 1) / px, 50e18));
         uint256 n = _notional(size, px);
-        vm.assume(n > 0);
         uint128 bond = uint128((n * 1000 + 9999) / 10_000);
         usdg.mint(maker, n + bond);
         uint256 id = _post(maker, address(0), size, px, 1 days, bond);
@@ -436,6 +444,7 @@ contract DepthCertTest is Test {
             if (rem == 0) break;
             uint128 s = uint128(bound(fills[i], 1, rem));
             if (_notional(s, px) == 0) continue;
+            if (rem - s != 0 && _notional(rem - s, px) == 0) s = rem; // a dust remainder is refused; take it all
             _take(taker, id, s, to);
             assertEq(
                 dc.committed(maker),
@@ -445,10 +454,10 @@ contract DepthCertTest is Test {
     }
 
     function test_take_rejects_zero_cost_and_bad_shares_and_zero_to() public {
-        uint256 id = _post(maker, address(0), 10e18, 3, 1 days, 3);
-        // 0.3 share at 3 units per share rounds to 0 USDG.
+        uint256 id = _post(maker, address(0), 10e18, 100_000, 1 days, 100_000);
+        // 1e12 wei of a share at 0.1 USDG a share rounds to 0 USDG.
         vm.expectRevert(DepthCert.ZeroCost.selector);
-        _take(taker, id, 0.3e18, to);
+        _take(taker, id, 1e12, to);
         vm.expectRevert(abi.encodeWithSelector(DepthCert.BadShares.selector, 0, 10e18));
         _take(taker, id, 0, to);
         vm.expectRevert(abi.encodeWithSelector(DepthCert.BadShares.selector, 10e18 + 1, 10e18));
@@ -459,6 +468,59 @@ contract DepthCertTest is Test {
         _take(taker, id, 1e18, address(dc));
         vm.expectRevert(abi.encodeWithSelector(DepthCert.NotLive.selector, 99));
         _take(taker, 99, 1e18, to);
+    }
+
+    /// No take may leave behind shares whose cost rounds to zero, so the last share can always be sold.
+    function test_no_take_may_leave_an_unfillable_remainder() public {
+        // 3 shares at 0.333334 USDG: notional 1_000_002. 1e12 wei left would cost 0.33 units -> refused.
+        uint256 id = _post(maker, address(0), 3e18, 333_334, 1 days, 100_001);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.DustRemainder.selector, uint128(1e12)));
+        _take(taker, id, 3e18 - 1e12, to);
+        // Leaving 3e12 wei (worth 1 unit) is fine, and that last unit can be taken.
+        (bool filled,) = _take(taker, id, 3e18 - 3e12, to);
+        assertTrue(filled);
+        (bool last, uint256 paid) = _take(taker, id, 3e12, to);
+        assertTrue(last);
+        assertEq(paid, 1);
+        assertEq(dc.certOf(id).remainingShares, 0);
+    }
+
+    /// Any valid cert, cut by any sequence of takes, can be filled to the last share.
+    function testFuzz_every_cert_can_be_filled_to_the_last_share(uint128 size, uint128 px, uint128[6] memory cuts)
+        public
+    {
+        px = uint128(bound(px, 1, 5_000e6));
+        uint256 minSize = (1e24 + px - 1) / px;
+        size = uint128(bound(size, minSize, minSize * 1_000));
+        uint256 n = _notional(size, px);
+        uint128 bond = uint128((n * 1000 + 9999) / 10_000);
+        usdg.mint(maker, n + bond);
+        wrapper.mint(taker, size);
+        uint256 id = _post(maker, address(0), size, px, 1 days, bond);
+        for (uint256 i; i < cuts.length; ++i) _cut(id, px, cuts[i]);
+        uint128 last = dc.certOf(id).remainingShares;
+        if (last != 0) {
+            (bool filled,) = _take(taker, id, last, to);
+            assertTrue(filled);
+        }
+        assertEq(dc.certOf(id).remainingShares, 0);
+        assertEq(dc.committed(maker), 0);
+    }
+
+    /// One random take: it fills, or is refused only for a zero cost or a dust remainder; never leaves dust.
+    function _cut(uint256 id, uint128 px, uint128 seed) internal {
+        uint128 rem = dc.certOf(id).remainingShares;
+        if (rem == 0) return;
+        vm.prank(taker);
+        (bool ok, bytes memory err) =
+            address(dc).call(abi.encodeCall(DepthCert.take, (id, uint128(bound(seed, 1, rem)), to)));
+        if (!ok) {
+            bytes4 why = bytes4(err);
+            assertTrue(why == DepthCert.ZeroCost.selector || why == DepthCert.DustRemainder.selector, "other");
+            return;
+        }
+        rem = dc.certOf(id).remainingShares;
+        assertTrue(rem == 0 || _notional(rem, px) > 0, "an unfillable remainder was left");
     }
 
     // --- fades -----------------------------------------------------------------------------------
@@ -823,9 +885,9 @@ contract DepthCertTest is Test {
         (, , uint128 minPx,) = dc.honouredDepth(address(wrapper), credit, 0);
         assertEq(minPx, 50e6, "minBidPx untouched");
         assertEq(dc.bookOf(address(wrapper), credit).length, 1);
-        // ...while the same dust in the open book is allowed, and does not touch the gated book.
+        // ...while a minimum-size cert in the open book is allowed, and does not touch the gated book.
         vm.prank(stranger);
-        dc.post(address(wrapper), address(0), 1e18, 1, t0 + 30 days, 1);
+        dc.post(address(wrapper), address(0), 1e18, 1e6, t0 + 30 days, 1e5);
         (, , minPx,) = dc.honouredDepth(address(wrapper), credit, 0);
         assertEq(minPx, 50e6);
     }
@@ -899,17 +961,21 @@ contract DepthCertTest is Test {
         vm.expectRevert(abi.encodeWithSelector(DepthCert.NotWithdrawable.selector, id));
         dc.withdraw(id);
 
-        vm.warp(exp);
+        // Before expiry nobody else may.
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(DepthCert.NotMaker.selector, stranger, maker));
         dc.withdraw(id);
 
+        // From expiry on, anyone may -- and the bond still goes to the maker.
+        vm.warp(exp);
         uint256 bal0 = usdg.balanceOf(maker);
+        uint256 strangerBal0 = usdg.balanceOf(stranger);
         vm.expectEmit(address(dc));
         emit Withdrawn(id, maker, BOND);
-        vm.prank(maker);
+        vm.prank(stranger);
         dc.withdraw(id);
         assertEq(usdg.balanceOf(maker), bal0 + BOND);
+        assertEq(usdg.balanceOf(stranger), strangerBal0, "the caller gets nothing");
         assertEq(dc.committed(maker), 0, "the unfilled remainder is released");
         assertEq(dc.totalBonds(), 0);
         assertEq(uint8(dc.certOf(id).status), uint8(IDepthCert.Status.CLOSED));
@@ -923,6 +989,79 @@ contract DepthCertTest is Test {
         vm.prank(maker);
         vm.expectRevert(abi.encodeWithSelector(DepthCert.NotLive.selector, 77));
         dc.withdraw(77);
+    }
+
+    /// Review PoC (issue 1): an expired, unwithdrawn cert used to stay in committed[maker], so a maker who
+    /// kept only enough USDG for their live bids looked dishonourable and all their live depth vanished
+    /// (CurbCredit's ltvFor 5220 -> 0 -> flagBreach). Expired certs now commit nothing.
+    function test_poc_expired_cert_does_not_poison_live_depth() public {
+        uint256 live = _post(maker, credit, 1e18, 50e6, 2 days, 5e6);
+        vm.prank(maker);
+        uint256 expired = dc.post(address(wrapper2), credit, 10e18, 50e6, t0 + 1 hours, 50e6);
+        assertEq(dc.committed(maker), 550e6);
+
+        vm.warp(t0 + 1 hours); // the wNVDAx-style cert expires; nobody withdraws it
+        assertEq(uint8(dc.certOf(expired).status), uint8(IDepthCert.Status.LIVE));
+        assertEq(dc.committed(maker), 50e6, "only the live cert is owed");
+
+        // The maker keeps just enough for the live bid.
+        uint256 bal = usdg.balanceOf(maker);
+        vm.prank(maker);
+        usdg.transfer(stranger, bal - 60e6);
+        assertTrue(dc.isHonourable(maker));
+        (uint256 s,, uint128 minPx,) = dc.honouredDepth(address(wrapper), credit, uint64(block.timestamp + 1 hours));
+        assertEq(s, 1e18, "live depth survives the expired cert");
+        assertEq(minPx, 50e6);
+
+        // Anyone may now clear the expired cert; the bond goes to the maker.
+        uint256 m0 = usdg.balanceOf(maker);
+        vm.prank(stranger);
+        dc.withdraw(expired);
+        assertEq(usdg.balanceOf(maker), m0 + 50e6);
+        assertEq(uint8(dc.certOf(expired).status), uint8(IDepthCert.Status.CLOSED));
+        assertEq(uint8(dc.certOf(live).status), uint8(IDepthCert.Status.LIVE));
+        assertEq(dc.committed(maker), 50e6);
+    }
+
+    /// Review PoC (issue 2): anyone could fill a wrapper's open book with 8 dust certs (~0.0008 USDG) and lock
+    /// it for 30 days. Open books are now uncapped and every cert carries at least 1 USDG of notional.
+    function test_poc_open_book_cannot_be_locked() public {
+        _fundMaker(stranger, 1_000e6);
+        vm.startPrank(stranger);
+        vm.expectRevert(DepthCert.BelowMinNotional.selector);
+        dc.post(address(wrapper), address(0), 1e18, 100, t0 + 30 days, 10); // the PoC's dust
+        for (uint256 i; i < 12; ++i) dc.post(address(wrapper), address(0), 1e18, 1e6, t0 + 30 days, 1e5);
+        vm.stopPrank();
+        assertEq(dc.bookOf(address(wrapper), address(0)).length, 12, "past MAX_LIVE_PER_BOOK");
+        uint256 id = _postDefault(); // the real maker still gets in
+        assertEq(dc.certOf(id).maker, maker);
+        // Books that name a beneficiary keep their cap (they are read on-chain).
+        for (uint256 i; i < 8; ++i) _post(maker, credit, 1e18, 50e6, 1 days, 5e6);
+        vm.prank(maker2);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BookFull.selector, address(wrapper), credit));
+        dc.post(address(wrapper), credit, 1e18, 50e6, t0 + 1 days, 5e6);
+    }
+
+    /// The per-maker cap that bounds `committed`: 16 takeable certs; retired ones are compacted away.
+    function test_maker_live_cert_cap() public {
+        assertEq(dc.MAX_LIVE_PER_MAKER(), 16);
+        uint256 first;
+        for (uint256 i; i < 16; ++i) {
+            uint256 id = _post(maker, address(0), 1e18, 50e6, uint64(1 hours + i * 1 hours), 5e6);
+            if (i == 0) first = id;
+        }
+        vm.prank(maker);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.TooManyLiveCerts.selector, maker));
+        dc.post(address(wrapper), address(0), 1e18, 50e6, t0 + 1 days, 5e6);
+        uint256 g = gasleft();
+        assertTrue(dc.isHonourable(maker));
+        assertLt(g - gasleft(), 200_000, "a full list stays cheap to check");
+
+        vm.warp(t0 + 1 hours); // `first` expires: its slot frees without a withdraw
+        _post(maker, address(0), 1e18, 50e6, 1 days, 5e6);
+        uint256[] memory mine = dc.certsOf(maker);
+        assertEq(mine.length, 16);
+        for (uint256 i; i < mine.length; ++i) assertTrue(mine[i] != first);
     }
 
     // --- honouredDepth / isHonourable -----------------------------------------------------------------
