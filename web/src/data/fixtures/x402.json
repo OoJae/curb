@@ -1,0 +1,63 @@
+{
+  "x402Version": 2,
+  "service": "Curb",
+  "description": "Closure data for tokenized equities on X Layer: when the issuer's primary market is shut, and how Curb's marks held up.",
+  "resources": [
+    "https://api.curb.markets/v1/closure-calendar",
+    "https://api.curb.markets/v1/accuracy-record",
+    "https://api.curb.markets/v1/discount-curve"
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/v1/closure-calendar",
+      "url": "https://api.curb.markets/v1/closure-calendar",
+      "summary": "When a tokenized equity's primary market is shut, and when it reopens",
+      "description": "Closure calendar for one tokenized equity on X Layer (default wTCENTx): every window in the next 1-14 days (default 7) in which the issuer's primary order cap is zero, and the instant it returns, computed from the issuer's published schedule and limits plus its observed cut to zero 5 minutes before each period ends. Includes the current period and cap, and the hashes of the exact issuer responses used.",
+      "query": "symbol (optional, default wTCENTx; see /v1/assets), horizonDays (1-14, default 7)",
+      "mimeType": "application/json",
+      "price": "$0.01",
+      "available": true,
+      "amount": "10000",
+      "asset": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+      "network": "eip155:196",
+      "payTo": "0x277cA91276A3801667B76C97Da3872Ccb6E96068",
+      "scheme": "exact",
+      "maxTimeoutSeconds": 300
+    },
+    {
+      "method": "GET",
+      "path": "/v1/accuracy-record",
+      "url": "https://api.curb.markets/v1/accuracy-record",
+      "summary": "Curb's graded record: every mark committed on chain before a reopen, and how Scorecard settled it",
+      "description": "Curb's accuracy record, read from the Scorecard contract on X Layer at one pinned block: the contract's own skill() tally across every asset (settled rows, and strict wins against the last print and against the closing VWAP; a tie is not a win), per-asset counts, ties and median errors, and the rows newest first, up to limit, each with its mark, both baselines, the reopen price the contract read from the pool, and the three errors in basis points.",
+      "query": "symbol (optional, e.g. wTCENTx; omit for every graded asset; see /v1/assets), limit (1-200, default 50)",
+      "mimeType": "application/json",
+      "price": "$0.05",
+      "available": true,
+      "amount": "50000",
+      "asset": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+      "network": "eip155:196",
+      "payTo": "0x277cA91276A3801667B76C97Da3872Ccb6E96068",
+      "scheme": "exact",
+      "maxTimeoutSeconds": 300
+    },
+    {
+      "method": "GET",
+      "path": "/v1/discount-curve",
+      "url": "https://api.curb.markets/v1/discount-curve",
+      "summary": "How far the reopen price lands from the pre-close price, by how long the primary market was shut",
+      "description": "Closure-discount observations for tokenized equities on X Layer, one per closure Curb marked on chain before the reopen and Scorecard then settled: how long the primary market was shut (from MarketClock's RegimeChanged into CLOSED to the scheduled reopen), the discount from the pre-close price (the 15-minute closing VWAP, or the last pool price when nothing traded in that window) to the reopen price, and the discount Curb's mark implied, in basis points. Grouped into five duration buckets with counts, and order statistics only once a bucket holds enough closures. No fitted curve: fit is always null.",
+      "query": "symbol (optional, e.g. wTCENTx; omit for every graded asset), minMinutes (30-10080, default 30; shorter closures are listed but left out of the buckets)",
+      "mimeType": "application/json",
+      "price": "$0.10",
+      "available": true,
+      "amount": "100000",
+      "asset": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+      "network": "eip155:196",
+      "payTo": "0x277cA91276A3801667B76C97Da3872Ccb6E96068",
+      "scheme": "exact",
+      "maxTimeoutSeconds": 300
+    }
+  ]
+}

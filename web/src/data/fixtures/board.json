@@ -1,0 +1,182 @@
+{
+  "rows": [
+    {
+      "symbol": "wTCENTx",
+      "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+      "mic": "XHKG",
+      "pool": "0xC89d8b547ceA7CdeAa7474E7a90B6baD01fE992f",
+      "hasPriceSource": true,
+      "regime": "CLOSED",
+      "attestedRegime": "CLOSED",
+      "cap": 0,
+      "glyph": "shut",
+      "stale": false,
+      "halted": false,
+      "blackout": false,
+      "multiplierNonce": 0,
+      "observedAtMs": 1790256611000,
+      "attestedAgoMin": 2,
+      "nextTransitionAtMs": 1790298000000,
+      "nextChange": {
+        "atMs": 1790299800000,
+        "kind": "reopen"
+      },
+      "closure": {
+        "startMs": 1790236500000,
+        "endMs": 1790299800000,
+        "durationS": 63300,
+        "kind": "overnight"
+      }
+    },
+    {
+      "symbol": "wSHEINx",
+      "wrapper": "0xff637d2d435D6745Df3faf61272B1216e7e8b727",
+      "mic": "XHKG",
+      "pool": null,
+      "hasPriceSource": false,
+      "regime": "CLOSED",
+      "attestedRegime": "CLOSED",
+      "cap": 0,
+      "glyph": "shut",
+      "stale": false,
+      "halted": false,
+      "blackout": false,
+      "multiplierNonce": 0,
+      "observedAtMs": 1790256611000,
+      "attestedAgoMin": 2,
+      "nextTransitionAtMs": 1790298000000,
+      "nextChange": {
+        "atMs": 1790299800000,
+        "kind": "reopen"
+      },
+      "closure": {
+        "startMs": 1790236500000,
+        "endMs": 1790299800000,
+        "durationS": 63300,
+        "kind": "overnight"
+      }
+    },
+    {
+      "symbol": "wXIAOx",
+      "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+      "mic": "XHKG",
+      "pool": "0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417",
+      "hasPriceSource": true,
+      "regime": "CLOSED",
+      "attestedRegime": "CLOSED",
+      "cap": 0,
+      "glyph": "shut",
+      "stale": false,
+      "halted": false,
+      "blackout": false,
+      "multiplierNonce": 0,
+      "observedAtMs": 1790256611000,
+      "attestedAgoMin": 2,
+      "nextTransitionAtMs": 1790298000000,
+      "nextChange": {
+        "atMs": 1790299800000,
+        "kind": "reopen"
+      },
+      "closure": {
+        "startMs": 1790236500000,
+        "endMs": 1790299800000,
+        "durationS": 63300,
+        "kind": "overnight"
+      }
+    },
+    {
+      "symbol": "wMEITx",
+      "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+      "mic": "XHKG",
+      "pool": "0x54E89e9acaFb073e7fd8471312E753A661b470C7",
+      "hasPriceSource": true,
+      "regime": "CLOSED",
+      "attestedRegime": "CLOSED",
+      "cap": 0,
+      "glyph": "shut",
+      "stale": false,
+      "halted": false,
+      "blackout": false,
+      "multiplierNonce": 0,
+      "observedAtMs": 1790256611000,
+      "attestedAgoMin": 2,
+      "nextTransitionAtMs": 1790298000000,
+      "nextChange": {
+        "atMs": 1790299800000,
+        "kind": "reopen"
+      },
+      "closure": {
+        "startMs": 1790236500000,
+        "endMs": 1790299800000,
+        "durationS": 63300,
+        "kind": "overnight"
+      }
+    },
+    {
+      "symbol": "wNVDAx",
+      "wrapper": "0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5",
+      "mic": "XNAS",
+      "pool": "0x2a2B11730C2b6d99a58034A869dd810D7300a7b2",
+      "hasPriceSource": true,
+      "regime": "MARKET",
+      "attestedRegime": "MARKET",
+      "cap": 1000000,
+      "glyph": "open",
+      "stale": false,
+      "halted": false,
+      "blackout": false,
+      "multiplierNonce": 5,
+      "observedAtMs": 1790256611000,
+      "attestedAgoMin": 2,
+      "nextTransitionAtMs": 1790280000000,
+      "nextChange": {
+        "atMs": 1790279700000,
+        "kind": "cut"
+      },
+      "closure": null
+    },
+    {
+      "symbol": "wAAPLx",
+      "wrapper": "0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f",
+      "mic": "XNAS",
+      "pool": "0xc44bd9c8589026D28D1632d7b86b2Efb6cDc8fd2",
+      "hasPriceSource": true,
+      "regime": "MARKET",
+      "attestedRegime": "MARKET",
+      "cap": 1000000,
+      "glyph": "open",
+      "stale": false,
+      "halted": false,
+      "blackout": false,
+      "multiplierNonce": 5,
+      "observedAtMs": 1790256611000,
+      "attestedAgoMin": 2,
+      "nextTransitionAtMs": 1790280000000,
+      "nextChange": {
+        "atMs": 1790279700000,
+        "kind": "cut"
+      },
+      "closure": null
+    }
+  ],
+  "registeredCount": 6,
+  "block": 71487722,
+  "blockTimeMs": 1790256758000,
+  "readAtMs": 1790256760972,
+  "latestRound": {
+    "txHash": "0x24880523c7248d8ffa76eff0f5785da39e9a39491b71c0ec4052a27e2f5daab0",
+    "block": 71487575,
+    "inputRoot": "0x142f81e2b5dd99d12c885f5ff6c7c87cf52c1df01eafb13a88a87c7ddfde5d4d",
+    "wrappers": [
+      "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+      "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+      "0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f",
+      "0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5",
+      "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+      "0xff637d2d435D6745Df3faf61272B1216e7e8b727"
+    ],
+    "bundleUrl": "https://attestor-a-production.up.railway.app/rounds/0x142f81e2b5dd99d12c885f5ff6c7c87cf52c1df01eafb13a88a87c7ddfde5d4d.json",
+    "oklinkTxUrl": "https://www.oklink.com/xlayer/tx/0x24880523c7248d8ffa76eff0f5785da39e9a39491b71c0ec4052a27e2f5daab0"
+  },
+  "source": "fixture"
+}
