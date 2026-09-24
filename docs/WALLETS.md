@@ -63,6 +63,17 @@ non-zero at 70,617,100. Its odd amount matches a bridge or swap payout, not a ty
 curb-desk's USDG and wTCENTx come only from the team's Agentic Wallet (below); every demo counterparty
 pair is team ↔ team.
 
+### Demo funding — 24 Sept 2026 (~$51, sent by the team from its OKX exchange account)
+
+| step | wallet | detail | tx |
+|---|---|---|---|
+| inbound | Agentic Wallet | 0.428 OKB withdrawn from the team's OKX exchange account | inbound native transfer |
+| swap | Agentic Wallet | 0.25 OKB → 29.832 USDG (OKX DEX aggregator) | `0xe7d469d4e23f3d7d13425fa0da222a9d63e16e348a5936880d09c903efccd777` |
+| swap | Agentic Wallet | 0.15 OKB → 0.31839 wTCENTx | `0xee7b3dbdf6c89eb50777d85ca498deaef1b763b4e3f1877364c34d88e456119d` |
+| swap | Agentic Wallet | 0.025 OKB → 0.01328 wNVDAx | `0xe31df80f59d3a37b7a5ae4722546951662dfcd7ce08976c70e5c67a6e9c74177` |
+| transfer | Agentic Wallet → curb-desk | 20 USDG | `0x1be006cc9b8abf71982c4c4836eed1c23f304932c2bd41c9cea2ac8b0fa0074c` |
+| transfer | Agentic Wallet → curb-desk | 0.1 wTCENTx | `0x7afc67e4b29ac129dd3dc1212c392d14852afe4c2d9d191f43e1e76e94d8eae6` |
+
 ## Admin transactions
 
 Every privileged call, signed by the deployer/admin from the team's Mac.
