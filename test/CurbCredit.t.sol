@@ -115,7 +115,8 @@ abstract contract CreditBase is Test {
 
         clock.set(address(wA), IMarketClock.Regime.MARKET, 20_000_000);
         clock.set(address(wB), IMarketClock.Regime.MARKET, 20_000_000);
-        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 2 days));
+        // 10 days: outlives the shut horizon (73 h + 30 min), so the depth counts open and shut.
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 10 days));
 
         usdg.mint(funder, 1_000_000e6);
         vm.startPrank(funder);
@@ -274,6 +275,7 @@ contract CurbCreditTest is CreditBase {
         assertEq(credit.CURE_OPEN_SECONDS(), 1800);
         assertEq(credit.MAX_TICK_GAP(), 600);
         assertEq(credit.MIN_CERT_LIFE(), 3600);
+        assertEq(credit.SHUT_CERT_LIFE(), 73 hours);
         assertEq(credit.reserve(), 100_000e6);
     }
 
@@ -389,6 +391,7 @@ contract CurbCreditTest is CreditBase {
         uint256 depth;
         uint128 minBid;
         uint64 life; // seconds from now until the book's soonest expiry
+        uint64 nextIn; // clock's published next transition, seconds from now (0 = none)
         uint256 totalColl;
         uint256 expected;
     }
@@ -396,28 +399,34 @@ contract CurbCreditTest is CreditBase {
     function _ltvCases() internal pure returns (LtvCase[] memory c) {
         IMarketClock.Regime MKT = IMarketClock.Regime.MARKET;
         IMarketClock.Regime SHUT = IMarketClock.Regime.CLOSED;
-        c = new LtvCase[](21);
-        c[0] = LtvCase("unknown clock -> 0", IMarketClock.Regime.UNKNOWN, 0, true, 50e18, 200e18, 45e6, 2 days, 100e18, 0);
-        c[1] = LtvCase("open, bid 90% of price -> open cap", MKT, 20_000_000, true, 50e18, 200e18, 45e6, 2 days, 100e18, 6000);
-        c[2] = LtvCase("closed -> shut cap", SHUT, 0, true, 50e18, 200e18, 45e6, 2 days, 100e18, 3000);
-        c[3] = LtvCase("overnight with capacity is open", IMarketClock.Regime.OVERNIGHT, 5_000_000, true, 50e18, 200e18, 45e6, 2 days, 100e18, 6000);
-        c[4] = LtvCase("MARKET with zero capacity is shut", MKT, 0, true, 50e18, 200e18, 45e6, 2 days, 100e18, 3000);
-        c[5] = LtvCase("no honoured depth -> 0", MKT, 20_000_000, true, 50e18, 0, 45e6, 2 days, 100e18, 0);
-        c[6] = LtvCase("price unreadable -> 0", MKT, 20_000_000, false, 50e18, 200e18, 45e6, 2 days, 100e18, 0);
-        c[7] = LtvCase("cert expiring in 59 min does not count", MKT, 20_000_000, true, 50e18, 200e18, 45e6, 59 minutes, 100e18, 0);
-        c[8] = LtvCase("cert expiring in exactly 1 h counts", MKT, 20_000_000, true, 50e18, 200e18, 45e6, 1 hours, 100e18, 6000);
-        c[9] = LtvCase("bid 40% of price, open", MKT, 20_000_000, true, 50e18, 200e18, 20e6, 2 days, 100e18, 4000);
-        c[10] = LtvCase("bid 40% of price, shut", SHUT, 0, true, 50e18, 200e18, 20e6, 2 days, 100e18, 3000);
-        c[11] = LtvCase("bid 20% of price, shut", SHUT, 0, true, 50e18, 200e18, 10e6, 2 days, 100e18, 2000);
-        c[12] = LtvCase("collateral 2x depth, open", MKT, 20_000_000, true, 50e18, 200e18, 45e6, 2 days, 400e18, 4500);
-        c[13] = LtvCase("collateral 2x depth, shut", SHUT, 0, true, 50e18, 200e18, 45e6, 2 days, 400e18, 3000);
-        c[14] = LtvCase("collateral 4x depth, shut", SHUT, 0, true, 50e18, 200e18, 45e6, 2 days, 800e18, 2250);
-        c[15] = LtvCase("no collateral: basis = depth", MKT, 20_000_000, true, 50e18, 200e18, 20e6, 2 days, 0, 4000);
-        c[16] = LtvCase("bid above price -> capped", MKT, 20_000_000, true, 50e18, 200e18, 60e6, 2 days, 100e18, 6000);
-        c[17] = LtvCase("demo: 0.028 cert vs 0.05 coll @55.78, open", MKT, 20_000_000, true, 55.78e18, 0.028e18, 52e6, 26 hours, 0.05e18, 5220);
-        c[18] = LtvCase("demo: 0.028 cert vs 0.05 coll @55.78, shut", SHUT, 0, true, 55.78e18, 0.028e18, 52e6, 26 hours, 0.05e18, 3000);
-        c[19] = LtvCase("collateral below depth: fully covered", MKT, 20_000_000, true, 50e18, 200e18, 25e6, 2 days, 10e18, 5000);
-        c[20] = LtvCase("dust depth vs large collateral", MKT, 20_000_000, true, 50e18, 1e15, 45e6, 2 days, 1_000e18, 0);
+        uint64 LONG = 10 days;
+        uint64 SHUT_H = 73 hours + 30 minutes; // SHUT_CERT_LIFE + CURE_OPEN_SECONDS
+        uint64 OPEN_H = 1 hours + 30 minutes; // MIN_CERT_LIFE + CURE_OPEN_SECONDS
+        c = new LtvCase[](24);
+        c[0] = LtvCase("unknown clock -> 0", IMarketClock.Regime.UNKNOWN, 0, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 0);
+        c[1] = LtvCase("open, bid 90% of price -> open cap", MKT, 20_000_000, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 6000);
+        c[2] = LtvCase("closed -> shut cap", SHUT, 0, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 3000);
+        c[3] = LtvCase("overnight with capacity is open", IMarketClock.Regime.OVERNIGHT, 5_000_000, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 6000);
+        c[4] = LtvCase("MARKET with zero capacity is shut", MKT, 0, true, 50e18, 200e18, 45e6, LONG, 0, 100e18, 3000);
+        c[5] = LtvCase("no honoured depth -> 0", MKT, 20_000_000, true, 50e18, 0, 45e6, LONG, 0, 100e18, 0);
+        c[6] = LtvCase("price unreadable -> 0", MKT, 20_000_000, false, 50e18, 200e18, 45e6, LONG, 0, 100e18, 0);
+        c[7] = LtvCase("open: cert 1 s short of 1 h + cure does not count", MKT, 20_000_000, true, 50e18, 200e18, 45e6, OPEN_H - 1, 0, 100e18, 0);
+        c[8] = LtvCase("open: cert living exactly 1 h + cure counts", MKT, 20_000_000, true, 50e18, 200e18, 45e6, OPEN_H, 0, 100e18, 6000);
+        c[9] = LtvCase("shut: cert 1 s short of 73 h + cure does not count", SHUT, 0, true, 50e18, 200e18, 45e6, SHUT_H - 1, 0, 100e18, 0);
+        c[10] = LtvCase("shut: cert living exactly 73 h + cure counts", SHUT, 0, true, 50e18, 200e18, 45e6, SHUT_H, 0, 100e18, 3000);
+        c[11] = LtvCase("shut: a 26 h cert (old demo) does not count", SHUT, 0, true, 50e18, 200e18, 45e6, 26 hours, 0, 100e18, 0);
+        c[12] = LtvCase("shut, holiday: reopen in 100 h, 80 h cert does not count", SHUT, 0, true, 50e18, 200e18, 45e6, 80 hours, 100 hours, 100e18, 0);
+        c[13] = LtvCase("shut, holiday: cert outliving reopen + 1 h + cure counts", SHUT, 0, true, 50e18, 200e18, 45e6, 101 hours + 30 minutes, 100 hours, 100e18, 3000);
+        c[14] = LtvCase("shut: a near transition never shortens 73 h", SHUT, 0, true, 50e18, 200e18, 45e6, SHUT_H - 1, 1 hours, 100e18, 0);
+        c[15] = LtvCase("bid 40% of price, open", MKT, 20_000_000, true, 50e18, 200e18, 20e6, LONG, 0, 100e18, 4000);
+        c[16] = LtvCase("bid 40% of price, shut", SHUT, 0, true, 50e18, 200e18, 20e6, LONG, 0, 100e18, 3000);
+        c[17] = LtvCase("bid 20% of price, shut", SHUT, 0, true, 50e18, 200e18, 10e6, LONG, 0, 100e18, 2000);
+        c[18] = LtvCase("collateral 4x depth: per-position ratio, not diluted", MKT, 20_000_000, true, 50e18, 200e18, 45e6, LONG, 0, 800e18, 6000);
+        c[19] = LtvCase("no collateral yet", MKT, 20_000_000, true, 50e18, 200e18, 20e6, LONG, 0, 0, 4000);
+        c[20] = LtvCase("bid above price -> capped", MKT, 20_000_000, true, 50e18, 200e18, 60e6, LONG, 0, 100e18, 6000);
+        c[21] = LtvCase("demo: 52 bid @55.78, open", MKT, 20_000_000, true, 55.78e18, 0.028e18, 52e6, LONG, 0, 0.05e18, 6000);
+        c[22] = LtvCase("demo: 52 bid @55.78, shut", SHUT, 0, true, 55.78e18, 0.028e18, 52e6, LONG, 0, 0.05e18, 3000);
+        c[23] = LtvCase("dust depth still prices the ratio (realisable bounds it)", MKT, 20_000_000, true, 50e18, 1e15, 45e6, LONG, 0, 1_000e18, 6000);
     }
 
     function test_ltvFor_table() public {
@@ -427,6 +436,7 @@ contract CurbCreditTest is CreditBase {
             uint256 snap = vm.snapshotState();
 
             clock.set(address(wA), k.regime, k.cap);
+            if (k.nextIn > 0) clock.setNextTransition(address(wA), uint64(block.timestamp) + k.nextIn);
             sc.setPrice(address(wA), k.price);
             sc.setRevert(address(wA), !k.priceOk);
             if (k.depth == 0) dc.clearDepth(address(wA), address(credit));
@@ -438,14 +448,51 @@ contract CurbCreditTest is CreditBase {
 
             uint256 ltv = credit.ltvFor(address(wA));
             assertEq(ltv, k.expected, k.name);
-
-            // Published invariant: ltvFor * value(totalColl) <= realisable * 1e4 (+ one USDG wei of rounding).
-            if (k.priceOk) {
-                uint256 lhs = ltv * _valueUsdg(credit.totalCollateral(address(wA)), k.price);
-                assertLe(lhs, credit.realisable(address(wA)) * 1e4 + 1e4, string.concat(k.name, ": realisable bound"));
+            assertLe(ltv, credit.isOpen(address(wA)) ? 6000 : 3000, string.concat(k.name, ": regime cap"));
+            // Per position: the limit is always payable by the honoured bid for that position's own collateral.
+            if (k.priceOk && k.totalColl > 0 && ltv > 0) {
+                assertLe(
+                    credit.limitOf(carol, address(wA)),
+                    MulDiv.mulDiv(k.totalColl, k.minBid, 1e18) + 1,
+                    string.concat(k.name, ": limit <= bid notional")
+                );
             }
             vm.revertToState(snap);
         }
+    }
+
+    function test_minCertExpiry_horizons() public {
+        uint256 t = block.timestamp;
+        assertEq(credit.minCertExpiry(address(wA)), t + 1 hours + 30 minutes, "open: 1 h + cure");
+        _shut(address(wA));
+        assertEq(credit.minCertExpiry(address(wA)), t + 73 hours + 30 minutes, "shut: 73 h + cure");
+        clock.setNextTransition(address(wA), uint64(t + 20 hours));
+        assertEq(credit.minCertExpiry(address(wA)), t + 73 hours + 30 minutes, "a nearer reopen never shortens it");
+        clock.setNextTransition(address(wA), uint64(t + 110 hours));
+        assertEq(credit.minCertExpiry(address(wA)), t + 111 hours + 30 minutes, "a holiday lengthens it");
+        _unknown(address(wA));
+        assertEq(credit.minCertExpiry(address(wA)), t + 111 hours + 30 minutes, "UNKNOWN is treated as shut");
+        vm.mockCallRevert(address(clock), abi.encodeWithSelector(IMarketClock.secondsToNextTransition.selector), "x");
+        _shut(address(wA));
+        assertEq(credit.minCertExpiry(address(wA)), t + 73 hours + 30 minutes, "a reverting clock falls back to 73 h");
+    }
+
+    /// While shut, only certs that outlive the next reopen plus a full cure count: a cert fine for open-market
+    /// lending stops supporting the loan the moment the market shuts.
+    function test_shut_requires_cert_outliving_reopen_plus_cure() public {
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 50 hours));
+        _deposit(alice, address(wA), 100e18);
+        assertEq(credit.ltvFor(address(wA)), 6000);
+        assertTrue(_borrow(alice, address(wA), 1000e6));
+        _shut(address(wA));
+        assertEq(credit.ltvFor(address(wA)), 0, "50 h cannot cover a weekend closure plus a cure");
+        (bool known, bool breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && breached);
+        // The same book, re-posted to outlive 73 h + 30 min, supports the loan while shut.
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 73 hours + 30 minutes));
+        assertEq(credit.ltvFor(address(wA)), 3000);
+        (known, breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && !breached);
     }
 
     function test_ltvFor_unsupported_asset_is_zero() public view {
@@ -460,28 +507,45 @@ contract CurbCreditTest is CreditBase {
         assertEq(credit.realisable(address(wA)), 4500e6); // 100 * 45
         _deposit(bob, address(wA), 300e18);
         assertEq(credit.realisable(address(wA)), 9000e6); // min(400, 200) * 45
-        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 59 minutes));
-        assertEq(credit.realisable(address(wA)), 0, "short-lived certs do not count");
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 89 minutes));
+        assertEq(credit.realisable(address(wA)), 0, "certs that cannot outlive a cure do not count");
     }
 
-    /// Fuzz the published bound and the regime caps across prices, bids, depths and collateral.
+    /// Finding 2 (pooled basis): idle collateral posted by someone else must never move a borrower's limit or
+    /// push them into breach.
+    function test_idle_collateral_cannot_push_another_borrower_into_breach() public {
+        _aliceAtLimit();
+        uint256 limit = credit.limitOf(alice, address(wA));
+        wA.mint(bob, 10_000e18);
+        _deposit(bob, address(wA), 10_000e18); // 100x alice's collateral, 50x the depth
+        assertEq(credit.ltvFor(address(wA)), 6000);
+        assertEq(credit.limitOf(alice, address(wA)), limit);
+        (bool known, bool breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && !breached);
+        vm.expectRevert(CurbCredit.NotBreached.selector);
+        credit.flagBreach(alice, address(wA));
+        _shut(address(wA)); // only the market can move her limit
+        (known, breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && breached);
+    }
+
+    /// Fuzz the regime caps and the per-position bound across prices, bids, depths and collateral.
     function testFuzz_ltv_bound(uint128 price, uint128 minBid, uint256 depth, uint256 coll, bool open) public {
         price = uint128(bound(price, 1e15, 1e24));
         minBid = uint128(bound(minBid, 1, 1e12));
         depth = bound(depth, 1, 1e27);
-        coll = bound(coll, 0, 1e27);
+        coll = bound(coll, 1, 1e27);
         if (open) _open(address(wA));
         else _shut(address(wA));
         sc.setPrice(address(wA), price);
-        dc.setDepth(address(wA), address(credit), depth, minBid, uint64(block.timestamp + 2 days));
-        if (coll > 0) {
-            wA.mint(carol, coll);
-            _deposit(carol, address(wA), coll);
-        }
+        dc.setDepth(address(wA), address(credit), depth, minBid, uint64(block.timestamp + 10 days));
+        wA.mint(carol, coll);
+        _deposit(carol, address(wA), coll);
         uint256 ltv = credit.ltvFor(address(wA));
         assertLe(ltv, open ? 6000 : 3000);
-        assertLe(ltv * _valueUsdg(coll, price), credit.realisable(address(wA)) * 1e4 + 1e4);
-        // Monotone in the regime: shutting never raises it.
+        assertLe(credit.limitOf(carol, address(wA)), MulDiv.mulDiv(coll, minBid, 1e18) + 1, "limit <= bid notional");
+        assertEq(credit.realisable(address(wA)), MulDiv.mulDiv(coll < depth ? coll : depth, minBid, 1e18));
+        // Shutting never raises it.
         _shut(address(wA));
         assertLe(credit.ltvFor(address(wA)), ltv, "shutting never raises ltv");
         assertLe(credit.ltvFor(address(wA)), 3000);
@@ -646,15 +710,15 @@ contract CurbCreditTest is CreditBase {
     }
 
     function test_refusal_ExceedsDepth() public {
-        _aliceAtLimit(); // 3000 against 100 shares, realisable 4500
-        _deposit(bob, address(wA), 100e18); // totalColl 200 = depth
-        // Bids fall to 40% of price: ltv 4000, realisable 200 * 20 = 4000, but 3000 is already lent.
-        dc.setDepth(address(wA), address(credit), DEPTH, 20e6, uint64(block.timestamp + 2 days));
-        assertEq(credit.ltvFor(address(wA)), 4000);
-        assertEq(credit.realisable(address(wA)), 4000e6);
-        assertEq(credit.limitOf(bob, address(wA)), 2000e6);
-        _refuseBorrow(bob, address(wA), 1500e6, CurbCredit.ExceedsDepth.selector, 1000e6);
-        assertTrue(_borrow(bob, address(wA), 1000e6), "up to realisable is fine");
+        // One 100-share book at 45: each 100-share position may borrow 3000 (60% of $5000), but the bids would
+        // pay only 4500 for everything lent against wA.
+        dc.setDepth(address(wA), address(credit), 100e18, BID, uint64(block.timestamp + 10 days));
+        _aliceAtLimit(); // 3000
+        _deposit(bob, address(wA), 100e18);
+        assertEq(credit.realisable(address(wA)), 4500e6); // min(200, 100) * 45
+        assertEq(credit.limitOf(bob, address(wA)), 3000e6);
+        _refuseBorrow(bob, address(wA), 1600e6, CurbCredit.ExceedsDepth.selector, 1500e6);
+        assertTrue(_borrow(bob, address(wA), 1500e6), "up to realisable is fine");
         assertEq(credit.totalPrincipal(address(wA)), credit.realisable(address(wA)));
     }
 
@@ -862,10 +926,10 @@ contract CurbCreditTest is CreditBase {
 
     function test_depth_expiry_breaches() public {
         _aliceAtLimit();
-        // The only cert is about to expire: inside MIN_CERT_LIFE it stops counting, ltv -> 0, limit -> 0.
+        // The only cert is about to expire: once it cannot outlive 1 h + a cure it stops counting, ltv -> 0.
         dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 2 hours));
         assertEq(credit.ltvFor(address(wA)), 6000);
-        vm.warp(block.timestamp + 1 hours + 1);
+        vm.warp(block.timestamp + 30 minutes + 1);
         assertEq(credit.ltvFor(address(wA)), 0);
         credit.flagBreach(alice, address(wA));
         assertTrue(credit.cureOf(alice, address(wA)).active);
@@ -1099,24 +1163,30 @@ contract CurbCreditTest is CreditBase {
         uint256 seize;
         uint256 cleared;
         uint256 bad;
+        uint256 debtAfter;
         uint256 tc;
         uint256 tp;
-        uint256 principal;
+        uint256 principalOff;
     }
 
     function _expected(uint256 pFresh, uint256 pBreach) internal view returns (Expect memory e) {
         e.debt = credit.debtOf(alice, address(wA));
-        e.coll = credit.positionOf(alice, address(wA)).collateral;
-        uint256 fresh = _sharesFor(e.debt, pFresh);
+        CurbCredit.Position memory p = credit.positionOf(alice, address(wA));
+        e.coll = p.collateral;
+        uint256 fresh = MulDiv.mulDiv(e.debt, 1e30, pFresh);
+        if (mulmod(e.debt, 1e30, pFresh) != 0) ++fresh; // rounds up
         e.stale = _sharesFor(MulDiv.mulDiv(e.debt, 10500, 1e4), pBreach);
         e.seize = e.coll < fresh ? e.coll : fresh;
         e.seize = e.seize < e.stale ? e.seize : e.stale;
         e.cleared = _valueUsdg(e.seize, pFresh);
         if (e.cleared > e.debt) e.cleared = e.debt;
-        e.bad = e.debt - e.cleared;
+        // Bad debt only when every share is gone; otherwise the remainder stays owed.
+        e.bad = e.seize == e.coll ? e.debt - e.cleared : 0;
+        e.debtAfter = e.seize == e.coll ? 0 : e.debt - e.cleared;
         e.tc = credit.totalCollateral(address(wA));
         e.tp = credit.totalPrincipal(address(wA));
-        e.principal = credit.positionOf(alice, address(wA)).principal;
+        uint256 accrued = e.debt - p.principal; // pending interest is accrued at liquidation
+        e.principalOff = e.seize == e.coll ? p.principal : e.cleared - (e.cleared < accrued ? e.cleared : accrued);
     }
 
     function _liquidateAndCheck(uint256 pFresh, uint256 pBreach)
@@ -1129,16 +1199,14 @@ contract CurbCreditTest is CreditBase {
         vm.prank(carol); // permissionless
         credit.liquidate(alice, address(wA));
 
-        CurbCredit.Position memory p = credit.positionOf(alice, address(wA));
-        assertEq(p.collateral, e.coll - e.seize, "borrower keeps the rest");
-        assertEq(p.principal, 0);
-        assertEq(p.accrued, 0);
-        assertEq(credit.debtOf(alice, address(wA)), 0);
+        assertEq(credit.positionOf(alice, address(wA)).collateral, e.coll - e.seize, "borrower keeps the rest");
+        assertEq(credit.debtOf(alice, address(wA)), e.debtAfter, "only a full seizure closes the debt");
         assertEq(credit.totalCollateral(address(wA)), e.tc - e.seize);
-        assertEq(credit.totalPrincipal(address(wA)), e.tp - e.principal);
+        assertEq(credit.totalPrincipal(address(wA)), e.tp - e.principalOff);
         assertEq(credit.seized(address(wA)), e.seize);
         assertEq(credit.badDebt(address(wA)), e.bad);
-        assertFalse(credit.cureOf(alice, address(wA)).active);
+        if (e.bad > 0) assertEq(credit.positionOf(alice, address(wA)).collateral, 0, "bad debt only with nothing left");
+        assertFalse(credit.cureOf(alice, address(wA)).active, "the cure ends either way");
         assertEq(wA.balanceOf(address(credit)), credit.totalCollateral(address(wA)) + credit.seized(address(wA)));
         assertLe(e.seize, e.stale, "never more than a 5%-bonus liquidation at the breach price");
         return (e.seize, e.cleared, e.bad);
@@ -1148,24 +1216,67 @@ contract CurbCreditTest is CreditBase {
         _aliceBreachedOpen(40e18);
         _runCureOpen(alice, address(wA));
         uint256 debt = credit.debtOf(alice, address(wA));
-        (uint256 seize,, uint256 bad) = _liquidateAndCheck(40e18, 40e18);
+        (uint256 seize, uint256 cleared, uint256 bad) = _liquidateAndCheck(40e18, 40e18);
         assertEq(seize, _sharesFor(debt, 40e18), "fresh leg binds");
-        assertLe(bad, 1, "rounding dust only");
+        assertEq(cleared, debt, "cleared exactly");
+        assertEq(bad, 0);
+        assertEq(credit.debtOf(alice, address(wA)), 0);
         // She walks away with her 25 shares.
         vm.prank(alice);
         assertTrue(credit.withdraw(address(wA), 100e18 - seize));
     }
 
-    function test_seize_stale_cap_binds() public {
+    /// Finding 1: when the breach-price cap binds with collateral left over, nothing is written off; the rest of
+    /// the debt stays owed against the shares she keeps, and she cannot walk away with them.
+    function test_seize_stale_cap_binds_keeps_remainder_owed() public {
         _aliceBreachedOpen(40e18);
         _runCureOpen(alice, address(wA));
         sc.setPrice(address(wA), 35e18); // fell another 12.5% after the breach
         uint256 debt = credit.debtOf(alice, address(wA));
         (uint256 seize, uint256 cleared, uint256 bad) = _liquidateAndCheck(35e18, 40e18);
         assertEq(seize, _sharesFor(MulDiv.mulDiv(debt, 10500, 1e4), 40e18), "stale cap binds");
-        assertLt(seize, _sharesFor(debt, 35e18));
+        assertLt(seize, 100e18);
         assertEq(cleared, _valueUsdg(seize, 35e18));
-        assertGt(bad, 240e6, "the lender, not the borrower, eats the post-breach fall");
+        assertEq(bad, 0, "no write-off while collateral remains");
+        uint256 owed = credit.debtOf(alice, address(wA));
+        assertEq(owed, debt - cleared);
+        assertGt(owed, 240e6);
+        // No free put: the remaining shares stay locked behind the remaining debt.
+        uint256 left = credit.positionOf(alice, address(wA)).collateral;
+        vm.prank(alice);
+        assertFalse(credit.withdraw(address(wA), left), "cannot walk away with the rest");
+        vm.prank(alice);
+        credit.repay(alice, address(wA), owed);
+        vm.prank(alice);
+        assertTrue(credit.withdraw(address(wA), left), "repaid in full, then free");
+    }
+
+    /// A partial liquidation that leaves the position still over its limit is re-flagged at the current price,
+    /// runs a fresh cure, and is liquidated again -- only the final, full seizure books bad debt.
+    function test_partial_liquidation_then_reflag_at_current_price() public {
+        _aliceBreachedOpen(40e18);
+        _runCureOpen(alice, address(wA));
+        sc.setPrice(address(wA), 30e18);
+        (uint256 seize1,,) = _liquidateAndCheck(30e18, 40e18);
+        assertLt(seize1, 100e18);
+        assertEq(credit.badDebt(address(wA)), 0);
+        (bool known, bool breached) = credit.isBreached(alice, address(wA));
+        assertTrue(known && breached, "21.25 shares at $30 cannot carry the remaining ~637");
+
+        vm.expectRevert(CurbCredit.NoCure.selector);
+        credit.liquidate(alice, address(wA)); // the old cure is gone
+        credit.flagBreach(alice, address(wA));
+        assertEq(credit.cureOf(alice, address(wA)).priceAtBreach, 30e18, "re-flagged at the current price");
+        assertEq(credit.cureOf(alice, address(wA)).openSecondsUsed, 0, "a full new cure");
+        _runCureOpen(alice, address(wA));
+        uint256 seizedBefore = credit.seized(address(wA));
+        uint256 debt = credit.debtOf(alice, address(wA));
+        credit.liquidate(alice, address(wA));
+        assertEq(credit.positionOf(alice, address(wA)).collateral, 0, "second round takes the rest");
+        uint256 seize2 = credit.seized(address(wA)) - seizedBefore;
+        assertEq(credit.badDebt(address(wA)), debt - _valueUsdg(seize2, 30e18), "only now is the shortfall written off");
+        assertEq(credit.debtOf(alice, address(wA)), 0);
+        assertEq(credit.totalPrincipal(address(wA)), 0);
     }
 
     function test_seize_collateral_binds_and_bad_debt() public {
@@ -1178,6 +1289,7 @@ contract CurbCreditTest is CreditBase {
         assertEq(cleared, 2500e6);
         assertEq(bad, debt - 2500e6);
         assertEq(credit.positionOf(alice, address(wA)).collateral, 0);
+        assertEq(credit.debtOf(alice, address(wA)), 0);
     }
 
     function test_liquidation_does_not_touch_reserve() public {
@@ -1486,10 +1598,14 @@ contract CurbCreditRealDepthTest is Test {
         assertEq(logs[0].topics[3], bytes32(CurbCredit.NoDepth.selector));
 
         _post(desk, address(credit), 50e18, 40e6, 2 days);
-        // covered 50 of basis 100, bid 80% of price: 0.5 * 8000 = 4000 bps
-        assertEq(credit.ltvFor(address(wA)), 4000);
+        // bid 80% of price: the per-position ratio is capped at 60%; the 50-share book pays 2000 in all.
+        assertEq(credit.ltvFor(address(wA)), 6000);
+        assertEq(credit.limitOf(alice, address(wA)), 3000e6);
         assertEq(credit.realisable(address(wA)), 2000e6);
-        assertEq(credit.limitOf(alice, address(wA)), 2000e6);
+        vm.recordLogs();
+        assertFalse(_borrow(2500e6));
+        logs = vm.getRecordedLogs();
+        assertEq(logs[0].topics[3], bytes32(CurbCredit.ExceedsDepth.selector), "the book, not the ratio, binds");
         assertTrue(_borrow(2000e6));
         assertEq(credit.totalPrincipal(address(wA)), credit.realisable(address(wA)));
     }
@@ -1503,25 +1619,37 @@ contract CurbCreditRealDepthTest is Test {
             depth.honouredDepth(address(wA), address(credit), uint64(block.timestamp + 1 hours));
         assertEq(s, 120e18);
         assertEq(minBid, 25e6);
-        assertEq(credit.ltvFor(address(wA)), 5000); // covered 100/100 at 25/50
+        assertEq(credit.ltvFor(address(wA)), 5000); // lowest counted bid 25 / price 50
         assertEq(credit.realisable(address(wA)), 2500e6);
     }
 
     function test_real_ineligible_maker_cannot_seed_the_book() public {
         vm.expectRevert(DepthCert.IneligibleMaker.selector);
-        _post(eve, address(credit), 1e18, 1e6, 2 days);
+        _post(eve, address(credit), 10e18, 1e6, 2 days);
         assertEq(credit.ltvFor(address(wA)), 0);
     }
 
-    function test_real_short_cert_drops_out_inside_an_hour() public {
+    function test_real_short_cert_drops_out_once_it_cannot_outlive_a_cure() public {
         _deposit(100e18);
-        _post(desk, address(credit), 200e18, 45e6, 90 minutes);
+        _post(desk, address(credit), 200e18, 45e6, 2 hours);
         assertEq(credit.ltvFor(address(wA)), 6000);
         assertTrue(_borrow(1000e6));
-        vm.warp(block.timestamp + 31 minutes); // 59 min of life left: below MIN_CERT_LIFE
+        vm.warp(block.timestamp + 31 minutes); // 89 min of life left: below 1 h + a 30 min cure
         assertEq(credit.ltvFor(address(wA)), 0);
         credit.flagBreach(alice, address(wA));
         assertTrue(credit.cureOf(alice, address(wA)).active);
+    }
+
+    function test_real_shut_counts_only_certs_outliving_reopen_plus_cure() public {
+        _deposit(100e18);
+        _post(desk, address(credit), 200e18, 45e6, 2 days);
+        assertTrue(_borrow(1000e6));
+        clock.set(address(wA), IMarketClock.Regime.CLOSED, 0);
+        assertEq(credit.ltvFor(address(wA)), 0, "a 2-day cert cannot cover a weekend and a cure");
+        _post(desk, address(credit), 200e18, 45e6, 4 days);
+        assertEq(credit.ltvFor(address(wA)), 3000);
+        (uint256 s,,,) = depth.honouredDepth(address(wA), address(credit), credit.minCertExpiry(address(wA)));
+        assertEq(s, 200e18, "only the 4-day cert counts");
     }
 
     function test_real_revoked_allowance_removes_depth_then_restoring_cures() public {

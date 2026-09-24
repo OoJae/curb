@@ -19,13 +19,28 @@ import {MulDiv} from "./lib/MulDiv.sol";
 ///      someone has committed, with money at risk, to pay for the shares. So the LTV is:
 ///
 ///          regimeCap = UNKNOWN -> 0 ; primaryCapNow > 0 -> 6000 ; shut (cap 0) -> 3000
-///          (dS,,minBid,) = depthCert.honouredDepth(a, this, now + 1h)
-///          basis   = totalCollateral[a] > 0 ? totalCollateral[a] : dS ;   covered = min(basis, dS)
+///          (dS,,minBid,) = depthCert.honouredDepth(a, this, minCertExpiry(a))
 ///          ltvFor  = 0 if UNKNOWN or dS == 0 or priceNow unreadable
-///                  = min(regimeCap, covered * 1e4 * minBid * 1e12 / (basis * P))
+///                  = min(regimeCap, minBid * 1e12 * 1e4 / P)
 ///
-///      which guarantees `ltvFor * valueUsdg(totalCollateral, P) <= realisable * 1e4` (up to rounding): the
-///      reserve never lends more against an asset than the honoured bids would pay for all of it.
+///      ltvFor is a PER-POSITION ratio: each position's limit is valueUsdg(its collateral, P) * ltvFor / 1e4 and
+///      depends on nothing any other depositor does, so idle collateral posted by someone else can never push a
+///      borrower into breach. Depth coverage is enforced in aggregate, at borrow time only:
+///
+///          realisable(a) = notional(min(totalCollateral[a], dS), minBid)
+///          borrow(x) requires totalPrincipal[a] + x <= realisable(a)       (else Refusal ExceedsDepth)
+///
+///      WHICH CERTS COUNT. A cert only supports lending if the lender could still hit it after the slowest
+///      possible liquidation: the next reopen, then a full cure. So honoured depth counts only certs with
+///
+///          expiry >= minCertExpiry(a) = now + (open ? MIN_CERT_LIFE : shutLife) + CURE_OPEN_SECONDS
+///          shutLife = max(SHUT_CERT_LIFE, clock.secondsToNextTransition(a) + MIN_CERT_LIFE)
+///
+///      While shut, only certs that outlive the next reopen plus a full cure count. SHUT_CERT_LIFE (73 h) covers a
+///      weekend plus margin without trusting any calendar; a longer closure (a holiday the attestor's published
+///      next transition says is further away) only ever LENGTHENS the requirement. The horizon is measured from
+///      now, so during a long closure a cert must keep outliving it: a maker covering a weekend posts with
+///      expiry >= (last moment it must count) + 73 h + 30 min.
 ///
 ///      Refusals are first-class. `borrow` and `withdraw` never revert on a policy refusal: they emit
 ///      `Refusal(who, asset, reason, requested, allowed)` with `reason` = the matching error selector, return
@@ -83,7 +98,12 @@ contract CurbCredit {
     uint256 public constant STALE_BONUS_BPS = 500;
     uint256 public constant CURE_OPEN_SECONDS = 30 minutes;
     uint256 public constant MAX_TICK_GAP = 10 minutes;
+    /// @notice While open: a cert must outlive now + MIN_CERT_LIFE + CURE_OPEN_SECONDS to count.
     uint256 public constant MIN_CERT_LIFE = 1 hours;
+    /// @notice While shut (or UNKNOWN): at least now + SHUT_CERT_LIFE + CURE_OPEN_SECONDS (a weekend plus margin).
+    uint256 public constant SHUT_CERT_LIFE = 73 hours;
+    /// @dev A published next transition further out than this is treated as this (ltvFor is 0 long before).
+    uint256 internal constant MAX_TRANSITION_HORIZON = 365 days;
     uint256 internal constant BPS = 1e4;
     uint256 internal constant YEAR = 365 days;
 
@@ -300,10 +320,9 @@ contract CurbCredit {
             Market memory m = _market(asset);
             if (!m.known) return _refuse(b, asset, MarketUnknown.selector, shares, 0);
             if (!m.priced) return _refuse(b, asset, PriceUnavailable.selector, shares, 0);
-            uint256 total = totalCollateral[asset];
-            uint256 limitAfter = _limit(coll - shares, m, _ltv(m, total - shares));
-            if (debt > limitAfter) {
-                return _refuse(b, asset, WouldBreach.selector, shares, _maxWithdraw(coll, debt, m, _ltv(m, total)));
+            uint256 ltv = _ltv(m);
+            if (debt > _limit(coll - shares, m, ltv)) {
+                return _refuse(b, asset, WouldBreach.selector, shares, _maxWithdraw(coll, debt, m, ltv));
             }
         }
 
@@ -330,8 +349,7 @@ contract CurbCredit {
 
         Position storage p = _positions[b][asset];
         uint256 debt = _debt(p);
-        uint256 total = totalCollateral[asset];
-        uint256 ltv = _ltv(m, total);
+        uint256 ltv = _ltv(m);
         {
             uint256 limit = _limit(p.collateral, m, ltv);
             if (debt + amount > limit) {
@@ -339,7 +357,8 @@ contract CurbCredit {
             }
         }
         {
-            uint256 real = MulDiv.mulDiv(_min(total, m.depthShares), m.minBid, 1e18);
+            // Aggregate depth coverage: everything lent against this asset must be payable by the honoured bids.
+            uint256 real = _realisable(asset, m);
             uint256 tp = totalPrincipal[asset];
             if (tp + amount > real) {
                 return _refuse(b, asset, ExceedsDepth.selector, amount, real > tp ? real - tp : 0);
@@ -395,7 +414,7 @@ contract CurbCredit {
         Market memory m = _market(asset);
         if (!m.known) revert MarketUnknown();
         if (!m.priced) revert PriceUnavailable();
-        uint256 ltv = _ltv(m, totalCollateral[asset]);
+        uint256 ltv = _ltv(m);
         uint256 limit = _limit(p.collateral, m, ltv);
         if (debt <= limit) revert NotBreached();
 
@@ -425,9 +444,17 @@ contract CurbCredit {
     }
 
     /// @notice Seize collateral from a position whose cure has run out of witnessed open-market time.
-    /// @dev seize = min(coll, sharesFor(debt, P_fresh), sharesFor(debt * 1.05, P_breach)); the debt is closed in
-    ///      full, anything the seized shares do not cover at P_fresh is written off as bad debt, and the borrower
-    ///      keeps the rest of the collateral.
+    /// @dev seize   = min(coll, sharesForUp(debt, P_fresh), sharesFor(debt * 1.05, P_breach))
+    ///      cleared = min(debt, valueUsdg(seize, P_fresh))
+    ///      - seize == coll: every share is gone, so whatever `cleared` does not cover is written off as bad debt
+    ///        and the debt closes.
+    ///      - seize <  coll: NOTHING is written off. The debt falls by `cleared` (accrued interest first) and the
+    ///        remainder stays owed against the collateral the borrower keeps; the cure ends, so a position still
+    ///        over its limit can be re-flagged at the current price. (A write-off here would hand the borrower a
+    ///        free put through every close-to-open gap: the breach-price cap binds, the lender eats the
+    ///        difference, and the borrower withdraws the rest.)
+    ///      The fresh leg rounds up (by at most one share-wei) so that when it binds the debt clears exactly.
+    ///      Never more than a 5%-bonus liquidation at the breach-time price, and never while shut.
     function liquidate(address borrower, address asset) external nonReentrant {
         Cure memory c = _cures[borrower][asset];
         if (!c.active) revert NoCure();
@@ -441,22 +468,14 @@ contract CurbCredit {
         Position storage p = _positions[borrower][asset];
         _accrue(p);
         uint256 debt = p.principal + p.accrued;
-        if (debt <= _limit(p.collateral, m, _ltv(m, totalCollateral[asset]))) revert NotBreached();
+        uint256 coll = p.collateral;
+        if (debt <= _limit(coll, m, _ltv(m))) revert NotBreached();
 
-        uint256 seize = _min(
-            p.collateral,
-            _min(
-                MulDiv.mulDiv(debt, 1e30, m.price),
-                MulDiv.mulDiv(MulDiv.mulDiv(debt, BPS + STALE_BONUS_BPS, BPS), 1e30, c.priceAtBreach)
-            )
-        );
+        uint256 seize = _seizeFor(coll, debt, m.price, c.priceAtBreach);
         uint256 cleared = _min(debt, MulDiv.mulDiv(seize, m.price, 1e30));
-        uint256 bad = debt - cleared;
+        uint256 bad = _writeDown(p, asset, cleared, seize == coll);
 
-        totalPrincipal[asset] -= p.principal;
-        p.principal = 0;
-        p.accrued = 0;
-        p.collateral -= seize;
+        p.collateral = coll - seize;
         totalCollateral[asset] -= seize;
         seized[asset] += seize;
         badDebt[asset] += bad;
@@ -515,18 +534,24 @@ contract CurbCredit {
     // views
     // =========================================================================================================
 
-    /// @notice The published loan-to-value for `asset`, in bps. 0 when the clock is UNKNOWN, there is no honoured
-    ///         depth (certs expiring within MIN_CERT_LIFE do not count), or the price is unreadable.
+    /// @notice The published per-position loan-to-value for `asset`, in bps: min(regimeCap, minBid / P). 0 when
+    ///         the clock is UNKNOWN, there is no honoured depth (see `minCertExpiry`), or the price is unreadable.
     function ltvFor(address asset) external view returns (uint256) {
         if (!isAsset[asset]) return 0;
-        return _ltv(_market(asset), totalCollateral[asset]);
+        return _ltv(_market(asset));
     }
 
     /// @notice USDG the honoured bids would pay for the pool's collateral: notional(min(totalCollateral, dS), minBid).
+    ///         Every successful borrow leaves totalPrincipal <= realisable.
     function realisable(address asset) external view returns (uint256) {
         if (!isAsset[asset]) return 0;
-        (uint256 dS, uint256 minBid) = _depth(asset);
-        return MulDiv.mulDiv(_min(totalCollateral[asset], dS), minBid, 1e18);
+        return _realisable(asset, _market(asset));
+    }
+
+    /// @notice The earliest cert expiry that counts as honoured depth right now: now + (open ? 1 h : shutLife)
+    ///         + 30 min, shutLife = max(73 h, time to the clock's next published transition + 1 h).
+    function minCertExpiry(address asset) external view returns (uint64) {
+        return _minExpiry(asset, _isOpen(asset));
     }
 
     function debtOf(address borrower, address asset) external view returns (uint256) {
@@ -538,7 +563,7 @@ contract CurbCredit {
         if (!isAsset[asset]) return 0;
         Market memory m = _market(asset);
         if (!m.priced) return 0;
-        return _limit(_positions[borrower][asset].collateral, m, _ltv(m, totalCollateral[asset]));
+        return _limit(_positions[borrower][asset].collateral, m, _ltv(m));
     }
 
     /// @notice (known, breached). Debt-free is always (true, false); otherwise unknown while the clock is
@@ -550,7 +575,7 @@ contract CurbCredit {
         if (!isAsset[asset]) return (false, false);
         Market memory m = _market(asset);
         if (!m.known || !m.priced) return (false, false);
-        return (true, debt > _limit(p.collateral, m, _ltv(m, totalCollateral[asset])));
+        return (true, debt > _limit(p.collateral, m, _ltv(m)));
     }
 
     function cureOf(address borrower, address asset) external view returns (Cure memory) {
@@ -623,7 +648,23 @@ contract CurbCredit {
                 m.price = px;
             }
         } catch {}
-        (m.depthShares, m.minBid) = _depth(asset);
+        (m.depthShares, m.minBid) = _depth(asset, _minExpiry(asset, m.open));
+    }
+
+    /// @dev now + (open ? MIN_CERT_LIFE : max(SHUT_CERT_LIFE, secondsToNextTransition + MIN_CERT_LIFE))
+    ///      + CURE_OPEN_SECONDS. The published transition can only lengthen the shut horizon; a clock that
+    ///      reverts or publishes nothing leaves it at SHUT_CERT_LIFE.
+    function _minExpiry(address asset, bool open) internal view returns (uint64) {
+        uint256 life = MIN_CERT_LIFE;
+        if (!open) {
+            life = SHUT_CERT_LIFE;
+            uint256 toNext;
+            try clock.secondsToNextTransition(asset) returns (uint256 s) {
+                toNext = s < MAX_TRANSITION_HORIZON ? s : MAX_TRANSITION_HORIZON;
+            } catch {}
+            if (toNext + MIN_CERT_LIFE > life) life = toNext + MIN_CERT_LIFE;
+        }
+        return uint64(block.timestamp + life + CURE_OPEN_SECONDS);
     }
 
     function _isOpen(address asset) internal view returns (bool) {
@@ -643,23 +684,51 @@ contract CurbCredit {
         }
     }
 
-    /// @dev Honoured depth naming this contract, counting only certs that live at least MIN_CERT_LIFE more.
+    /// @dev Honoured depth naming this contract, counting only certs with expiry >= `minExpiry`.
     ///      A reverting DepthCert reads as no depth.
-    function _depth(address asset) internal view returns (uint256 shares, uint256 minBid) {
-        try depthCert.honouredDepth(asset, address(this), uint64(block.timestamp + MIN_CERT_LIFE)) returns (
-            uint256 s, uint256, uint128 px, uint64
-        ) {
+    function _depth(address asset, uint64 minExpiry) internal view returns (uint256 shares, uint256 minBid) {
+        try depthCert.honouredDepth(asset, address(this), minExpiry) returns (uint256 s, uint256, uint128 px, uint64) {
             if (s > 0 && px > 0) return (s, px);
         } catch {}
         return (0, 0);
     }
 
-    function _ltv(Market memory m, uint256 total) internal pure returns (uint256) {
+    /// @dev Per-position ratio: min(regimeCap, minBid * 1e12 * 1e4 / P). Independent of every position.
+    function _ltv(Market memory m) internal pure returns (uint256) {
         if (!m.known || !m.priced || m.depthShares == 0 || m.minBid == 0) return 0;
         uint256 cap = m.open ? LTV_OPEN_BPS : LTV_SHUT_BPS;
-        uint256 basis = total > 0 ? total : m.depthShares;
-        uint256 covered = _min(basis, m.depthShares);
-        return _min(cap, MulDiv.mulDiv(covered * BPS, m.minBid * 1e12, basis * m.price));
+        return _min(cap, MulDiv.mulDiv(m.minBid * 1e12, BPS, m.price));
+    }
+
+    function _realisable(address asset, Market memory m) internal view returns (uint256) {
+        return MulDiv.mulDiv(_min(totalCollateral[asset], m.depthShares), m.minBid, 1e18);
+    }
+
+    /// @dev min(coll, sharesForUp(debt, pFresh), sharesFor(debt * 1.05, pBreach)).
+    function _seizeFor(uint256 coll, uint256 debt, uint256 pFresh, uint256 pBreach) internal pure returns (uint256) {
+        uint256 fresh = MulDiv.mulDiv(debt, 1e30, pFresh);
+        if (mulmod(debt, 1e30, pFresh) != 0) ++fresh;
+        uint256 stale = MulDiv.mulDiv(MulDiv.mulDiv(debt, BPS + STALE_BONUS_BPS, BPS), 1e30, pBreach);
+        return _min(coll, _min(fresh, stale));
+    }
+
+    /// @dev Takes `cleared` off the debt (accrued first). If `all` collateral went, the rest is written off and
+    ///      returned as bad debt; otherwise the rest stays owed and nothing is written off.
+    function _writeDown(Position storage p, address asset, uint256 cleared, bool all) internal returns (uint256 bad) {
+        uint256 principal = p.principal;
+        uint256 accrued = p.accrued;
+        if (all) {
+            bad = principal + accrued - cleared;
+            totalPrincipal[asset] -= principal;
+            p.principal = 0;
+            p.accrued = 0;
+        } else {
+            uint256 fromAccrued = _min(cleared, accrued);
+            uint256 fromPrincipal = cleared - fromAccrued;
+            p.accrued = accrued - fromAccrued;
+            p.principal = principal - fromPrincipal;
+            totalPrincipal[asset] -= fromPrincipal;
+        }
     }
 
     function _limit(uint256 coll, Market memory m, uint256 ltv) internal pure returns (uint256) {
@@ -668,7 +737,7 @@ contract CurbCredit {
     }
 
     /// @dev Informational `allowed` for a WouldBreach refusal: the collateral that could leave while keeping debt
-    ///      within the limit at the CURRENT ltv. Conservative, since a smaller basis never lowers ltvFor.
+    ///      within the limit (rounded in the lender's favour).
     function _maxWithdraw(uint256 coll, uint256 debt, Market memory m, uint256 ltv) internal pure returns (uint256) {
         if (ltv == 0) return 0;
         uint256 needValue = MulDiv.mulDiv(debt, BPS, ltv) + 1;
