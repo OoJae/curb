@@ -18,7 +18,12 @@ import { html, render, safeUrl } from '../../ui/html';
 import { slotStrip, type SlotState, type SlotStrip } from '../../ui/slotstrip';
 import { blockLinkHTML, txLinkHTML } from '../../ui/txlink';
 
-boot({ page: 'clock' });
+try {
+  boot({ page: 'clock' });
+} catch (err) {
+  // The shell is lane A's; if it fails, the page still reads the chain.
+  console.warn('clock: shell boot failed', err);
+}
 
 const main = document.getElementById('main')!;
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = main) => root.querySelector<T>(sel);
