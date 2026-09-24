@@ -1,0 +1,1 @@
+Curb sells closure data for tokenized stocks on X Layer: when the issuer's primary market for each stock shuts and reopens, plus an on-chain graded record of the reopen price marks Curb commits in advance and the price moves observed across the closures it has graded.

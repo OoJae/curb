@@ -285,7 +285,7 @@ export function buildCurve(i: CurveInput): CurveAnswer {
     observations,
     definitions: {
       durationS: "settleAfter - closureStartAt: from the block time of MarketClock's last RegimeChanged into CLOSED before the commit, to the reopen the row was committed with",
-      discountBps: "(closingVwap - reopenPrint) / closingVwap * 10000, signed, truncated toward zero at 0.01 bp; positive means the reopen came in below the closing VWAP",
+      discountBps: "(closingVwap - reopenPrint) / closingVwap * 10000, signed, truncated toward zero at 0.01 bp; positive means the reopen came in below the closing VWAP. closingVwap is the committed baseline: the pool's 15-minute VWAP before the cut, or its last price when nothing traded in that window, which the chain cannot tell apart",
       markDiscountBps: "(closingVwap - mark) / closingVwap * 10000, same convention: the discount Curb's committed mark implied",
       buckets: "half-open duration ranges [minDurationS, maxDurationS) in seconds; only usable observations (excludedReason null) are counted",
       quantiles: "Hyndman-Fan type 7 over the bucket's sorted values (R's default, numpy's linear), rounded to 0.01 bp",

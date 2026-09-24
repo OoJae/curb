@@ -38,10 +38,11 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
     atomic: "10000",
     summary: "When a tokenized equity's primary market is shut, and when it reopens",
     description:
-      "Closure calendar for one tokenized equity on X Layer: every window in the next 1-14 days (default 7) in which " +
-      "the issuer's primary order cap is zero, and the instant it returns, computed from the issuer's published " +
-      "schedule and limits. Includes the current period and cap, and the hashes of the exact issuer responses used.",
-    query: "symbol (required, e.g. wTCENTx; see /v1/assets), horizonDays (1-14, default 7)",
+      "Closure calendar for one tokenized equity on X Layer (default wTCENTx): every window in the next 1-14 days " +
+      "(default 7) in which the issuer's primary order cap is zero, and the instant it returns, computed from the " +
+      "issuer's published schedule and limits plus its observed cut to zero 5 minutes before each period ends. " +
+      "Includes the current period and cap, and the hashes of the exact issuer responses used.",
+    query: "symbol (optional, default wTCENTx; see /v1/assets), horizonDays (1-14, default 7)",
   },
   {
     key: "GET /v1/accuracy-record",
@@ -52,9 +53,10 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
     summary: "Curb's graded record: every mark committed on chain before a reopen, and how Scorecard settled it",
     description:
       "Curb's accuracy record, read from the Scorecard contract on X Layer at one pinned block: the contract's own " +
-      "skill() tally (settled rows, and strict wins against the last print and against the closing VWAP; a tie is not " +
-      "a win), per-asset counts, ties and median errors, and each row newest first with its mark, both baselines, the " +
-      "reopen price the contract read from the pool, and the three errors in basis points.",
+      "skill() tally across every asset (settled rows, and strict wins against the last print and against the closing " +
+      "VWAP; a tie is not a win), per-asset counts, ties and median errors, and the rows newest first, up to limit, " +
+      "each with its mark, both baselines, the reopen price the contract read from the pool, and the three errors in " +
+      "basis points.",
     query: "symbol (optional, e.g. wTCENTx; omit for every graded asset; see /v1/assets), limit (1-200, default 50)",
   },
   {
@@ -63,14 +65,15 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
     path: "/v1/discount-curve",
     priceUsd: "0.10",
     atomic: "100000",
-    summary: "How far the reopen price lands from the closing VWAP, by how long the primary market was shut",
+    summary: "How far the reopen price lands from the pre-close price, by how long the primary market was shut",
     description:
-      "Closure-discount observations for tokenized equities on X Layer, one per settled Scorecard row: how long the " +
-      "primary market was shut (from MarketClock's RegimeChanged into CLOSED to the predicted reopen), the discount " +
-      "from the closing VWAP to the reopen price, and the discount Curb's mark implied, in basis points. Grouped into " +
-      "five duration buckets with counts, and order statistics only once a bucket holds enough closures. No fitted " +
-      "curve: fit is always null.",
-    query: "symbol (optional, e.g. wTCENTx; omit for every graded asset), minMinutes (30-10080, default 30)",
+      "Closure-discount observations for tokenized equities on X Layer, one per closure Curb marked on chain before " +
+      "the reopen and Scorecard then settled: how long the primary market was shut (from MarketClock's RegimeChanged " +
+      "into CLOSED to the scheduled reopen), the discount from the pre-close price (the 15-minute closing VWAP, or the " +
+      "last pool price when nothing traded in that window) to the reopen price, and the discount Curb's mark implied, " +
+      "in basis points. Grouped into five duration buckets with counts, and order statistics only once a bucket holds " +
+      "enough closures. No fitted curve: fit is always null.",
+    query: "symbol (optional, e.g. wTCENTx; omit for every graded asset), minMinutes (30-10080, default 30; shorter closures are listed but left out of the buckets)",
   },
 ];
 

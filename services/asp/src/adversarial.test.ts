@@ -219,7 +219,9 @@ test("HOLDS: path, case, encoding and method tricks never reach paid content or 
       // Absolute form: the adapter never reads the authority, and maps a non-origin-form target to "/".
       ["GET http://evil.test/v1/closure-calendar?symbol=wTCENTx HTTP/1.1", [200]],
       ["HEAD /v1/closure-calendar?symbol=wTCENTx HTTP/1.1", [405]],
-      ["POST /v1/closure-calendar?symbol=wTCENTx HTTP/1.1", [405]],
+      // POST is the same priced resource as GET: a junk payment header is an unpaid call, so 402.
+      ["POST /v1/closure-calendar?symbol=wTCENTx HTTP/1.1", [402]],
+      ["PUT /v1/closure-calendar?symbol=wTCENTx HTTP/1.1", [405]],
       ["get /v1/closure-calendar?symbol=wTCENTx HTTP/1.1", [400]],
     ];
     for (const [line, ok] of cases) {

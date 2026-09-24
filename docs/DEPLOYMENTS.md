@@ -195,8 +195,56 @@ Verified live from outside, 24 Sept 07:1xZ:
 | unpaid `/v1/accuracy-record`, `/v1/discount-curve` | **402**, `50000` ($0.05) and `100000` ($0.10) |
 | `/`, `/v1/assets`, `/.well-known/x402` | 200 |
 
-**Not yet done:** a paid call from an external wallet holding USDT0 (the end-to-end gate), and the OKX
-marketplace listing itself, which needs the `onchainos` CLI, an Agentic Wallet email login and an avatar.
+### Listed on the OKX AI marketplace — agent #13869, 24 Sept 2026
+
+Registered with `onchainos` 4.6.2 from the team's Agentic Wallet `0x055b…7105` (see `docs/WALLETS.md`)
+in [`0xe2420407…ccc7`](https://www.oklink.com/xlayer/tx/0xe2420407a65b51a468f060a52496e15587ce13d1c23fccff30330d8ab293ccc7),
+then submitted for listing review (`submitApproval.success: true`, under review). The exact text
+submitted is `script/asp/agent-description.txt` and `script/asp/services.json`; the avatar is
+`script/asp/curb-avatar.png`. Three A2MCP services: Closure Calendar ($0.01), Reopen Price Accuracy
+Record ($0.05), Closure Discount by Duration ($0.10). No subscription and no free trial: A2MCP
+forbids both.
+
+Before submitting, four independent reviewers checked each claim in the text against the live endpoints
+and the code. They found one blocker in the service and two claims the data did not support:
+
+- **OKX's endpoint self-check is `curl -i -X POST <endpoint>` with no parameters, and expects 402.** The
+  API answered 405 to any POST, and 400 to a bare calendar GET (`missing-symbol`). Fixed and redeployed:
+  a priced route now answers POST exactly as GET, with parameters from the query string, a flat JSON body
+  or a form body (the same name in two places with different values is a free 400); the calendar's
+  `symbol` defaults to wTCENTx; an empty `horizonDays=` means the default, as on the other routes.
+  Verified live: a bare POST to all three priced paths returns 402 with the challenge, and
+  `onchainos payment quote` on each bare URL decodes it as supported, paying curb-revenue.
+- **"Closing VWAP" was the last pool price in all 15 settled rows**: nothing traded in the 15 minutes
+  before any cut, so the keeper committed the last print as the baseline, and the chain cannot tell the
+  two apart. The listing and the route's own description now say "the pre-close price (the 15-minute
+  closing VWAP, or the last pool price when nothing traded)".
+- **"A mark before every reopen" overstated coverage**: wSHEINx has no price source and closures shorter
+  than 30 minutes are skipped. The agent description now says "the closures it has graded".
+
+### The first paid call — end to end through OKX's own buyer CLI, 24 Sept 2026 11:56Z
+
+A **team** wallet paying the team, disclosed as such (`docs/WALLETS.md`): it proves the rail, not demand.
+
+1. The team withdrew 0.01 OKB from its OKX exchange account to the Agentic Wallet `0x055b…7105`, which
+   swapped 0.009 OKB → 1.061866 USDT0 through OKX's DEX aggregator (Uniswap V3, 0.04% impact) in
+   [`0x60d93474…8283`](https://www.oklink.com/xlayer/tx/0x60d93474f738158a87bfff9c2018dfcd7065f9b6c70c270b0e0a7bc8145e8283),
+   block 71,481,865. The wallet paid no gas for it.
+2. `onchainos payment quote` on `/v1/closure-calendar?symbol=wTCENTx&horizonDays=7` → `payment pay`: the
+   Agentic Wallet signed an EIP-3009 authorization in OKX's TEE, the CLI replayed the request, and the
+   API answered **200** with the paid calendar (9 windows) after the OKX Broker settled.
+3. Settlement [`0xe8740458…4de7`](https://www.oklink.com/xlayer/tx/0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7),
+   block 71,481,945, status 1: **10000 USD₮0 units ($0.01) from `0x055b…7105` to curb-revenue
+   `0x277c…6068`**, submitted by OKX's relayer `0xde95…0591`, with the token's `AuthorizationUsed` event.
+4. Receipt [`/receipts/0xcee1ee75…817c.json`](https://api.curb.markets/receipts/0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c.json),
+   served immutable. Its id is `keccak256(transaction ‖ responseDigest)`, and `responseDigest` is the
+   sha256 of the exact 2,256 bytes delivered. Checked independently: the answer the buyer received,
+   serialised in the server's key order, hashes to that digest.
+
+**A finding about OKX's CLI, for anyone checking a receipt:** `onchainos payment pay` prints the paid
+answer re-serialised with its keys sorted, so its output is not the bytes the server sent, and hashing it
+does not reproduce `responseDigest`. The receipt binds the exact bytes on the wire; a buyer that wants to
+check it must keep the raw response body (or restore the server's key order, as above).
 
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 
