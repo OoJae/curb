@@ -1,5 +1,5 @@
 DepthCert invariants (P3, W4 spec "DepthCertInvariant")
-Generated 2026-09-24 13:55 UTC. forge 1.8.3, solc 0.8.28, legacy codegen, optimizer 200.
+Generated 2026-09-24 14:03 UTC. forge 1.8.3, solc 0.8.28, legacy codegen, optimizer 200.
 Suite: test/invariant/DepthCertInvariant.t.sol, handler test/invariant/handlers/DepthHandler.sol.
 
 Handler: 3 makers, 3 takers, 2 wrappers (MockERC20, 18 dp), USDG (MockERC20, 6 dp); books = wrapper x
@@ -39,26 +39,26 @@ DepthCertInvariant invariants:
 ╭--------------+--------------+-------+---------+----------╮
 | Contract     | Selector     | Calls | Reverts | Discards |
 +==========================================================+
-| DepthHandler | claim        | 1791  | 0       | 0        |
+| DepthHandler | claim        | 1850  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | moveBalance  | 1794  | 0       | 0        |
+| DepthHandler | moveBalance  | 1777  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | post         | 1833  | 0       | 0        |
+| DepthHandler | post         | 1729  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | prune        | 1843  | 0       | 0        |
+| DepthHandler | prune        | 1830  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setAllowance | 1801  | 0       | 0        |
+| DepthHandler | setAllowance | 1827  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setFrozen    | 1842  | 0       | 0        |
+| DepthHandler | setFrozen    | 1808  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | take         | 1875  | 0       | 0        |
+| DepthHandler | take         | 1898  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | warp         | 1839  | 0       | 0        |
+| DepthHandler | warp         | 1831  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | withdraw     | 1766  | 0       | 0        |
+| DepthHandler | withdraw     | 1834  | 0       | 0        |
 ╰--------------+--------------+-------+---------+----------╯
 
-[PASS] test_handler_reaches_every_path() (gas: 704137442)
+[PASS] test_handler_reaches_every_path() (gas: 704155926)
 Logs:
   posts 62 fills 58
   fades 55 InsufficientGas reverts 3
@@ -66,9 +66,9 @@ Logs:
   fade reasons: transfer_failed 5 other take reverts 95
   withdraws 1 claims 8
 
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 10.17s (10.62s CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 9.57s (10.00s CPU time)
 
-Ran 1 test suite in 10.17s (10.17s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+Ran 1 test suite in 9.58s (9.57s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
 
 === Run 2: deeper, handler must never revert (runs 1024, depth 128, fail_on_revert true) ===
 $ FOUNDRY_INVARIANT_SHOW_METRICS=true FOUNDRY_INVARIANT_FAIL_ON_REVERT=true FOUNDRY_INVARIANT_RUNS=1024 \
@@ -89,25 +89,25 @@ DepthCertInvariant invariants:
 ╭--------------+--------------+-------+---------+----------╮
 | Contract     | Selector     | Calls | Reverts | Discards |
 +==========================================================+
-| DepthHandler | claim        | 14546 | 0       | 0        |
+| DepthHandler | claim        | 14751 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | moveBalance  | 14546 | 0       | 0        |
+| DepthHandler | moveBalance  | 14454 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | post         | 14388 | 0       | 0        |
+| DepthHandler | post         | 14739 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | prune        | 14585 | 0       | 0        |
+| DepthHandler | prune        | 14560 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setAllowance | 14709 | 0       | 0        |
+| DepthHandler | setAllowance | 14579 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setFrozen    | 14671 | 0       | 0        |
+| DepthHandler | setFrozen    | 14675 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | take         | 14700 | 0       | 0        |
+| DepthHandler | take         | 14362 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | warp         | 14555 | 0       | 0        |
+| DepthHandler | warp         | 14534 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | withdraw     | 14372 | 0       | 0        |
+| DepthHandler | withdraw     | 14418 | 0       | 0        |
 ╰--------------+--------------+-------+---------+----------╯
 
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 108.87s (108.87s CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 121.48s (121.48s CPU time)
 
-Ran 1 test suite in 108.88s (108.87s CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+Ran 1 test suite in 121.48s (121.48s CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

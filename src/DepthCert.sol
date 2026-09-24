@@ -37,6 +37,8 @@ contract DepthCert is IDepthCert {
     // --- errors -----------------------------------------------------------------------------
 
     error ZeroAddress();
+    error BadWrapper(address wrapper);
+    error BadRecipient(address to);
     error ZeroNotional();
     error BondTooSmall(uint256 bond, uint256 minBond);
     error BadExpiry(uint64 expiry, uint64 earliest, uint64 latest);
@@ -137,7 +139,8 @@ contract DepthCert is IDepthCert {
         nonReentrant
         returns (uint256 id)
     {
-        if (wrapper == address(0)) revert ZeroAddress();
+        // A USDG-for-USDG bid is meaningless and would mix claimable shares into the bond balance.
+        if (wrapper == address(0) || wrapper == address(usdg)) revert BadWrapper(wrapper);
         uint256 n = _notional(sizeShares, bidPx);
         if (n == 0) revert ZeroNotional();
         // n <= 2^256 / 1e18, so n * 1000 cannot overflow.
@@ -194,7 +197,7 @@ contract DepthCert is IDepthCert {
 
     /// @notice Send the caller's filled shares of `wrapper` to `to`. Returns 0 (and moves nothing) if none.
     function claimShares(address wrapper, address to) external nonReentrant returns (uint256 shares) {
-        if (to == address(0)) revert ZeroAddress();
+        if (to == address(0) || to == address(this)) revert BadRecipient(to);
         shares = claimableShares[msg.sender][wrapper];
         if (shares == 0) return 0;
         claimableShares[msg.sender][wrapper] = 0;
@@ -220,7 +223,8 @@ contract DepthCert is IDepthCert {
         if (ben != address(0) && msg.sender != ben) revert NotBeneficiary(msg.sender, ben);
         uint128 rem = c.remainingShares;
         if (shares == 0 || shares > rem) revert BadShares(shares, rem);
-        if (to == address(0)) revert ZeroAddress();
+        // Paying this contract would strand the USDG: nothing could ever move it out again.
+        if (to == address(0) || to == address(this)) revert BadRecipient(to);
         uint256 cost = _notional(shares, c.bidPx);
         if (cost == 0) revert ZeroCost();
 

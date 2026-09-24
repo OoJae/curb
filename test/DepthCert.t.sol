@@ -207,10 +207,13 @@ contract DepthCertTest is Test {
         new DepthCert(IERC20(address(0)));
     }
 
-    function test_post_rejects_zero_wrapper() public {
-        vm.prank(maker);
-        vm.expectRevert(DepthCert.ZeroAddress.selector);
+    function test_post_rejects_zero_wrapper_and_usdg_as_wrapper() public {
+        vm.startPrank(maker);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BadWrapper.selector, address(0)));
         dc.post(address(0), address(0), SIZE, PX, t0 + 1 days, BOND);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BadWrapper.selector, address(usdg)));
+        dc.post(address(usdg), address(0), SIZE, PX, t0 + 1 days, BOND);
+        vm.stopPrank();
     }
 
     function test_post_rejects_zero_notional() public {
@@ -383,8 +386,12 @@ contract DepthCertTest is Test {
         assertEq(dc.claimShares(address(wrapper), stranger), 0);
 
         vm.prank(maker);
-        vm.expectRevert(DepthCert.ZeroAddress.selector);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BadRecipient.selector, address(0)));
         dc.claimShares(address(wrapper), address(0));
+        _take(taker, id, 0.1e18, to);
+        vm.prank(maker);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BadRecipient.selector, address(dc)));
+        dc.claimShares(address(wrapper), address(dc));
     }
 
     function test_committed_is_recomputed_not_decremented() public {
@@ -432,8 +439,10 @@ contract DepthCertTest is Test {
         _take(taker, id, 0, to);
         vm.expectRevert(abi.encodeWithSelector(DepthCert.BadShares.selector, 10e18 + 1, 10e18));
         _take(taker, id, 10e18 + 1, to);
-        vm.expectRevert(DepthCert.ZeroAddress.selector);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BadRecipient.selector, address(0)));
         _take(taker, id, 1e18, address(0));
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.BadRecipient.selector, address(dc)));
+        _take(taker, id, 1e18, address(dc));
         vm.expectRevert(abi.encodeWithSelector(DepthCert.NotLive.selector, 99));
         _take(taker, 99, 1e18, to);
     }
