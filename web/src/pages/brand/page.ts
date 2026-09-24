@@ -65,22 +65,6 @@ const section = (id: string, title: string, ledger: SafeHTML, instrument: SafeHT
     </div>
   </section>`;
 
-function hero(): SafeHTML {
-  const toc = ['Colour', 'Type', 'Mark', 'Glyphs', 'Motion', 'Guilloche', 'Downloads'];
-  return html`
-  <header class="section br-hero">
-    <div class="wrap">
-      <p class="t-label muted br-kicker">Brand</p>
-      <h1 class="t-h1 vt-title-brand br-h1">Street ink, certificate ivory, one <em>streetlamp</em>.</h1>
-      <p class="t-lede muted br-lede">The Curb identity in one place: six colours, three typefaces, one mark and the rules
-      that keep them honest. Every value on this page is read from the site’s own tokens.</p>
-      <nav class="cluster br-toc" aria-label="On this page">
-        ${toc.map((t) => html`<a class="link-arrow" href="#${t.toLowerCase()}">${t}</a>`)}
-      </nav>
-    </div>
-  </header>`;
-}
-
 function colours(): SafeHTML {
   const chips = COLOUR_TOKENS.map(
     (t) => html`
@@ -388,16 +372,18 @@ function wireRosette(root: HTMLElement) {
 
 // ── mount ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const page = document.createElement('article');
-page.className = 'br-page';
-render(page, html`${hero()}${colours()}${type()}${mark()}${glyphs()}${motion()}${rosette()}${downloads()}`);
-shell.main.replaceChildren(page);
+// The hero is static in brand/index.html (the H1 must exist at first paint for the title morph and the reveal);
+// everything below it is rendered here.
+let page = shell.main.querySelector<HTMLElement>('.br-page');
+if (!page) {
+  page = document.createElement('article');
+  page.className = 'br-page';
+  shell.main.replaceChildren(page);
+}
+page.insertAdjacentHTML('beforeend', html`${colours()}${type()}${mark()}${glyphs()}${motion()}${rosette()}${downloads()}`.value);
 
 fillColours(page);
 liveWeek(page);
 wireMotion(page);
 wireRosette(page);
-void shell.ready.then(() => {
-  fillScale(page);
-  if (!prefersReducedMotion()) void import('../../motion/reveal').then((m) => m.revealLines(page.querySelector('.br-h1')!));
-});
+void shell.ready.then(() => fillScale(page));
