@@ -13,6 +13,9 @@ const values = args.filter((a) => !a.startsWith('--')).map(Number);
 const ps = values.length ? values : [0, 0.4, 1];
 const two = args.includes('--2d');
 const now = args.find((a) => a.startsWith('--now='))?.slice(6);
+const clipArg = args.find((a) => a.startsWith('--clip='))?.slice(7);
+const clip = clipArg ? Object.fromEntries(clipArg.split(',').map(Number).map((v, i) => [['x', 'y', 'width', 'height'][i], v])) : undefined;
+const tag = args.find((a) => a.startsWith('--tag='))?.slice(6) ?? '';
 
 const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
@@ -28,8 +31,8 @@ console.log(renderer);
 for (const p of ps) {
   await page.evaluate((p) => window.__lab.setP(p), p);
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-  const file = join(out, `ring${two ? '-2d' : ''}-p${String(Math.round(p * 100)).padStart(3, '0')}.png`);
-  await page.screenshot({ path: file });
+  const file = join(out, `ring${two ? '-2d' : ''}${tag}-p${String(Math.round(p * 100)).padStart(3, '0')}.png`);
+  await page.screenshot({ path: file, clip });
   console.log('wrote', file);
 }
 await browser.close();

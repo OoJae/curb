@@ -32,7 +32,7 @@ export const MARK = {
   arcSpanDeg: 96, // centred east
   bladeRadius: 1,
   blade: [0.0026, 0.16, 0.02] as const, // tangential width, radial length, depth
-  needle: { inner: 0.84, outer: 1.3, width: 0.0075, depth: 0.05 },
+  needle: { inner: 0.8, outer: 1.3, width: 0.0055, depth: 0.03 },
 } as const;
 
 export const CAMERA = {
