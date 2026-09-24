@@ -40,6 +40,9 @@ contract CreditHandler is Test {
     uint256 public cureMovedAcrossShut; // a tick with shut/UNKNOWN at either end moved the clock
     uint256 public cureOverCounted; // a tick added more than min(gap, MAX_TICK_GAP)
     uint256 public refusalChangedState; // a refused borrow/withdraw changed the position or totals
+    uint256 public crossPositionBreachChange; // an action on one position changed another's isBreached
+    uint256 public badDebtWithCollateralLeft; // a liquidation wrote debt off while the borrower kept shares
+    uint256 public debtForgiven; // a partial liquidation took more off the debt than the shares it seized cover
 
     // --- ghosts: coverage -------------------------------------------------------------------------------------
     uint256 public borrowsOk;
@@ -48,6 +51,7 @@ contract CreditHandler is Test {
     uint256 public ticks;
     uint256 public shutTicks;
     uint256 public liquidations;
+    uint256 public partialLiquidations;
     uint256 public realisedFills;
     uint256 public realisedFades;
     uint256 public depositsRefusedIneligible;
@@ -123,9 +127,11 @@ contract CreditHandler is Test {
         amount = bound(amount, 1e15, 50e18);
         MockERC20(a).mint(who, amount);
         bool ok = elig.isEligible(who);
+        bytes32 others = _othersBreach(who, a);
         vm.prank(who);
         if (ok) {
             credit.deposit(a, amount);
+            if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
         } else {
             try credit.deposit(a, amount) {
                 revert("ineligible deposit accepted");
@@ -142,9 +148,12 @@ contract CreditHandler is Test {
         if (coll == 0) return;
         amount = bound(amount, 1, coll);
         bytes32 before = _positionDigest(who, a);
+        bytes32 others = _othersBreach(who, a);
         vm.recordLogs();
         vm.prank(who);
-        if (!credit.withdraw(a, amount)) {
+        bool ok = credit.withdraw(a, amount);
+        if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+        if (!ok) {
             _countRefusal();
             if (_positionDigest(who, a) != before) ++refusalChangedState;
         }
@@ -159,9 +168,12 @@ contract CreditHandler is Test {
         amount = MulDiv.mulDiv(headroom, _h(amount) % 11_000 + 1, 1e4);
         if (amount == 0) amount = 1;
         bytes32 before = _positionDigest(who, a);
+        bytes32 others = _othersBreach(who, a);
         vm.recordLogs();
         vm.prank(who);
-        if (credit.borrow(a, amount)) {
+        bool ok = credit.borrow(a, amount);
+        if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+        if (ok) {
             ++borrowsOk;
             if (credit.totalPrincipal(a) > credit.realisable(a)) ++borrowOverRealisable;
         } else {
@@ -177,7 +189,9 @@ contract CreditHandler is Test {
         amount = bound(amount, 1, debt + 10e6);
         usdg.mint(address(this), amount);
         usdg.approve(address(credit), amount);
+        bytes32 others = _othersBreach(who, a);
         credit.repay(who, a, amount);
+        if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
     }
 
     function fund(uint256 amount) external {
@@ -191,13 +205,16 @@ contract CreditHandler is Test {
     // the world moves
     // =========================================================================================================
 
+    /// @dev Shut modes also publish a next transition (sometimes a long holiday) that stretches the cert horizon.
     function setRegime(uint256 assetSeed, uint256 mode) external {
         address a = _asset(assetSeed);
+        uint256 h = _h(mode);
         mode = mode % 8;
         if (mode <= 2) clock.set(a, IMarketClock.Regime.MARKET, 20_000_000);
         else if (mode == 3) clock.set(a, IMarketClock.Regime.OVERNIGHT, 2_000_000);
         else if (mode <= 6) clock.set(a, IMarketClock.Regime.CLOSED, 0);
         else clock.set(a, IMarketClock.Regime.UNKNOWN, 0);
+        clock.setNextTransition(a, uint64(block.timestamp + (h >> 8) % 120 hours));
     }
 
     function setPrice(uint256 assetSeed, uint256 bps, uint256 failSeed) external {
@@ -303,14 +320,36 @@ contract CreditHandler is Test {
         bool openNow = credit.isOpen(a);
         uint256 debt = credit.debtOf(who, a);
         uint256 coll = credit.positionOf(who, a).collateral;
+        uint256 bad0 = credit.badDebt(a);
+        bytes32 others = _othersBreach(who, a);
         try credit.liquidate(who, a) {
             ++liquidations;
             if (!openNow) ++liquidatedWhileShut;
             if (c.openSecondsUsed < 1800) ++liquidatedEarly;
-            uint256 seize = coll - credit.positionOf(who, a).collateral;
+            if (_othersBreach(who, a) != others) ++crossPositionBreachChange;
+            uint256 left = credit.positionOf(who, a).collateral;
+            uint256 seize = coll - left;
             uint256 cap = MulDiv.mulDiv(MulDiv.mulDiv(debt, 10_500, 1e4), 1e30, c.priceAtBreach);
             if (seize > cap) ++seizeOverStaleCap;
+            if (left > 0) {
+                ++partialLiquidations;
+                if (credit.badDebt(a) != bad0) ++badDebtWithCollateralLeft;
+                uint256 cleared = MulDiv.mulDiv(seize, sc.priceNow(a), 1e30);
+                if (cleared > debt) cleared = debt;
+                if (credit.debtOf(who, a) != debt - cleared) ++debtForgiven;
+            }
         } catch {}
+    }
+
+    /// @dev (known, breached) of every position except (who, a), hashed: an action on one position must not move it.
+    function _othersBreach(address who, address a) internal view returns (bytes32 h) {
+        for (uint256 i; i < _actors.length; ++i) {
+            for (uint256 j; j < _assets.length; ++j) {
+                if (_actors[i] == who && _assets[j] == a) continue;
+                (bool known, bool breached) = credit.isBreached(_actors[i], _assets[j]);
+                h = keccak256(abi.encode(h, known, breached));
+            }
+        }
     }
 
     /// @dev Sell some seized shares into a fresh cert naming CurbCredit; sometimes the maker fades.
