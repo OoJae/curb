@@ -20,6 +20,5 @@ node_modules
 
 # agent worktrees and local tool state
 .claude/
-
 web/node_modules
 web/dist

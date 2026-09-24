@@ -4,8 +4,9 @@
 #   approve  TOKEN SPENDER AMOUNT                 ERC-20 approve (TOKEN: wtcentx|usdg|0x..; SPENDER: note|auction|0x..)
 #   mint     AMOUNT [TO]                          ReopenNote.mint(WRAPPER, AMOUNT, TO=FROM)
 #   setApprovalForAll [OPERATOR] [true|false]     ReopenNote.setApprovalForAll(OPERATOR=auction, true)
-#   list     NOTE_ID AMOUNT START FLOOR DECAY END_AT
-#                                                 ClosedAuction.list; END_AT is unix seconds or +SECONDS from now
+#   list     NOTE_ID AMOUNT START FLOOR DECAY [END_AT]
+#                                                 ClosedAuction.list; END_AT is unix seconds or +SECONDS from now,
+#                                                 clamped to (and defaulting to) the MarketClock cutoff, printed
 #   bid      LOT_ID MAX_PRICE                     ClosedAuction.bid
 #   redeem   NOTE_ID AMOUNT [TO]                  ReopenNote.redeem(NOTE_ID, AMOUNT, TO=FROM)
 #   withdraw LOT_ID                               ClosedAuction.withdraw
@@ -38,7 +39,7 @@ for a in "$@"; do
 done
 set -- "${ARGS[@]+"${ARGS[@]}"}"
 
-usage() { sed -n '2,24p' "$0"; exit "${1:-0}"; }
+usage() { sed -n '2,25p' "$0"; exit "${1:-0}"; }
 [[ $# -ge 1 ]] || usage 2
 cmd="$1"; shift
 [[ "$cmd" == "-h" || "$cmd" == "--help" ]] && usage 0
@@ -71,6 +72,23 @@ check_account() { # the keystore must be the address we pay from / mint to
   checked=1
 }
 
+CLOCK="${CLOCK:-0x160Dc415902971a7a9B5ade7f43005b36FE5B09b}"
+
+# The note's wrapper from ReopenNote.unitOf(id); falls back to $WRAPPER if the note is unreadable.
+note_wrapper() {
+  local w
+  [[ -n "${NOTE:-}" ]] || { echo "$WRAPPER"; return 0; }
+  w="$(cast call "$NOTE" "unitOf(uint256)((address,address,uint128,uint128,uint32,uint32,uint64,uint64))" "$1" \
+    --rpc-url "$RPC" 2>/dev/null | tr -d '()' | awk -F', ' '{print $1}')" || true
+  if [[ "$w" == 0x* && "$w" != "0x0000000000000000000000000000000000000000" ]]; then echo "$w"; else echo "$WRAPPER"; fi
+}
+
+# MarketClock.stateOf(w).nextTransitionAt (State = regime, cap, nextTransitionAt, observedAt, nonce, halted).
+cutoff_of() {
+  cast call "$CLOCK" "stateOf(address)((uint8,uint128,uint64,uint64,uint32,bool))" "$1" --rpc-url "$RPC" 2>/dev/null \
+    | tr -d '()' | awk -F', ' '{print $3}' | awk '{print $1}' || true
+}
+
 send() { # send <to> <sig> [args...]
   local to="$1"; shift
   local data
@@ -99,9 +117,30 @@ case "$cmd" in
     send "$NOTE" "setApprovalForAll(address,bool)" "$(addr_of "${1:-auction}")" "${2:-true}"
     ;;
   list)
-    nargs $# 6; need AUCTION
-    end="$6"
-    if [[ "$end" == +* ]]; then end=$(( $(date -u +%s) + ${end#+} )); fi
+    nargs $# 5; need AUCTION
+    # The lot may not outlive the closure segment: endAt <= MarketClock.stateOf(wrapper).nextTransitionAt.
+    w="$(note_wrapper "$1")"
+    cutoff="$(cutoff_of "$w")"
+    now="$(date -u +%s)"
+    when=""
+    [[ -n "$cutoff" && "$cutoff" != "0" ]] && when=" ($(date -u -r "$cutoff" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true))"
+    echo "cutoff: MarketClock nextTransitionAt for $w = ${cutoff:-unreadable}${when}"
+    if [[ -z "$cutoff" || "$cutoff" == "0" || "$cutoff" -le "$now" ]]; then
+      echo "no future boundary on MarketClock: list would revert NoCutoff()" >&2
+      [[ $DRY_RUN -eq 1 ]] || exit 1
+      cutoff=""
+    fi
+    end="${6:-${cutoff:-}}"
+    [[ -n "$end" ]] || { echo "list: give END_AT (no cutoff to default to)" >&2; exit 2; }
+    if [[ "$end" == +* ]]; then end=$(( now + ${end#+} )); fi
+    if [[ -n "$cutoff" ]] && (( end > cutoff )); then
+      echo "endAt $end is past the cutoff; clamped to $cutoff"
+      end="$cutoff"
+    fi
+    if (( end > now + 345600 )); then # MAX_LIFE = 4 days (a long holiday closure)
+      echo "endAt $end is past now + 4 days; clamped to $((now + 345600))"
+      end=$((now + 345600))
+    fi
     send "$AUCTION" "list(uint256,uint128,uint128,uint128,uint32,uint64)" "$1" "$2" "$3" "$4" "$5" "$end"
     ;;
   bid)
@@ -118,9 +157,9 @@ case "$cmd" in
     ;;
   status)
     nargs $# 1; need AUCTION
-    echo "lot $1 (seller, wrapper, noteId, amount, start, floor, ref, startAt, endAt, decay, epochAtMint, status, buyer, cleared, clearedAt):"
+    echo "lot $1 (seller, wrapper, noteId, amount, start, floor, ref, startAt, endAt, decay, epochAtMint, status, buyer, cleared, clearedAt, cutoff):"
     cast call "$AUCTION" \
-      "lotOf(uint256)((address,address,uint256,uint128,uint128,uint128,uint128,uint64,uint64,uint32,uint32,uint8,address,uint128,uint64))" \
+      "lotOf(uint256)((address,address,uint256,uint128,uint128,uint128,uint128,uint64,uint64,uint32,uint32,uint8,address,uint128,uint64,uint64))" \
       "$1" --rpc-url "$RPC"
     printf 'currentPrice: '; cast call "$AUCTION" "currentPrice(uint256)(uint256)" "$1" --rpc-url "$RPC" || true
     printf 'realisedDiscountBps: '

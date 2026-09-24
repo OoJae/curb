@@ -96,6 +96,9 @@ contract ClosedAuctionTest is Test {
         clock.set(w, IMarketClock.Regime.CLOSED, 0);
         sc.setPrice(w, PRICE);
         pointer.setEpoch(w, 3); // the market has already reopened three times before this closure
+        // The next scheduled boundary. Far enough that the generic list tests (up to MAX_LIFE = 4 days) are not
+        // cut short; the cutoff tests below set their own.
+        clock.setNextTransition(w, t0 + 5 days);
 
         registry.setEligible(bidder, true, keccak256("test:bidder"));
 
@@ -348,6 +351,77 @@ contract ClosedAuctionTest is Test {
         assertGe(p2, floor_);
         assertEq(auction.priceAt(lotId, t0), start, "starts at start");
         assertEq(auction.priceAt(lotId, uint256(t0) + decay), floor_, "reaches the floor after decay");
+    }
+
+    // --- cutoff: a lot never outlives the closure segment it was listed in -------------------------
+
+    function test_list_records_the_cutoff() public {
+        (, uint256 lotId) = _demoLot();
+        assertEq(auction.lotOf(lotId).cutoff, t0 + 5 days);
+    }
+
+    function test_list_endAt_may_equal_the_cutoff_but_not_pass_it() public {
+        uint64 cutoff = t0 + 3600; // e.g. 09:00 HKT, when the pre-open auction starts publishing
+        clock.setNextTransition(w, cutoff);
+        uint256 id = _mint(AMOUNT);
+        vm.prank(seller);
+        vm.expectRevert(abi.encodeWithSelector(ClosedAuction.SpansTransition.selector, cutoff));
+        auction.list(id, AMOUNT, START, FLOOR, DECAY, cutoff + 1);
+
+        uint256 lotId = _list(id, AMOUNT, START, FLOOR, DECAY, cutoff);
+        assertEq(auction.lotOf(lotId).endAt, cutoff);
+        assertEq(auction.lotOf(lotId).cutoff, cutoff);
+    }
+
+    function test_list_with_no_boundary_fails_closed() public {
+        uint256 id = _mint(AMOUNT);
+        clock.setNextTransition(w, 0);
+        vm.prank(seller);
+        vm.expectRevert(ClosedAuction.NoCutoff.selector);
+        auction.list(id, AMOUNT, START, FLOOR, DECAY, t0 + 2400);
+    }
+
+    /// `stateOf` does not fail closed on staleness, but a stale state has a boundary in the past.
+    function test_list_with_a_passed_boundary_fails_closed() public {
+        uint256 id = _mint(AMOUNT);
+        clock.setNextTransition(w, t0); // the boundary is now
+        vm.prank(seller);
+        vm.expectRevert(ClosedAuction.NoCutoff.selector);
+        auction.list(id, AMOUNT, START, FLOOR, DECAY, t0 + 60);
+
+        clock.setNextTransition(w, t0 - 1);
+        vm.prank(seller);
+        vm.expectRevert(ClosedAuction.NoCutoff.selector);
+        auction.list(id, AMOUNT, START, FLOOR, DECAY, t0 + 60);
+
+        // one second of future boundary is enough to list a lot that ends by it
+        clock.setNextTransition(w, t0 + 1);
+        _list(id, AMOUNT, START, FLOOR, DECAY, t0 + 1);
+    }
+
+    /// The hole the cutoff closes: a whole session that nobody witnesses leaves the pointer's epoch unchanged,
+    /// so the epoch check alone would still accept a bid at a pre-reopen price in the next closure. The lot
+    /// ends at the boundary instead, so it is dead before the market can reopen.
+    function test_an_unwitnessed_session_cannot_be_traded_on() public {
+        uint64 cutoff = t0 + 3600;
+        clock.setNextTransition(w, cutoff);
+        (uint256 id) = _mint(AMOUNT);
+        uint256 lotId = _list(id, AMOUNT, START, FLOOR, DECAY, cutoff);
+
+        // Reopen at the boundary, a full session nobody observes, then the next closure.
+        vm.warp(cutoff + 1);
+        clock.set(w, IMarketClock.Regime.MARKET, 20_000_000);
+        vm.warp(cutoff + 6 hours);
+        clock.set(w, IMarketClock.Regime.CLOSED, 0);
+        clock.setNextTransition(w, cutoff + 1 days);
+        assertEq(pointer.epochOf(w), 3, "the pointer never saw the session");
+
+        vm.prank(bidder);
+        vm.expectRevert(ClosedAuction.LotExpired.selector);
+        auction.bid(lotId, START);
+        vm.prank(seller);
+        auction.withdraw(lotId);
+        assertEq(note.balanceOf(seller, id), AMOUNT);
     }
 
     // --- bid --------------------------------------------------------------------------------------
@@ -840,6 +914,7 @@ contract ClosedAuctionWithRealNoteTest is Test {
         );
 
         clock.set(address(w), IMarketClock.Regime.CLOSED, 0);
+        clock.setNextTransition(address(w), t0 + 2400); // the scheduled reopen ("09:00 HKT")
         pointer.observe(address(w)); // the pointer witnesses the shut
 
         w.mint(seller, 1e18);
@@ -855,7 +930,7 @@ contract ClosedAuctionWithRealNoteTest is Test {
     function _mintAndList() internal returns (uint256 id, uint256 lotId) {
         vm.startPrank(seller);
         id = note.mint(address(w), AMOUNT, seller);
-        lotId = auction.list(id, AMOUNT, START, FLOOR, DECAY, uint64(vm.getBlockTimestamp() + 2400));
+        lotId = auction.list(id, AMOUNT, START, FLOOR, DECAY, t0 + 2400); // ends exactly at the boundary
         vm.stopPrank();
     }
 
@@ -880,13 +955,14 @@ contract ClosedAuctionWithRealNoteTest is Test {
         vm.expectRevert(abi.encodeWithSelector(ReopenNote.NotReopened.selector, id, uint32(0), uint32(0)));
         note.redeem(id, AMOUNT, bidder);
 
-        vm.warp(t0 + 900);
+        assertEq(auction.lotOf(lotId).cutoff, t0 + 2400);
+        vm.warp(t0 + 2400); // the scheduled boundary: the market reopens
         _reopen();
         assertEq(pointer.epochOf(address(w)), 1);
         vm.expectRevert(ClosedAuction.NotPrinted.selector); // reopened, not printed: epochInfo reads zeroes
         auction.realisedDiscountBps(lotId);
 
-        vm.warp(t0 + 1200);
+        vm.warp(t0 + 2700);
         sc.setPrice(address(w), 57e18);
         assertEq(pointer.recordPrint(address(w), 1), 57e18);
 
@@ -896,6 +972,8 @@ contract ClosedAuctionWithRealNoteTest is Test {
         assertEq(auction.realisedDiscountBps(lotId), 324);
     }
 
+    /// Defence in depth: even if the market reopened before its scheduled boundary (a wrong schedule), a
+    /// witnessed reopen still stops the lot.
     function test_no_hindsight_with_the_real_pointer() public {
         (uint256 id, uint256 lotId) = _mintAndList();
         vm.warp(t0 + 600);
@@ -918,16 +996,22 @@ contract ClosedAuctionWithRealNoteTest is Test {
         assertEq(note.balanceOf(seller, id), AMOUNT);
     }
 
-    /// The pointer can only refuse what it witnessed: a reopen-and-shut that nobody observed does not move
-    /// the epoch, so the lot stays biddable. This is why poke.sh observes at every reopen.
-    function test_an_unwitnessed_reopen_does_not_move_the_epoch() public {
-        (, uint256 lotId) = _mintAndList();
-        vm.warp(t0 + 600);
+    /// The pointer can only refuse what it witnessed: a session nobody observes leaves the epoch at
+    /// `epochAtMint`. The cutoff makes that harmless: the lot ended at the boundary, before the reopen.
+    function test_an_unwitnessed_session_leaves_the_epoch_but_the_lot_has_expired() public {
+        (uint256 id, uint256 lotId) = _mintAndList();
+        vm.warp(t0 + 2401);
         clock.set(address(w), IMarketClock.Regime.MARKET, 20_000_000); // nobody observes
-        vm.warp(t0 + 700);
+        vm.warp(t0 + 2400 + 6 hours);
         clock.set(address(w), IMarketClock.Regime.CLOSED, 0);
+        clock.setNextTransition(address(w), t0 + 1 days);
         vm.prank(bidder);
+        vm.expectRevert(ClosedAuction.LotExpired.selector);
         auction.bid(lotId, START);
-        assertEq(pointer.epochOf(address(w)), 0);
+        assertEq(pointer.epochOf(address(w)), 0, "the session was never witnessed");
+
+        vm.prank(seller);
+        auction.withdraw(lotId);
+        assertEq(note.balanceOf(seller, id), AMOUNT);
     }
 }
