@@ -18,6 +18,11 @@
       aside input[type='range'] { width: 100%; }
       aside button, aside select { font: inherit; background: none; color: inherit; border: 1px solid var(--slate); padding: 4px 8px; }
       pre { white-space: pre-wrap; color: var(--slate); }
+      @media (max-width: 767.98px) {
+        body { display: block; }
+        .fig { width: 100vw; }
+        aside { display: none; }
+      }
       body.capture { display: block; background: transparent; }
       body.capture aside, body.capture .caption { display: none; }
       body.capture .stage { display: block; }

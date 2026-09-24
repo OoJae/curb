@@ -247,10 +247,8 @@
 }
 .hm-inst:hover::before { transform: scaleY(1); }
 .hm-inst-date { font: 400 var(--t-data) / 1.4 var(--hm-data); color: var(--hm-muted); }
-.hm-inst-name { font-weight: 600; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+.hm-inst-name { font-weight: 600; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; gap: 0.35em; }
 .hm-inst-line { color: var(--hm-muted); }
-.hm-inst:not(.is-live)[data-inst='notes'] .hm-inst-date,
-.hm-inst:not(.is-live)[data-inst='depth'] .hm-inst-date { font-style: italic; }
 
 /* for agents */
 .hm-agents-body { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: calc(2 * var(--hm-gutter)); align-items: start; }
@@ -312,15 +310,28 @@
     width: 100vw;
     margin: 0.5rem 0 0 calc(12vw - var(--hm-margin));
   }
-  .hm-ledger { order: 3; margin-top: -9vw; } /* the square's bottom ~11% is empty in both ring states */
-  .hm-lede { order: 4; }
+  /* The dial fills 24–84% of the square's height, so the ledger rides up into the empty band below it; one
+     caption at a time, then the live sentence, share a single cell (reserved, so nothing below moves). */
+  .hm-ledger { order: 3; margin-top: -16vw; display: grid; grid-template-areas: 'legend' 'cell'; }
+  .hm-lede { order: 4; margin-top: 1.25rem; }
   .hm-ctas { order: 5; margin-bottom: 2rem; }
-  .hm-now { order: 6; min-height: 5rem; }
-  .hm-legend { margin-bottom: 0.75rem; }
-  .hm-captions { grid-template-areas: 'c'; }
-  .hm-caption { grid-area: c; border: 0; font-size: var(--t-h2); }
-  .hm-caption.is-on:not(.is-now) { opacity: 0; }
-  .hm-sentence { margin-top: 0.75rem; min-height: 4.2em; }
+  .hm-now { order: 6; min-height: 5rem; column-gap: 0.75rem; }
+  .hm-now .hm-now-v:not(:first-of-type)::before { content: none; }
+  .hm-now [data-now='next'],
+  .hm-now [data-now='attested'] { flex-basis: 100%; }
+  .hm-legend { grid-area: legend; margin-bottom: 0.5rem; }
+  .hm-key--data { display: none; }
+  .hm-captions { grid-area: cell; grid-template-areas: 'c'; align-self: start; }
+  .hm-caption { grid-area: c; border: 0; padding: 0; }
+  .hm-caption.is-on:not(.is-now),
+  .hm.is-unrolled .hm-caption.is-on { opacity: 0; }
+  .hm-sentence { grid-area: cell; margin: 0; min-height: 0; align-self: start; }
+  /* Reduced motion: nothing plays, so the whole ledger is simply listed. */
+  .hm[data-mode='reduced'] .hm-ledger { grid-template-areas: 'legend' 'caps' 'sentence'; }
+  .hm[data-mode='reduced'] .hm-captions { grid-area: caps; grid-template-areas: none; }
+  .hm[data-mode='reduced'] .hm-caption { grid-area: auto; }
+  .hm[data-mode='reduced'] .hm-caption.is-on { opacity: 1; }
+  .hm[data-mode='reduced'] .hm-sentence { grid-area: sentence; margin-top: 1rem; }
   .hm-section { padding-block: 4rem; }
   .hm-section > *,
   .hm-section > .hm-h2 { grid-column: 1 / -1; grid-row: auto; }

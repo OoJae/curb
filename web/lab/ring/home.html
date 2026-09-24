@@ -4,7 +4,17 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Home preview (lab)</title>
-    <!-- Lab only: fonts come from @fontsource (imported in home.ts); lane A self-hosts latin subsets + fontaine. -->
+    <!-- Lab only: local @fontsource files, preloaded and render-blocking like lane A's self-hosted subsets, so CLS
+         here measures the page rather than a late font swap. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/bodoni-moda/files/bodoni-moda-latin-opsz-normal.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/bodoni-moda/files/bodoni-moda-latin-opsz-italic.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/libre-franklin/files/libre-franklin-latin-wght-normal.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@fontsource-variable/martian-mono/files/martian-mono-latin-standard-normal.woff2" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/bodoni-moda/opsz.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/bodoni-moda/opsz-italic.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/libre-franklin/wght.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/libre-franklin/wght-italic.css" />
+    <link rel="stylesheet" href="/node_modules/@fontsource-variable/martian-mono/standard.css" />
     <link rel="stylesheet" href="./stubs/tokens.css" />
     <style>
       html { background: var(--ground); color: var(--figure); }

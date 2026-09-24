@@ -37,8 +37,7 @@ import type { Caption, Regime, WeekInput } from '../../ring/layout';
  * local behaviour noted beside each entry (never to an invented number). Each `A.*` states the signature it
  * expects; rename the property lookups below to lane A/B's real exports.
  * ════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
-import * as shellBoot from '../../shell/boot';
-import * as motionLenis from '../../motion/lenis';
+import * as shellBoot from '../../shell/boot'; // boot() also wires Lenis to ScrollTrigger; the page needs only the latter
 import * as motionReveal from '../../motion/reveal';
 import * as motionReduced from '../../motion/reduced';
 import * as dataSchedule from '../../data/schedule';
@@ -90,8 +89,6 @@ const A = {
   reducedMotion: (): boolean =>
     get<Fn<[], boolean>>(motionReduced, 'prefersReducedMotion', 'reducedMotion', 'isReduced')?.() ??
     matchMedia('(prefers-reduced-motion: reduce)').matches,
-  /** lane A `motion/lenis`: the Lenis instance (already on the GSAP ticker) or null. */
-  lenis: (): { on?: Fn<[string, Fn]> } | null => get<Fn<[], null>>(motionLenis, 'getLenis', 'lenis')?.() ?? null,
   /** lane A `motion/reveal`: SplitText headlines + [data-reveal] entrances inside root. Fallback: none. */
   reveal: (root: Element) => get<Fn<[Element]>>(motionReveal, 'reveal', 'revealAll')?.(root),
   /** lane B `schedule.ts`: this HK week's 2,016 slots (0 open, 1 shut), "now", and Mon 00:00 HKT. Fallback: stub. */
@@ -201,8 +198,8 @@ export function homeMarkup(w: WeekInput): string {
         <canvas class="hm-canvas" aria-hidden="true"></canvas>
         <figcaption class="hm-sr" id="hm-ring-text">${esc(ringText(w))}</figcaption>
       </figure>
-      <div class="hm-ledger" aria-hidden="true">
-        <p class="hm-legend">
+      <div class="hm-ledger">
+        <p class="hm-legend" aria-hidden="true">
           <span class="hm-key"><span class="hm-swatch hm-swatch--open"></span>Exchange open</span>
           <span class="hm-key"><span class="hm-swatch hm-swatch--shut"></span>Shut, still trading</span>
           <span class="hm-key hm-key--data">2,016 five-minute slots from Mon 00:00 HKT</span>
@@ -450,10 +447,10 @@ export async function mountHome(root: HTMLElement = document.querySelector('main
         if (attested) ring.pulse();
         hm.dataset.regime = regime;
       } else if (!clock) {
-        nowEls.attested.textContent = 'clock unavailable; showing the published schedule';
+        nowEls.attested.textContent = 'clock unavailable · published schedule';
       }
     } catch {
-      if (!clock) nowEls.attested.textContent = 'clock unavailable; showing the published schedule';
+      if (!clock) nowEls.attested.textContent = 'clock unavailable · published schedule';
     }
     renderLive();
   };
@@ -524,7 +521,7 @@ export async function mountHome(root: HTMLElement = document.querySelector('main
   cleanups.push(() => ask.removeEventListener('click', onAsk));
 
   A.reveal(hm);
-  document.fonts?.ready.then(() => ScrollTrigger.refresh?.());
+  if (hm.dataset.mode === 'pin') document.fonts?.ready.then(() => ScrollTrigger.refresh());
 
   return {
     ring,
