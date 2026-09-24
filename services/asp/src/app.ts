@@ -7,6 +7,7 @@
  *                              the Scorecard snapshot's block and age, and the RegimeChanged backfill's progress
  *   GET /v1/assets             the cohort MarketClock tracks, and which of it Scorecard can grade
  *   GET /.well-known/x402      the priced routes and their terms, for discovery
+ *   GET /v1/relay/binance/klines  closed Binance 1m klines, the upstream bytes verbatim (relay.ts; the one that fetches)
  *   GET /receipts/<id>.json    a paid call's receipt, immutable
  *   GET /issuer/<hash>.json    the exact issuer bytes a calendar was computed from, immutable
  *
@@ -28,6 +29,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeHttpAdapter, bufferBody, BodyTooLarge } from "./http/adapter.ts";
 import { send, sendJson } from "./http/respond.ts";
+import { BINANCE_KLINES_PATH, createBinanceRelay, serveRelay } from "./relay.ts";
+import type { BinanceRelay } from "./relay.ts";
 import { servePriced } from "./pay/flow.ts";
 import { PRICED_ROUTES, SCHEME, MAX_TIMEOUT_SECONDS, USDT0 } from "./pay/routes.ts";
 import type { Payments, PricedHandler } from "./pay/server.ts";
@@ -64,6 +67,8 @@ export interface AppDeps {
   /** For /healthz only; null when SCORECARD is unset. */
   scorecard?: { status(nowMs: number): ScorecardStatus } | null;
   closures?: { status(): ClosureIndexStatus } | null;
+  /** The Binance klines relay (relay.ts); left out, one is built over the real fetch and `now`. */
+  relay?: BinanceRelay;
   /**
    * The payment ledger (pay/ledger.ts). main.ts builds it, loads what a previous process left pending and
    * runs its reconciler; left out (tests), one is built under dataDir/ledger.
@@ -84,6 +89,7 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
   const receiptsDir = join(d.dataDir, "receipts");
   const ledger = d.ledger ?? new AuthorizationLedger({ dir: join(d.dataDir, "ledger"), receiptsDir, now: d.now, log: d.log });
   const noteUndecodable = throttledLog(d.log, "payment-header-undecodable", 60_000);
+  const relay = d.relay ?? createBinanceRelay({ now: d.now, log: d.log });
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     let body: Buffer;
@@ -110,6 +116,8 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
       case "/v1/assets": return assets(res);
       case "/.well-known/x402": return send(res, 200, wellKnown, { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" });
     }
+    // Free and GET-only (the method gate above): the relay's own query rules and upstream budget apply.
+    if (path === BINANCE_KLINES_PATH) return serveRelay(res, relay, adapter.url.searchParams);
     const file = path.match(HASH_FILE);
     if (file) {
       const dir = join(d.dataDir, file[1]);
