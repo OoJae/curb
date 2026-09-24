@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Test, Vm, console2} from "forge-std/Test.sol";
-import {CurbCredit} from "../../src/CurbCredit.sol";
+import {CurbCredit, IClockAssets} from "../../src/CurbCredit.sol";
 import {MarketClock} from "../../src/MarketClock.sol";
 import {IMarketClock} from "../../src/interfaces/IMarketClock.sol";
 import {IScorecardPrice} from "../../src/interfaces/IScorecardPrice.sol";
@@ -38,10 +38,11 @@ contract W4CreditForkTest is Test {
     address constant W_NVDA = 0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5;
     address constant W_AAPL = 0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f;
 
-    /// @dev K's demo cert expiry: Fri 2 Oct 2026 06:00Z (spec amendment). It outlives the shut horizon
-    ///      (now + 73 h + 30 min) until Mon 28 Sep 04:30Z, past Monday's reopen; on a later fork the test uses
-    ///      now + 110 h instead.
-    uint64 constant DEMO_EXPIRY = 1790920800;
+    /// @dev K's demo cert expiry: Sat 17 Oct 2026 06:00Z, under DepthCert's 30-day MAX_LIFE from a Fri 25 Sep post.
+    ///      It outlives the shut horizon (now + 73 h + 30 min) until Wed 14 Oct 04:30Z, so the demo loan's arc
+    ///      (breached at the cut, frozen all weekend, cured at Monday's reopen) is not undone before the 7 Oct finale.
+    ///      On a fork taken later than that the test uses now + 110 h instead.
+    uint64 constant DEMO_EXPIRY = 1792216800;
 
     CurbCredit credit;
     DepthCert dc;
@@ -263,6 +264,30 @@ contract W4CreditForkTest is Test {
         assertEq(credit.minCertExpiry(W_TCENT), block.timestamp + 30 minutes + 73 hours + 30 minutes);
         _postDemoCert();
         assertEq(credit.ltvFor(W_TCENT), 6000);
+    }
+
+    /// The final re-review's HIGH on the real clock: wNVDAx is registered TwentyFourFive, so a MARKET -> EXTENDED
+    /// period change an hour away is not a close and a 26 h cert keeps counting. wTCENTx (Regular) is unchanged.
+    function test_us_24_5_period_change_keeps_depth_on_the_real_clock() public {
+        (,, uint8 nvdaMode,) = IClockAssets(CLOCK).assets(W_NVDA);
+        (,, uint8 tcentMode,) = IClockAssets(CLOCK).assets(W_TCENT);
+        assertEq(nvdaMode, 1, "wNVDAx: TwentyFourFive");
+        assertEq(tcentMode, 2, "wTCENTx: Regular");
+
+        vm.prank(HOST_A);
+        MarketClock(CLOCK).attest(
+            W_NVDA, IMarketClock.Regime.MARKET, 1_000_000, uint64(block.timestamp + 1 hours), false, bytes32("w4-fork")
+        );
+        uint256 p = IScorecardPrice(SCORECARD).priceNow(W_NVDA);
+        uint128 bid = uint128(p / 1e12 + 5e6); // just above the live price
+        vm.prank(desk);
+        dc.post(W_NVDA, address(credit), 0.01e18, bid, uint64(block.timestamp + 26 hours), uint128(uint256(bid) / 1000 + 1));
+        assertEq(credit.minCertExpiry(W_NVDA), block.timestamp + 1 hours + 30 minutes, "plain open rule");
+        assertEq(credit.ltvFor(W_NVDA), 6000, "the period change an hour away is not a close");
+
+        _attest(IMarketClock.Regime.MARKET, 20_000_000, 1 hours); // HK: a close an hour away
+        _post(0.028e18, 52e6, 26 hours, 1e6);
+        assertEq(credit.ltvFor(W_TCENT), 0, "HK keeps the imminent-close rule");
     }
 
     function test_short_cert_does_not_count_while_shut() public {

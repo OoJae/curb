@@ -8,7 +8,9 @@
 #
 # Usage: script/w4/credit.sh [--dry-run] <command> [args...]
 #
-#   status   [BORROWER] [ASSET]              read-only: reserve, ltvFor, realisable, regime, debt, limit, cure
+#   status   [BORROWER] [ASSET]              read-only: reserve, ltvFor/ltvEffective, realisable, regime, debt,
+#                                            limit, cure; and for each maker in MAKERS (default K and D):
+#                                            committed, USDG allowance to DEPTH_CERT, balance, isHonourable
 #   approve  TOKEN SPENDER AMOUNT            ERC-20 approve (USDG to CREDIT for fund/repay, to DEPTH_CERT for post;
 #                                            wrapper shares to CREDIT for deposit). AMOUNT 0 revokes.
 #   fund     AMOUNT                          add USDG (6 dp units) to the reserve
@@ -22,7 +24,11 @@
 #                                            take), or a 0x address (only it may take, e.g. A for the fade demo).
 #                                            EXPIRY: unix seconds, +SECONDS from now, or `demo` (= Fri 2 Oct 2026
 #                                            06:00Z). BIDPX in USDG units per share. Notional must be >= 1 USDG.
-#   maker-approve AMOUNT                     the MAKER approves USDG to DEPTH_CERT (bond now + notional on a fill)
+#   maker-approve [AMOUNT]                   the MAKER approves USDG to DEPTH_CERT. Default: unlimited (max uint256),
+#                                            as a team maker should: a maker's certs count only while its allowance
+#                                            AND balance cover committed(maker) = sum of notional over ALL its live
+#                                            certs, so an allowance sized for one cert zeroes the whole book the
+#                                            moment a second cert is posted.
 #   revoke                                   the MAKER revokes its USDG allowance to DEPTH_CERT (fade demo): every
 #                                            cert of that maker stops counting at once, so never K (refused
 #                                            unless ALLOW_K_REVOKE=1)
@@ -45,15 +51,22 @@
 #
 # Makers: only DeployW4's maker allowlist (K and D) may post a cert with a beneficiary.
 #
+# The imminent-close rule applies only to assets whose clock hours mode can close them (HK names: Regular); a
+# 24/5 name's MARKET -> EXTENDED -> OVERNIGHT period changes are not closes.
+#
+# Funding: K must hold >= reserve fund + all bonds + committed notional of its live certs (plan: 20 USDG).
+#
 # W4 demo (HK, wTCENTx). Fri 25 Sep is a normal HKEX trading day: morning to the 03:55Z recess, recess
 # 03:55-05:00Z, afternoon to the 07:55Z cut, then shut until Mon 28 Sep 01:30Z (and 1 Oct is a holiday).
-#   K: ACCOUNT=curb-desk      fund 3e6; maker-approve 3e6; post $W credit 0.028e18 52e6 demo 1e6
-#                             (cert to Fri 2 Oct 06:00Z: counts while shut until Mon 28 Sep 04:30Z, past the reopen)
+#   K: ACCOUNT=curb-desk      fund 3e6; maker-approve; post $W credit 0.028e18 52e6 demo 1e6
+#                             (cert to Sat 17 Oct 06:00Z, under the 30-day MAX_LIFE: counts while shut until
+#                             Wed 14 Oct 04:30Z, so the loan's arc -- breached at the cut, cure frozen all weekend,
+#                             cured at Monday's reopen -- is not undone by the cert ageing out before the 7 Oct finale)
 #   A: (Agentic Wallet)       approve $W $CREDIT; deposit $W 0.05e18; borrow $W 1.4e6 before the cert -> Refusal
 #                             (NoDepth); after it -> ok (per-position 60% open; the book pays 1.456 in total)
 #   07:55Z cut:               flagBreach A $W  (1.4 > 30% of ~2.8)    -- cure frozen while shut
 #   fade (maker D, never K):  MAKER_ACCOUNT=curb-deployer MAKER_PWFILE=...:
-#                               maker-approve 2e6; post $W <A> 0.03e18 52e6 +93600 0.2e6; revoke
+#                               maker-approve; post $W <A> 0.03e18 52e6 +93600 0.2e6; revoke
 #                             A (Agentic Wallet): approve $W $DEPTH_CERT; take <id> 0.03e18 <A> -> Faded: D's bond
 #                             to A, A keeps her shares. K's depth is untouched.
 #
@@ -62,6 +75,7 @@
 #   DEPTH_CERT  DepthCert address (required for post/take)
 #   ACCOUNT     Foundry keystore name (required to send; e.g. curb-desk)
 #   PWFILE      path to that keystore's password file (required to send)
+#   MAKERS      makers shown by `status` (default: K and D)
 #   MAKER_ACCOUNT, MAKER_PWFILE, MAKER_FROM
 #               the cert maker for post / maker-approve / revoke (default: ACCOUNT, PWFILE, FROM). The fade demo's
 #               maker must not be K (curb-desk); the lead uses the deployer D.
@@ -75,7 +89,9 @@ set -euo pipefail
 SUFFIX="6464377535306e636b74356537323966100080218021802180218021802180218021" # ERC-8021, Builder Code dd7u50nckt5e729f
 USDG="0x4ae46a509F6b1D9056937BA4500cb143933D2dc8"
 DESK_K="0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E" # curb-desk: the demo's depth maker; never the fade maker
-DEMO_EXPIRY=1790920800                                 # Fri 2 Oct 2026 06:00:00Z
+DEPLOYER_D="0x78a5955b433988198bccA2E8bdC671444798f809" # the deployer: fade-demo maker
+DEMO_EXPIRY=1792216800                                 # Sat 17 Oct 2026 06:00:00Z (< 30 d MAX_LIFE from Fri 25 Sep)
+MAX_UINT=115792089237316195423570985008687907853269984665640564039457584007913129639935
 SHUT_HORIZON=$(( 73 * 3600 + 30 * 60 ))                # SHUT_CERT_LIFE + CURE_OPEN_SECONDS
 RPC_URL="${RPC_URL:-https://rpc.xlayer.tech}"
 CHAIN_ID=196
@@ -141,6 +157,22 @@ call() { cast call --rpc-url "$RPC_URL" "$@"; }
 credit() { [[ -n "${CREDIT:-}" ]] || die "set CREDIT to the CurbCredit address"; need_addr CREDIT "$CREDIT"; echo "$CREDIT"; }
 depth() { [[ -n "${DEPTH_CERT:-}" ]] || die "set DEPTH_CERT to the DepthCert address"; need_addr DEPTH_CERT "$DEPTH_CERT"; echo "$DEPTH_CERT"; }
 
+# Integer arithmetic on uint256 values (bash integers overflow at 2^63).
+big() { BC_LINE_LENGTH=0 bc <<<"$1"; }
+# Normalise an amount (e.g. 0.028e18) to a plain decimal integer, as cast would parse it.
+num() { cast to-dec "0x$(cast calldata 'f(uint256)' "$1" | cut -c 11-)"; }
+plain() { awk '{print $1}' <<<"$1"; }
+
+maker_health() {
+    local d m committed allowance balance ok
+    d="$1"; m="$2"
+    committed=$(plain "$(call "$d" 'committed(address)(uint256)' "$m")")
+    allowance=$(plain "$(call "$USDG" 'allowance(address,address)(uint256)' "$m" "$d")")
+    balance=$(plain "$(call "$USDG" 'balanceOf(address)(uint256)' "$m")")
+    ok=$(call "$d" 'isHonourable(address)(bool)' "$m")
+    log "  maker $m  committed=$committed  allowance=$allowance  balance=$balance  isHonourable=$ok"
+}
+
 cmd_status() {
     local c b="${1:-}" a="${2:-}"
     c=$(credit)
@@ -156,6 +188,32 @@ cmd_status() {
             log "    cure(active,lastOpen,openedAt,lastTickAt,used,priceAtBreach)=$(call "$c" 'cureOf(address,address)((bool,bool,uint64,uint64,uint64,uint128))' "$b" "$x")"
         fi
     done
+    if [[ -n "${DEPTH_CERT:-}" ]]; then
+        local d m
+        d=$(depth)
+        for m in ${MAKERS:-$DESK_K $DEPLOYER_D}; do maker_health "$d" "$m"; done
+    fi
+}
+
+# Warn (never block) when posting this cert would leave the maker unable to honour ALL its certs.
+post_preflight() {
+    local d="$1" maker="$2" size="$3" px="$4" bond="$5" committed allowance balance need
+    committed=$(plain "$(call "$d" 'committed(address)(uint256)' "$maker")")
+    allowance=$(plain "$(call "$USDG" 'allowance(address,address)(uint256)' "$maker" "$d")")
+    balance=$(plain "$(call "$USDG" 'balanceOf(address)(uint256)' "$maker")")
+    # After the post: committed' = committed + notional(size, px); the bond leaves the balance (and the allowance,
+    # unless it is unlimited).
+    need=$(big "$committed + ($(num "$size") * $(num "$px")) / 10^18")
+    local balAfter allowAfter
+    balAfter=$(big "$balance - $(num "$bond")")
+    if [[ "$allowance" == "$MAX_UINT" ]]; then allowAfter="$MAX_UINT"; else allowAfter=$(big "$allowance - $(num "$bond")"); fi
+    log "maker $maker: committed after post $need; balance after bond $balAfter; allowance after bond $allowAfter"
+    if [[ "$(big "$allowAfter < $need")" == 1 ]]; then
+        log "WARNING: allowance would not cover committed($need): EVERY cert of this maker stops counting (run maker-approve)"
+    fi
+    if [[ "$(big "$balAfter < $need")" == 1 ]]; then
+        log "WARNING: balance would not cover committed($need): EVERY cert of this maker stops counting (fund the maker)"
+    fi
 }
 
 expiry_of() {
@@ -226,6 +284,7 @@ main() {
             esac
             set -- "$1" "$3" "$4" "$5" "$6" # WRAPPER SIZE BIDPX EXPIRY BOND; the beneficiary is resolved into $ben
             as_maker
+            post_preflight "$(depth)" "$MAKER_ADDR" "$2" "$3" "$5"
             exp=$(expiry_of "$4")
             now=$(date +%s)
             counts_until=$(( exp - SHUT_HORIZON ))
@@ -239,9 +298,10 @@ main() {
             send_tx "$(depth)" "$(cast calldata 'post(address,address,uint128,uint128,uint64,uint128)' "$1" "$ben" "$2" "$3" "$exp" "$5")" \
                 "post cert: $2 of $1 at $3/share for $ben, expiry $exp, bond $5" ;;
         maker-approve)
-            [[ $# == 1 ]] || die "maker-approve AMOUNT"
+            [[ $# -le 1 ]] || die "maker-approve [AMOUNT] (default: unlimited)"
+            local amt="${1:-$MAX_UINT}"
             as_maker
-            send_tx "$USDG" "$(cast calldata 'approve(address,uint256)' "$(depth)" "$1")" "maker approves $1 USDG to DepthCert" ;;
+            send_tx "$USDG" "$(cast calldata 'approve(address,uint256)' "$(depth)" "$amt")" "maker approves $amt USDG to DepthCert" ;;
         revoke)
             [[ $# == 0 ]] || die "revoke (takes no arguments; uses MAKER_ACCOUNT)"
             as_maker

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {CurbCredit} from "../src/CurbCredit.sol";
+import {CurbCredit, IClockAssets} from "../src/CurbCredit.sol";
 import {DepthCert} from "../src/DepthCert.sol";
 import {IMarketClock} from "../src/interfaces/IMarketClock.sol";
 import {IScorecardPrice} from "../src/interfaces/IScorecardPrice.sol";
@@ -171,9 +171,4 @@ contract DeployW4 is Script {
         }
         require(!c.isAsset(0xff637d2d435D6745Df3faf61272B1216e7e8b727), "CurbCredit: wSHEINx must not be listed");
     }
-}
-
-/// @dev MarketClock's auto-generated `assets(address)` getter.
-interface IClockAssets {
-    function assets(address wrapper) external view returns (address raw, bytes4 mic, uint8 hoursMode, bool registered);
 }

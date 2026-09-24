@@ -15,7 +15,7 @@ import {MockWrapper4626} from "../mocks/MockWrapper4626.sol";
 import {MockClock} from "../mocks/MockClock.sol";
 import {MockScorecardPrice} from "../mocks/MockScorecardPrice.sol";
 import {MockDepthCert} from "../mocks/MockDepthCert.sol";
-import {AllowList} from "../CurbCredit.t.sol";
+import {AllowList, ModeClock} from "../CurbCredit.t.sol";
 import {CreditHandler, ISettableEligibility} from "./handlers/CreditHandler.sol";
 
 /// @notice CreditInvariant (P4, W3W4 spec): under random positions, regime flips, price and depth moves, breach
@@ -55,7 +55,8 @@ contract CreditInvariantTest is StdInvariant, Test {
         usdg = new MockERC20("Global Dollar", "USDG", 6);
         wA = new MockWrapper4626(address(0xA0), "Wrapped TCENTx", "wTCENTx");
         wB = new MockWrapper4626(address(0xB0), "Wrapped NVDAx", "wNVDAx");
-        clock = new MockClock();
+        ModeClock modes = new ModeClock();
+        clock = modes;
         sc = new MockScorecardPrice();
         dc = new MockDepthCert(IERC20(address(usdg)));
         elig = new AllowList();
@@ -63,6 +64,8 @@ contract CreditInvariantTest is StdInvariant, Test {
         sc.setPrice(address(wB), 220e18);
         assetList.push(address(wA));
         assetList.push(address(wB));
+        modes.setHoursMode(address(wA), 2); // wTCENTx-like: Regular (HKEX)
+        modes.setHoursMode(address(wB), 1); // wNVDAx-like: TwentyFourFive
 
         credit = new CurbCredit(
             IMarketClock(address(clock)),

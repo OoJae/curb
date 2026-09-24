@@ -9,6 +9,12 @@ import {IERC20} from "./interfaces/IERC20.sol";
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
 import {MulDiv} from "./lib/MulDiv.sol";
 
+/// @dev MarketClock's auto-generated `assets(address)` getter (not part of IMarketClock). hoursMode: 0 unknown,
+///      1 TwentyFourFive, 2 Regular, 3 MarketHours, 4 Always.
+interface IClockAssets {
+    function assets(address wrapper) external view returns (address raw, bytes4 mic, uint8 hoursMode, bool registered);
+}
+
 /// @title CurbCredit
 /// @notice A fixed-rate USDG reserve lending against tokenized-equity wrapper shares, whose loan-to-value is
 ///         published, depends on whether the primary market is open, and is capped by what a bonded bid would
@@ -47,10 +53,17 @@ import {MulDiv} from "./lib/MulDiv.sol";
 ///          expiry >= minCertExpiry(a) = now + life + CURE_OPEN_SECONDS, where with toNext =
 ///          clock.secondsToNextTransition(a):
 ///            open, toNext = 0 or >= MIN_CERT_LIFE + CURE_OPEN_SECONDS  -> life = MIN_CERT_LIFE
-///            open, 0 < toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS      -> life = toNext + SHUT_CERT_LIFE
+///            open, 0 < toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS,
+///                  and the asset's transitions can close it             -> life = toNext + SHUT_CERT_LIFE
 ///                                                     (a close is imminent: the cert must see the next reopen)
 ///            open, clock read reverts                                -> life = SHUT_CERT_LIFE (fail closed)
 ///            shut / UNKNOWN                                          -> life = max(SHUT_CERT_LIFE, toNext + 1 h)
+///
+///      "Can close it" reads the clock's `assets(a).hoursMode`: 2 Regular (e.g. HKEX, with a lunch recess) and
+///      3 MarketHours close at session ends, so an imminent transition there is treated as a close. 1 TwentyFourFive
+///      and 4 Always change PERIOD (MARKET -> EXTENDED -> OVERNIGHT, all with capacity) every few hours; for those
+///      the plain open rule applies, and the shut rule takes over once a real close is attested. An unknown mode
+///      (0) or a failed read is treated as closing (fail closed).
 ///
 ///      While shut, only certs that outlive the next reopen plus a full cure count. SHUT_CERT_LIFE (73 h) covers a
 ///      weekend plus margin without trusting any calendar; a longer closure (a holiday the attestor's published
@@ -130,6 +143,9 @@ contract CurbCredit {
     ///         caller 1/64 of what it forwarded, so passing this check means an out-of-gas callee was given at
     ///         least 63 * GAS_FLOOR (3.15M) -- far above the worst honouredDepth (8-cert book, 16 certs a maker).
     uint256 public constant GAS_FLOOR = 50_000;
+    /// @dev MarketClock hours modes whose transitions are period changes, not closes (see WHICH CERTS COUNT).
+    uint256 internal constant HOURS_TWENTY_FOUR_FIVE = 1;
+    uint256 internal constant HOURS_ALWAYS = 4;
     uint256 internal constant BPS = 1e4;
     uint256 internal constant YEAR = 365 days;
 
@@ -692,9 +708,13 @@ contract CurbCredit {
         (bool ok, uint256 toNext) = _toNext(asset);
         uint256 life;
         if (open) {
-            if (!ok) life = SHUT_CERT_LIFE; // cannot tell whether a close is imminent: assume it is
-            else if (toNext > 0 && toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS) life = toNext + SHUT_CERT_LIFE;
-            else life = MIN_CERT_LIFE;
+            if (!ok) {
+                life = SHUT_CERT_LIFE; // cannot tell whether a close is imminent: assume it is
+            } else if (toNext > 0 && toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS && _closesAtTransitions(asset)) {
+                life = toNext + SHUT_CERT_LIFE;
+            } else {
+                life = MIN_CERT_LIFE;
+            }
         } else {
             life = SHUT_CERT_LIFE;
             if (ok && toNext + MIN_CERT_LIFE > life) life = toNext + MIN_CERT_LIFE;
@@ -709,6 +729,20 @@ contract CurbCredit {
             _notStarved();
             return (false, 0);
         }
+    }
+
+    /// @dev False only for hours modes whose transitions are period changes with capacity on both sides
+    ///      (1 TwentyFourFive, 4 Always). Reads MarketClock's `assets(a)` getter defensively: a revert, short or
+    ///      malformed return data, or mode 0 (unknown) all count as closing.
+    function _closesAtTransitions(address asset) internal view returns (bool) {
+        (bool ok, bytes memory ret) = address(clock).staticcall(abi.encodeWithSelector(IClockAssets.assets.selector, asset));
+        if (!ok) {
+            _notStarved();
+            return true;
+        }
+        if (ret.length < 128) return true;
+        (,, uint256 hoursMode,) = abi.decode(ret, (uint256, uint256, uint256, uint256));
+        return !(hoursMode == HOURS_TWENTY_FOUR_FIVE || hoursMode == HOURS_ALWAYS);
     }
 
     function _isOpen(address asset) internal view returns (bool) {

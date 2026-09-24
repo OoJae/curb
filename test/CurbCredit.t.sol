@@ -25,6 +25,20 @@ contract AllowList is IEligibility {
     }
 }
 
+/// @notice MockClock plus MarketClock's `assets(address)` getter, so a test can set an asset's hours mode
+///         (0 unknown, 1 TwentyFourFive, 2 Regular, 3 MarketHours, 4 Always). Unset assets read mode 0.
+contract ModeClock is MockClock {
+    mapping(address => uint8) public hoursMode;
+
+    function setHoursMode(address wrapper, uint8 mode) external {
+        hoursMode[wrapper] = mode;
+    }
+
+    function assets(address wrapper) external view returns (address raw, bytes4 mic, uint8 mode, bool registered) {
+        return (address(0), bytes4(0), hoursMode[wrapper], true);
+    }
+}
+
 /// @notice An 18-dp token that tries to re-enter CurbCredit from inside `transferFrom`.
 contract ReentrantWrapper {
     uint8 public constant decimals = 18;
@@ -80,6 +94,7 @@ abstract contract CreditBase is Test {
     MockWrapper4626 wB;
     MockWrapper4626 wX; // not supported by CurbCredit
     MockClock clock;
+    ModeClock modes; // the same contract as `clock`
     MockScorecardPrice sc;
     MockDepthCert dc;
     AllowList elig;
@@ -99,7 +114,8 @@ abstract contract CreditBase is Test {
         wA = new MockWrapper4626(address(0xA0), "Wrapped TCENTx", "wTCENTx");
         wB = new MockWrapper4626(address(0xB0), "Wrapped NVDAx", "wNVDAx");
         wX = new MockWrapper4626(address(0xC0), "Wrapped SHEINx", "wSHEINx");
-        clock = new MockClock();
+        modes = new ModeClock();
+        clock = modes;
         sc = new MockScorecardPrice();
         dc = new MockDepthCert(IERC20(address(usdg)));
         elig = new AllowList();
@@ -526,6 +542,89 @@ contract CurbCreditTest is CreditBase {
         assertEq(credit.ltvFor(address(wA)), 0, "a 26 h cert cannot see the reopen plus a cure");
         (bool known, bool breached) = credit.isBreached(alice, address(wA));
         assertTrue(known && breached);
+    }
+
+    // --- hours modes: only a session-ending transition is treated as a close -----------------------------
+
+    function _usBook(uint64 life) internal {
+        dc.setDepth(address(wB), address(credit), 10e18, 210e6, uint64(block.timestamp) + life); // bid > $200 price
+    }
+
+    /// The final re-review's HIGH: a 24/5 name crossing MARKET -> EXTENDED (capacity on both sides) must keep its
+    /// depth, its ratio and its loans. (Regression of ReviewPoC::test_us_session_boundary_liquidates_healthy_position.)
+    function test_24_5_period_change_is_not_a_close() public {
+        modes.setHoursMode(address(wB), 1); // TwentyFourFive
+        clock.setNextTransition(address(wB), uint64(block.timestamp + 6 hours)); // 20:00Z MARKET -> EXTENDED
+        _usBook(26 hours);
+        _deposit(alice, address(wB), 10e18);
+        assertTrue(_borrow(alice, address(wB), 1000e6)); // limit 1200 = 60% of 2000
+        assertEq(credit.ltvFor(address(wB)), 6000);
+
+        vm.warp(block.timestamp + 4 hours + 30 minutes + 1); // 1 h 29 before the period change
+        _open(address(wB));
+        assertEq(credit.minCertExpiry(address(wB)), block.timestamp + 1 hours + 30 minutes, "plain open rule");
+        assertEq(credit.ltvFor(address(wB)), 6000, "the cert still counts");
+        (bool known, bool breached) = credit.isBreached(alice, address(wB));
+        assertTrue(known && !breached);
+        vm.expectRevert(CurbCredit.NotBreached.selector);
+        credit.flagBreach(alice, address(wB));
+
+        vm.warp(block.timestamp + 1 hours + 30 minutes); // EXTENDED, still with capacity
+        clock.set(address(wB), IMarketClock.Regime.EXTENDED, 1_000_000);
+        clock.setNextTransition(address(wB), uint64(block.timestamp + 4 hours));
+        assertEq(credit.ltvFor(address(wB)), 6000, "nothing ever closed");
+        assertTrue(_borrow(alice, address(wB), 100e6), "and lending carries on");
+    }
+
+    function test_always_mode_is_not_a_close() public {
+        modes.setHoursMode(address(wB), 4); // Always
+        clock.setNextTransition(address(wB), uint64(block.timestamp + 30 minutes));
+        _usBook(26 hours);
+        assertEq(credit.ltvFor(address(wB)), 6000);
+    }
+
+    /// HK names (Regular) and MarketHours names keep the conservative imminent-close rule.
+    function test_regular_and_market_hours_keep_the_imminent_close_rule() public {
+        uint8[2] memory closing = [uint8(2), uint8(3)];
+        for (uint256 i; i < closing.length; ++i) {
+            modes.setHoursMode(address(wB), closing[i]);
+            clock.setNextTransition(address(wB), uint64(block.timestamp + 1 hours));
+            _usBook(26 hours);
+            assertEq(credit.ltvFor(address(wB)), 0, "a close 1 h away: a 26 h cert cannot see the reopen");
+            assertEq(credit.minCertExpiry(address(wB)), block.timestamp + 1 hours + 73 hours + 30 minutes);
+            _usBook(1 hours + 73 hours + 30 minutes);
+            assertEq(credit.ltvFor(address(wB)), 6000);
+        }
+    }
+
+    /// Unknown mode (0), a reverting `assets()`, or malformed return data all fail closed to the conservative rule.
+    function test_unknown_or_unreadable_hours_mode_fails_closed() public {
+        clock.setNextTransition(address(wB), uint64(block.timestamp + 1 hours));
+        _usBook(26 hours);
+        modes.setHoursMode(address(wB), 0);
+        assertEq(credit.ltvFor(address(wB)), 0, "mode 0: conservative");
+
+        modes.setHoursMode(address(wB), 1);
+        assertEq(credit.ltvFor(address(wB)), 6000, "mode 1: plain open rule");
+        vm.mockCallRevert(address(clock), abi.encodeWithSelector(ModeClock.assets.selector), "x");
+        assertEq(credit.ltvFor(address(wB)), 0, "assets() reverts: conservative");
+        vm.clearMockedCalls();
+        vm.mockCall(address(clock), abi.encodeWithSelector(ModeClock.assets.selector), hex"01");
+        assertEq(credit.ltvFor(address(wB)), 0, "short return data: conservative");
+        vm.clearMockedCalls();
+        assertEq(credit.ltvFor(address(wB)), 6000);
+    }
+
+    /// A clock without the `assets()` getter at all (the plain MockClock) is read as unknown: conservative.
+    function test_clock_without_assets_getter_fails_closed() public {
+        MockClock plain = new MockClock();
+        address[] memory list = new address[](1);
+        list[0] = address(wB);
+        CurbCredit c2 = new CurbCredit(plain, sc, dc, elig, IERC20(address(usdg)), admin, list);
+        plain.set(address(wB), IMarketClock.Regime.MARKET, 20_000_000);
+        plain.setNextTransition(address(wB), uint64(block.timestamp + 1 hours));
+        dc.setDepth(address(wB), address(c2), 10e18, 210e6, uint64(block.timestamp + 26 hours));
+        assertEq(c2.ltvFor(address(wB)), 0);
     }
 
     // --- effective ratio: depth leaving is a margin call ---------------------------------------------------
