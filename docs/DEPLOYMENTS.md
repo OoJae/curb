@@ -155,6 +155,26 @@ on the hostname would make the index immutable too, so the publisher sets `Cache
 **Not yet done, deliberately:** the three R2 API tokens (host A, host B, keeper) are created when the
 publisher exists, so the secrets go straight to where they are used instead of sitting unused.
 
+## X Layer Builder Code — `dd7u50nckt5e729f`, 24 Sept 2026
+
+Minted from the OKX developer portal by `0xacaf…e490`: tx
+[`0xc3315eb4…051b`](https://www.oklink.com/xlayer/tx/0xc3315eb4785c394567ee74e86ee6210443bb0ea80fac8564d15a4598482f051b),
+block 71,444,945, status 1, 110,651 gas. Registry (ERC-721 "Builder Codes" / `BUILDERCODE`):
+mainnet `0xd6c426f9c077358735622ae5a83468dc0510823b`; testnet `0x33907e98d7392d95212b05ab03f091e02d7815bf`.
+
+ERC-8021 **schema 0**, per OKX's own integration guide (no registry address or chain id embedded).
+The suffix is a 34-byte constant, derived with OKX's `ox@1.7.5` `Attribution.toDataSuffix` and
+checked byte-for-byte against the hand formula `utf8(code) ‖ 0x10 ‖ 0x00 ‖ 0x8021×8`:
+
+```
+0x6464377535306e636b74356537323966100080218021802180218021802180218021
+```
+
+It round-trips through `Attribution.fromData` to `{codes: ["dd7u50nckt5e729f"], id: 0}`. **Not yet
+attached to any Curb transaction.** It goes inside `Sender.prepare()` before the `eth_call`
+simulation, after one mainnet `eth_call` confirms the target functions ignore trailing calldata.
+Attribution is visible on OKLink next to each transaction hash.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
