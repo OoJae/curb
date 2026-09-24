@@ -20,11 +20,27 @@ import {MulDiv} from "./lib/MulDiv.sol";
 ///      clears with a single bidder: the price falls linearly from `startPrice` to `floorPrice` over
 ///      `decaySeconds`, sits at the floor until `endAt`, and the first acceptable bid takes the whole lot.
 ///
-///      NO HINDSIGHT. Bids are accepted only while the market is still CLOSED with zero primary capacity,
-///      and only in the same ReopenPointer epoch the note was minted in (checked through `pointer.observe`,
-///      which also records a reopen if it has happened). Once the reopen is witnessed, nobody can buy a
-///      note at a price set before it. `realisedDiscountBps` later grades every sale against the pointer's
-///      write-once reopen print: the discount the buyer actually earned, or the premium they paid.
+///      NO HINDSIGHT, TWO LAYERS.
+///
+///      1. The cutoff (the binding rule). ReopenPointer counts only WITNESSED reopens: its epoch moves when
+///         somebody calls `observe` while the market is open. If a whole session passes with nobody observing,
+///         the epoch at the next closure still equals the note's `epochAtMint`, and the epoch check below
+///         would let a stale lot be bought by someone who already knows how the reopen moved. The pre-open
+///         auction leaks the same way: HKEX publishes an indicative price from 09:00 HKT, before primary
+///         capacity returns. So `list` pins every lot to the closure segment it was listed in: it reads
+///         MarketClock's `nextTransitionAt` (the next scheduled regime boundary, attested with the regime),
+///         requires it to be in the future, and requires `endAt <= cutoff`. A reopen can only happen at or
+///         after a scheduled boundary, so no lot can still be live when the market reopens, whether or not
+///         anyone witnessed it. `stateOf` does not fail closed on a stale attestation, but a stale state has
+///         a past `nextTransitionAt`, so a missing or stale boundary refuses the listing (`NoCutoff`).
+///         The boundary is the NEXT one, not necessarily the reopen: in the minutes before the 12:00 HKT
+///         lunch reopen it is 12:00, and overnight before 09:00 HKT it is 09:00. Lots must fit inside it.
+///      2. The witnessed epoch (defence in depth). Bids are accepted only while the market is still CLOSED
+///         with zero primary capacity, and only in the same pointer epoch the note was minted in (checked
+///         through `pointer.observe`, which records a reopen itself if one is under way).
+///
+///      `realisedDiscountBps` later grades every sale against the pointer's write-once reopen print: the
+///      discount the buyer actually earned, or the premium they paid.
 ///
 ///      No admin, no fees, no upgrade path. Money moves straight from buyer to seller; the contract only
 ///      ever holds notes in escrow for live lots.
@@ -43,6 +59,8 @@ contract ClosedAuction is IERC1155Receiver {
     error NotSold();
     error Unsolicited();
     error Reentrant();
+    error NoCutoff();
+    error SpansTransition(uint64 cutoff);
 
     enum Status {
         NONE,
@@ -68,6 +86,7 @@ contract ClosedAuction is IERC1155Receiver {
         address buyer;
         uint128 clearedPrice;
         uint64 clearedAt;
+        uint64 cutoff;         // MarketClock nextTransitionAt at listing; endAt <= cutoff
     }
 
     event Listed(
@@ -138,7 +157,9 @@ contract ClosedAuction is IERC1155Receiver {
     // --- selling ----------------------------------------------------------------------------------
 
     /// @notice Escrow `amount` units of note `noteId` and start the clock now.
-    /// @dev The seller must first call `note.setApprovalForAll(address(this), true)`.
+    /// @dev The seller must first call `note.setApprovalForAll(address(this), true)`. `endAt` must not pass
+    ///      the wrapper's next scheduled regime boundary (`clock.stateOf(w).nextTransitionAt`), so the lot
+    ///      cannot outlive the closure segment it was listed in (see the contract NatSpec).
     function list(
         uint256 noteId,
         uint128 amount,
@@ -157,6 +178,11 @@ contract ClosedAuction is IERC1155Receiver {
         if (!_shut(w)) revert MarketNotClosed();
         if (pointer.epochOf(w) != u.epochAtMint) revert ReopenedSinceMint();
 
+        // Fail closed: no boundary, or one already passed (a stale attestation), means no listing.
+        uint64 cutoff = clock.stateOf(w).nextTransitionAt;
+        if (cutoff == 0 || cutoff <= block.timestamp) revert NoCutoff();
+        if (endAt > cutoff) revert SpansTransition(cutoff);
+
         uint128 ref = _refPrice(w, amount);
         lotId = ++lotCount;
         Lot storage l = _lots[lotId];
@@ -172,6 +198,7 @@ contract ClosedAuction is IERC1155Receiver {
         l.decaySeconds = decaySeconds;
         l.epochAtMint = u.epochAtMint;
         l.status = Status.LIVE;
+        l.cutoff = cutoff;
         emit Listed(lotId, noteId, msg.sender, w, amount, startPrice, floorPrice, endAt, ref);
 
         note.safeTransferFrom(msg.sender, address(this), noteId, amount, "");

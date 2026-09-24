@@ -18,8 +18,11 @@ const bWeekSlots = Object.values(schedModules)[0]?.weekSlots;
 export function weekSlotsNow(nowMs = Date.now()): { slots: SlotState[]; nowIndex: number; source: 'schedule' | 'timetable' } {
   if (bWeekSlots) {
     try {
-      const w = bWeekSlots(nowMs);
-      return { ...w, source: 'schedule' };
+      // Lane B's schedule returns `open: boolean[]` (one per five-minute slot); the strip wants states.
+      const w = bWeekSlots(nowMs) as unknown as { slots?: SlotState[]; open?: readonly boolean[]; nowIndex: number };
+      const slots = w.slots ?? (w.open ?? []).map((o): SlotState => (o ? 'open' : 'shut'));
+      if (slots.length === 0) throw new Error('schedule.weekSlots returned no slots');
+      return { slots, nowIndex: w.nowIndex, source: 'schedule' };
     } catch (err) {
       console.warn('schedule.weekSlots failed; using the timetable', err);
     }
