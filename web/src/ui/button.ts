@@ -3,7 +3,7 @@
  *
  * txButton(el, run): the transaction states from spec §3 micro-interactions.
  *   pending   → the label becomes a 16 px C whose amber arc turns once every 1.6 s
- *   confirmed → the two C halves rotate ±62° (MARK.cHalfGapDeg) to meet; status: "Confirmed in block N ↗ ·
+ *   confirmed → the two C halves the C and its arc give way to a closed ring (the loop closes); status: "Confirmed in block N ↗ ·
  *               Builder Code dd7u50nckt5e729f attached"
  *   reverted  → the arc stops; status: "Reverted: ErrorName()"
  *
@@ -14,7 +14,7 @@
  *     return { hash, block: r.blockNumber };
  *   });
  */
-import { ARC_PATH, C_BOTTOM_PATH, C_TOP_PATH, MARK_VIEWBOX } from '../shell/mark';
+import { ARC_PATH, C_BOTTOM_PATH, C_TOP_PATH, MARK_VIEWBOX, RING_PATH } from '../shell/mark';
 import { EXTERNAL } from '../shell/markup';
 import { fmtBlock } from './format';
 import { html } from './html';
@@ -61,7 +61,8 @@ const svg = (cls: string, d: string) =>
   `<svg class="${cls}" viewBox="${MARK_VIEWBOX}" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg"><path class="${cls.includes('arc') ? 'mark__arc' : 'mark__c'}" d="${d}"/></svg>`;
 
 /** The spinner: two C halves and the arc, stacked, so each can rotate about the mark's centre. */
-export const SPINNER_HTML = svg('spin__top', C_TOP_PATH) + svg('spin__bottom', C_BOTTOM_PATH) + svg('spin__arc', ARC_PATH);
+export const SPINNER_HTML =
+  svg('spin__top', C_TOP_PATH) + svg('spin__bottom', C_BOTTOM_PATH) + svg('spin__arc', ARC_PATH) + svg('spin__ring', RING_PATH);
 
 /** Best-effort "ErrorName()" from viem / wallet errors. */
 export function defaultErrorName(err: unknown): string {
