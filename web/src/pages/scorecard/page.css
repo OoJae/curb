@@ -434,6 +434,16 @@
   font-stretch: var(--wdth-code);
 }
 
+.sc-m__live {
+  min-height: calc(3em * var(--lh-body));
+  padding-top: var(--s-2);
+  border-top: var(--rule) solid var(--hairline);
+}
+
+.sc-headline {
+  margin-top: var(--s-5);
+}
+
 .sc-formula {
   padding: var(--s-1-5) var(--s-2);
   border: var(--rule) solid var(--hairline-strong);

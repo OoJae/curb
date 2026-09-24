@@ -187,10 +187,16 @@
 
 .api-kv > div {
   display: grid;
-  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
-  gap: var(--s-2);
+  grid-template-columns: minmax(0, 1fr);
   padding-block: var(--s-half);
   border-bottom: var(--rule) solid var(--hairline);
+}
+
+@media (min-width: 768px) {
+  .api-kv > div {
+    grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+    gap: var(--s-2);
+  }
 }
 
 .api-kv dt {

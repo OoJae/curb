@@ -183,6 +183,19 @@ function renderTally(v: ScorecardView): void {
   }
   const m1 = v.rows.filter((r) => r.methodShort === 'mark/1').length;
   const m2 = v.rows.filter((r) => r.methodShort === 'mark/2').length;
+  const m1Live = $('[data-sc-m1-live]');
+  if (m1Live) {
+    const graded = v.rows.filter((r) => r.methodShort === 'mark/1' && r.status === 'settled');
+    const t = graded.filter((r) => r.vsLastPrint === 'tie').length;
+    const w = graded.filter((r) => r.vsLastPrint === 'win').length;
+    const l = graded.filter((r) => r.vsLastPrint === 'loss').length;
+    const flat = graded.filter((r) => r.markE18 === r.lastPrintE18).length;
+    const moved = Math.max(0, ...graded.map((r) => r.lastPrintErrorBps ?? 0));
+    const tally = [w ? plural(w, 'win', 'wins') : '', t ? plural(t, 'tie', 'ties') : '', l ? plural(l, 'loss', 'losses') : ''].filter(Boolean).join(', ');
+    m1Live.textContent = graded.length
+      ? `On the record: ${plural(graded.length, 'settled mark/1 row', 'settled mark/1 rows')}, ${tally || 'none decided'}. In ${fmtInt(flat)} of them the mark was exactly the last print, while the reopen landed as far as ${fmtInt(moved)} bp from it.`
+      : '';
+  }
   const m1El = $('[data-sc-m1-count]');
   const m2El = $('[data-sc-m2-count]');
   if (m1El) m1El.textContent = m1 ? `${plural(m1, 'row', 'rows')} on the record` : 'No rows on the record';
