@@ -25,6 +25,24 @@
  *   (PendingUnresolved). After STUCK_MS the new round REPLACES it at the same nonce, outbidding the pooled
  *   transaction on both fee cap and tip. The stuck row stays tracked until the replacement is accepted,
  *   and replaced rows stay tracked until their nonce is confirmed, so whichever one mines is recorded.
+ *
+ * Attribution (ERC-8021, the X Layer Builder Code; 24 Sep 2026):
+ * - An optional `dataSuffix` is appended to the calldata of every transaction this key signs. Solidity's
+ *   ABI decoder reads only the arguments and ignores trailing bytes, so the contract executes exactly as
+ *   before; the suffix exists only so OKX can attribute the transaction to Curb. It is off unless set.
+ * - It is applied ONCE, on the first line of prepare(), before the simulation. The eth_call, the gas
+ *   estimate and the signature therefore all see the bytes that are actually sent (the suffix costs
+ *   ~536 gas on a real attestBatch, so an estimate without it would be short), and every later path --
+ *   the 12s fee bump, a stuck-row replacement -- re-signs Prepared.data, which already carries it.
+ * - The caller's calldata is never rewritten. The keeper freezes CommitPlan.data WITHOUT the suffix and
+ *   reuses it on every retry, and closure ids and input roots are computed from arguments, never from
+ *   bytes, so switching attribution on or off can never change a row's id or split one closure into two.
+ * - A malformed suffix is refused when the Sender is built, before the outbox is opened: a typo must stop
+ *   the service at boot, not append garbage to every transaction or quietly attribute them to nobody.
+ *   "Malformed" is everything but schema 0 carrying printable Builder Codes (review, 24 Sep 2026: a one-
+ *   character slip in the schema byte, or a code of NUL bytes, used to pass). A well-formed code that is
+ *   simply the WRONG one cannot be caught here; builderCodes() prints it in plain text for the boot log
+ *   and /healthz, and a test pins every DATA_SUFFIX committed to a deploy config to Curb's own code.
  */
 import { DatabaseSync } from "node:sqlite";
 import { Transaction, Interface } from "ethers";
@@ -41,6 +59,64 @@ export const STUCK_MS = 120_000;
 
 export type RpcFn = (url: string, method: string, params: unknown[]) => Promise<unknown>;
 
+/** Every ERC-8021 suffix ends with these 16 bytes. A parser reads from the end, so they must be last. */
+export const ERC8021_MARKER = "80218021802180218021802180218021";
+
+/**
+ * Validate an ERC-8021 data suffix. Returns it lower-cased, or "" (attribution off) for undefined or "".
+ *
+ * Strict, because it is a hand-set config value appended to every transaction, and almost every way it can
+ * be wrong is SILENT: the transaction still mines and is credited to nobody, or to someone else. So:
+ * - 0x-prefixed hex of whole bytes, ending in the marker, long enough to carry the codes-length and
+ *   schema-id bytes that sit in front of it.
+ * - Schema 0 (plain Builder Codes) and nothing else. It is the only kind Curb sends, and no other schema
+ *   can be checked beyond the marker, so accepting them let a one-character slip in the schema byte
+ *   (00 -> 01) turn Curb's code into a schema-1 payload that nobody reads as Curb's.
+ * - The declared codes length matches what is there: that catches a byte dropped or pasted twice.
+ * - The codes are what a Builder Code is: printable ASCII (0x21-0x7e), comma-delimited, none empty. That
+ *   refuses NULs, whitespace, stray bytes and doubled commas, none of which any registry would credit.
+ * What it cannot catch is a well-formed code that is the wrong one (dd7u50nckt5e729g); see builderCodes().
+ */
+export function normalizeDataSuffix(raw: string | undefined): string {
+  if (raw === undefined || raw === "") return "";
+  if (!/^0x[0-9a-fA-F]*$/.test(raw)) throw new Error(`dataSuffix must be 0x-prefixed hex, got ${JSON.stringify(raw)}`);
+  if (raw.length % 2 !== 0) throw new Error(`dataSuffix must be whole bytes (even-length hex), got ${JSON.stringify(raw)}`);
+  const hex = raw.slice(2).toLowerCase();
+  if (!hex.endsWith(ERC8021_MARKER)) throw new Error(`dataSuffix ${raw} does not end with the ERC-8021 marker 0x${ERC8021_MARKER}`);
+  const bytes = hex.length / 2;
+  if (bytes < 18) throw new Error(`dataSuffix ${raw} is too short to carry a codes length and a schema id before the marker`);
+  const schemaId = parseInt(hex.slice(-34, -32), 16);
+  const codesLength = parseInt(hex.slice(-36, -34), 16);
+  if (schemaId !== 0) throw new Error(`dataSuffix ${raw} declares ERC-8021 schema ${schemaId}; Curb sends only schema 0 (plain Builder Codes)`);
+  if (codesLength === 0) throw new Error(`dataSuffix ${raw} is schema 0 with no Builder Code in it`);
+  if (bytes !== codesLength + 18) {
+    throw new Error(`dataSuffix ${raw} declares ${codesLength} bytes of schema-0 codes but carries ${bytes - 18}`);
+  }
+  const codes = Buffer.from(hex.slice(0, -36), "hex");
+  for (const [i, b] of codes.entries()) {
+    if (b < 0x21 || b > 0x7e) {
+      throw new Error(`dataSuffix ${raw} has byte 0x${b.toString(16).padStart(2, "0")} at position ${i} of its codes; a Builder Code is printable ASCII`);
+    }
+  }
+  if (codes.toString("ascii").split(",").includes("")) {
+    throw new Error(`dataSuffix ${raw} has an empty Builder Code (a leading, trailing or doubled comma)`);
+  }
+  return "0x" + hex;
+}
+
+/**
+ * The Builder Codes a data suffix carries, in plain text; [] when attribution is off. Throws exactly when
+ * normalizeDataSuffix does.
+ *
+ * This is the answer to the one mistake the validator cannot see, a well-formed but wrong code: 34 bytes of
+ * hex are unreadable, so the boot log and /healthz print this instead, where a person sees
+ * "dd7u50nckt5e729g" at a glance, and the deploy configs' literals are pinned to Curb's code by a test.
+ */
+export function builderCodes(dataSuffix: string | undefined): string[] {
+  const hex = normalizeDataSuffix(dataSuffix);
+  return hex === "" ? [] : Buffer.from(hex.slice(2, -36), "hex").toString("ascii").split(",");
+}
+
 export interface SenderOptions {
   wallet: Wallet | HDNodeWallet;
   rpcs: string[];
@@ -50,6 +126,8 @@ export interface SenderOptions {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   errorInterface?: Interface;
+  /** ERC-8021 attribution suffix appended to every transaction's calldata; undefined or "" is off. */
+  dataSuffix?: string;
 }
 
 export interface Prepared {
@@ -61,6 +139,7 @@ export interface Prepared {
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
   to: string;
+  /** The calldata as signed: the caller's plus any attribution suffix. A fee bump re-signs exactly this. */
   data: string;
   /** The stuck row this transaction replaces, if any; its hash may still mine instead. */
   replaces?: { id: string; hash: string };
@@ -110,8 +189,12 @@ export class Sender {
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private chain: Promise<unknown> = Promise.resolve();
+  /** The ERC-8021 suffix every transaction carries, lower-cased; "" when attribution is off. */
+  readonly dataSuffix: string;
 
   constructor(o: SenderOptions) {
+    // First, before the outbox is touched: a Sender with a bad suffix must not exist at all.
+    this.dataSuffix = normalizeDataSuffix(o.dataSuffix);
     this.o = o;
     this.now = o.now ?? Date.now;
     this.sleep = o.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
@@ -217,8 +300,29 @@ export class Sender {
     return data ?? (err instanceof Error ? err.message : String(err));
   }
 
-  /** Simulate, size gas, sign. Does not broadcast. */
-  prepare(to: string, data: string, meta: { id: string; kind: string; targetMs: number }): Promise<Prepared> {
+  /**
+   * The calldata actually sent: the caller's with the attribution suffix appended.
+   *
+   * Never twice: calldata that already ends with the exact configured suffix is returned as it is, so a
+   * caller that hands back a Prepared.data, or attributed its own calldata, cannot stack a second copy.
+   * Anything else -- including calldata ending in some OTHER ERC-8021 suffix -- is treated as ordinary
+   * calldata and gets ours appended, because a parser reads attribution from the end and only the last
+   * suffix counts. (ABI calldata ending in these 34 exact bytes by accident is not a practical concern,
+   * and would lose nothing: the arguments are untouched and the tail still reads as our attribution.)
+   */
+  private attributed(callData: string): string {
+    if (!this.dataSuffix) return callData;
+    const tail = this.dataSuffix.slice(2);
+    return callData.toLowerCase().endsWith(tail) ? callData : callData + tail;
+  }
+
+  /**
+   * Simulate, size gas, sign. Does not broadcast. `callData` is the caller's and is never modified; the
+   * returned Prepared.data is what was simulated, estimated and signed, attribution included.
+   */
+  prepare(to: string, callData: string, meta: { id: string; kind: string; targetMs: number }): Promise<Prepared> {
+    // Attribution is applied here and nowhere else, so every step below sees the bytes that are sent.
+    const data = this.attributed(callData);
     return this.exclusive(async () => {
       const existing = this.db.prepare("select * from outbox where id = ?").get(meta.id);
       if (existing) throw new Error(`round ${meta.id} was already prepared`);

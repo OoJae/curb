@@ -38,7 +38,7 @@ import type { PriorObservation } from "./derive.ts";
 import { boundaries } from "./calendar.ts";
 import type { ExchangeSchedule } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
-import { Sender, RevertedInSimulation, PendingUnresolved } from "./tx/sender.ts";
+import { Sender, RevertedInSimulation, PendingUnresolved, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
 import { TakeoverPlanner, readChainStates } from "./coord.ts";
 import type { Alarm, PlannerSnapshot } from "./coord.ts";
 import { checkRound, compareObservation, signWitness, Observation, isBundleShaped } from "./witness.ts";
@@ -54,13 +54,17 @@ type Mode = (typeof MODES)[number];
 /**
  * Parsed without throwing. A bad value is recorded and raised inside main(), so it goes through the
  * logged fatal path with backoff instead of crashing at import time into a hot restart loop.
+ * Exported so tests can check parsing; calling it has no side effects beyond reading process.env.
  */
-function loadConfig() {
+export function loadConfig() {
   const env = (k: string, d?: string) => process.env[k] ?? d;
   const list = (s: string | undefined) => (s ?? "").split(",").map((x) => x.trim()).filter(Boolean);
   const errors: string[] = [];
   const addr = (name: string, v: string, fallback: string) => {
     try { return getAddress(v); } catch { errors.push(`${name} is not a valid checksummed address: ${JSON.stringify(v)}`); return fallback; }
+  };
+  const suffix = (name: string, v: string) => {
+    try { return normalizeDataSuffix(v.trim()); } catch (e) { errors.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); return ""; }
   };
   const rawMode = (env("MODE") ?? "shadow").trim();
   if (!(MODES as readonly string[]).includes(rawMode)) errors.push(`MODE must be one of ${MODES.join("|")}, got ${JSON.stringify(rawMode)}`);
@@ -86,6 +90,14 @@ function loadConfig() {
       .map((a, i) => addr(`EXPECTED_ATTESTORS[${i}]`, a, zero)),
     witnessFromBlock: env("WITNESS_FROM_BLOCK") ? Number(env("WITNESS_FROM_BLOCK")) : null,
     witnessMaxBlocksPerTick: 3000,
+    /**
+     * ERC-8021 attribution: the X Layer Builder Code suffix the Sender appends to every transaction this
+     * host signs (attestBatch rounds and host B takeovers alike). Empty, the default, is off. Checked HERE
+     * as well as in the Sender, so a typo is a fatal config error before anything else happens -- the
+     * deploy's health check fails loudly -- rather than a host that boots, loads its key, and then
+     * throws on the first round it tries to send.
+     */
+    dataSuffix: suffix("DATA_SUFFIX", env("DATA_SUFFIX", "")!),
   };
   if (!Number.isInteger(cfg.chainId)) errors.push("CHAIN_ID is not an integer");
   if (cfg.rpcs.length === 0) errors.push("RPCS is empty");
@@ -184,6 +196,22 @@ interface Health {
     last?: { root: string; tx: string; attestor: string; reproduced: boolean; labelsConsistent: boolean; observation: number; atMs: number };
   };
   lastTakeover?: { root: string; tx: string; kind: RoundKind; reasons: string[]; atMs: number };
+  /** ERC-8021 Builder Code attribution. The suffix is in every transaction's calldata, so it is public. */
+  attribution: { on: boolean; dataSuffix: string | null; codes: string[] };
+}
+
+/**
+ * What /healthz says about attribution: what the live Sender appends, not what DATA_SUFFIX says.
+ *
+ * They differ in keyless shadow mode. There is no key, so no Sender, so nothing is signed and nothing is
+ * attributed however DATA_SUFFIX is set -- and a health page reading `on: true` there would be taken as
+ * proof that attribution is live when no transaction carries it. The codes are decoded so a person can
+ * read the Builder Code itself; 34 bytes of hex hide a mistyped one. (The boot log's `attribution` line
+ * reports the configuration, before the key is loaded; this is the one to trust.)
+ */
+export function attributionHealth(sender: { readonly dataSuffix: string } | null): Health["attribution"] {
+  const dataSuffix = sender?.dataSuffix || null;
+  return { on: dataSuffix !== null, dataSuffix, codes: builderCodes(dataSuffix ?? "") };
 }
 
 /** key -> when and at what severity it was last delivered. A higher severity is never suppressed by a lower one. */
@@ -261,6 +289,10 @@ async function raise(a: Alarm, fields: Record<string, unknown> = {}): Promise<bo
 
 async function main() {
   if (CONFIG_ERRORS.length) throw new Error(`invalid configuration: ${CONFIG_ERRORS.join("; ")}`);
+  // Logged before anything can fail, so every boot says whether its transactions will be attributed.
+  log("attribution", CFG.dataSuffix
+    ? { on: true, dataSuffix: CFG.dataSuffix, codes: builderCodes(CFG.dataSuffix), note: "ERC-8021 Builder Code suffix appended to every transaction this host signs" }
+    : { on: false, note: "DATA_SUFFIX unset: transactions carry no Builder Code" });
   mkdirSync(join(CFG.dataDir, "outbox"), { recursive: true });
   loadUndelivered();
   const digest = codeDigest();
@@ -309,9 +341,13 @@ async function main() {
       return j.result;
     },
     errorInterface: new Interface(["error NotAttestor()", "error UnknownAsset(address)", "error NotAdmin()"]),
+    dataSuffix: CFG.dataSuffix,
   });
 
-  const health: Health = { lastTickOkMs: 0, isAttestor: false, mode: CFG.mode, address };
+  const health: Health = {
+    lastTickOkMs: 0, isAttestor: false, mode: CFG.mode, address,
+    attribution: attributionHealth(sender),
+  };
   startHttp(health);
 
   const x = new XStocksClient();

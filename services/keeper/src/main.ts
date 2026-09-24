@@ -39,7 +39,7 @@ import { nextCapReturnMs } from "./reopen.ts";
 import type { PeriodLimits } from "./reopen.ts";
 import type { ExchangeSchedule, TradingObject } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
-import { Sender, RevertedInSimulation, PendingUnresolved } from "./tx/sender.ts";
+import { Sender, RevertedInSimulation, PendingUnresolved, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
 
 const MODES = ["shadow", "live"];
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -62,7 +62,8 @@ const erc20 = new Interface(["function symbol() view returns (string)"]);
 // configuration: collected, never thrown from at import time
 // ---------------------------------------------------------------------------------------------
 
-function loadConfig() {
+/** Exported so tests can check parsing; calling it has no side effects beyond reading process.env. */
+export function loadConfig() {
   const env = (k: string, d?: string) => process.env[k] ?? d;
   const errors: string[] = [];
   const addr = (name: string, v: string) => {
@@ -73,6 +74,9 @@ function loadConfig() {
     const n = Number(v);
     if (!Number.isFinite(n) || n < min || n > max) { errors.push(`${name} must be in [${min},${max}], got ${JSON.stringify(v)}`); return min; }
     return n;
+  };
+  const suffix = (name: string, v: string) => {
+    try { return normalizeDataSuffix(v.trim()); } catch (e) { errors.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); return ""; }
   };
   const rawMode = (env("MODE") ?? "shadow").trim();
   if (!MODES.includes(rawMode)) errors.push(`MODE must be one of ${MODES.join("|")}, got ${JSON.stringify(rawMode)}`);
@@ -113,6 +117,14 @@ function loadConfig() {
     maxAttestationAgeS: num("MAX_ATTESTATION_AGE_S", env("MAX_ATTESTATION_AGE_S", "1800")!, 60, 86_400),
     venueRefreshMs: num("VENUE_REFRESH_MS", env("VENUE_REFRESH_MS", "600000")!, 60_000, 3_600_000),
     lowBalanceWei: BigInt(env("LOW_BALANCE_WEI", "3000000000000000")!),
+    /**
+     * ERC-8021 attribution: the X Layer Builder Code suffix the Sender appends to every commit and settle
+     * this keeper signs. Empty, the default, is off. It is applied inside the Sender and nowhere else:
+     * CommitPlan.data stays the bare `commit` encoding, frozen and reused byte for byte, and the closure
+     * id comes from the arguments -- so turning attribution on mid-closure cannot change a row's id or
+     * turn a retry into a second row. Checked here too, so a typo is fatal at boot, not on the first send.
+     */
+    dataSuffix: suffix("DATA_SUFFIX", env("DATA_SUFFIX", "")!),
   };
   // Unset is legitimate exactly once: the first boot on a new host, whose only job is to generate
   // the key that the Scorecard is then deployed with. Live mode always needs it.
@@ -177,6 +189,7 @@ interface CommitPlan {
   settleAfterS: number;
   markE18: string;
   bandBps: number;
+  /** The bare `commit` encoding. Attribution (DATA_SUFFIX) is added by the Sender per send, never stored here. */
   data: string;
   attempts: number;
 }
@@ -275,6 +288,23 @@ interface Health {
   settledTotal: number;
   lastCommit?: Record<string, unknown>;
   lastSettle?: Record<string, unknown>;
+  /** ERC-8021 Builder Code attribution. The suffix is in every transaction's calldata, so it is public. */
+  attribution: { on: boolean; dataSuffix: string | null; codes: string[] };
+}
+
+/**
+ * What /healthz says about attribution: what the live Sender appends, not what DATA_SUFFIX says.
+ *
+ * They differ whenever the keeper runs without a key (shadow with no password set). There is then no
+ * Sender, so no commit or settle is signed and nothing is attributed however DATA_SUFFIX is set -- and a
+ * health page reading `on: true` there would be taken as proof that attribution is live when no
+ * transaction carries it. The codes are decoded so a person can read the Builder Code itself; 34 bytes of
+ * hex hide a mistyped one. (The boot log's `attribution` line reports the configuration, before the key is
+ * loaded; this is the one to trust.)
+ */
+export function attributionHealth(sender: { readonly dataSuffix: string } | null): Health["attribution"] {
+  const dataSuffix = sender?.dataSuffix || null;
+  return { on: dataSuffix !== null, dataSuffix, codes: builderCodes(dataSuffix ?? "") };
 }
 
 const alarmSentAt = new Map<string, { at: number; sev: number }>();
@@ -426,6 +456,10 @@ const methodDigest = () => keccak256(toUtf8Bytes(MARK_METHOD_VERSION));
 
 async function main() {
   if (CONFIG_ERRORS.length) throw new Error(`invalid configuration: ${CONFIG_ERRORS.join("; ")}`);
+  // Logged before anything can fail, so every boot says whether its transactions will be attributed.
+  log("attribution", CFG.dataSuffix
+    ? { on: true, dataSuffix: CFG.dataSuffix, codes: builderCodes(CFG.dataSuffix), note: "ERC-8021 Builder Code suffix appended to every commit and settle this keeper signs" }
+    : { on: false, note: "DATA_SUFFIX unset: transactions carry no Builder Code" });
   mkdirSync(join(CFG.dataDir, "marks"), { recursive: true });
   mkdirSync(join(CFG.dataDir, "closures"), { recursive: true });
   const digest = codeDigest();
@@ -456,6 +490,7 @@ async function main() {
   const sender = key ? new Sender({
     wallet: key.wallet, rpcs: CFG.rpcs, chainId: CFG.chainId, dbPath: join(CFG.dataDir, "keeper-outbox.sqlite"),
     errorInterface: scorecardAbi,
+    dataSuffix: CFG.dataSuffix,
     rpc: async (url, method, params) => {
       const res = await fetch(url, {
         method: "POST", headers: { "content-type": "application/json" },
@@ -474,6 +509,7 @@ async function main() {
   const health: Health = {
     bootMs: Date.now(), ticks: 0, lastTickOkMs: Date.now(), mode: CFG.mode, address, isKeeper: false, armed: false,
     assets: assets.length, open: 0, pending: state.pending.length, committedTotal: 0, settledTotal: 0,
+    attribution: attributionHealth(sender),
   };
   startHttp(health);
 

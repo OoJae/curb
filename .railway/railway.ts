@@ -58,6 +58,18 @@ export default defineRailway(() => {
       PORT: "8080",
       HEARTBEAT_S: "300",
       TZ: "UTC",
+      // X Layer Builder Code dd7u50nckt5e729f as an ERC-8021 suffix on every attestBatch; public, so a literal.
+      //
+      // A bad value here takes host A, the live writer, DOWN, and there is no old deployment to fall back
+      // on. This service has a volume, and Railway never runs two deployments against one volume, so the
+      // old one is stopped before the new one boots, health check or not. The new one then logs fatal,
+      // waits 60s and exits, and restartPolicyType ALWAYS repeats that until someone fixes the value.
+      // Nothing in `railway config apply` checks it, so before any apply that touches it:
+      //   - run the attestor tests: main.test.ts pins this exact literal to the code above;
+      //   - roll it out one host at a time. Apply here, wait until host A's /healthz shows
+      //     attribution.codes ["dd7u50nckt5e729f"], and only then run script/hostb/deploy.sh (or the
+      //     other way round), so host B, the standby, is never on an unproven config while host A is.
+      DATA_SUFFIX: "0x6464377535306e636b74356537323966100080218021802180218021802180218021",
       // Sealed variable set by a human in the Railway dashboard on 14 Sep 2026. preserve() keeps the
       // existing value and stops any apply from deleting it: without it, host A could no longer decrypt
       // its own key (0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4). Its value never appears in this repo.

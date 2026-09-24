@@ -1,10 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { Wallet, getAddress } from "ethers";
+import { readFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Wallet, getAddress, keccak256, Transaction } from "ethers";
 import { checkRound, compareObservation, signWitness, verifyWitness, Observation } from "./witness.ts";
 import type { TxInfo } from "./sources/chain.ts";
 import { clockAbi } from "./sources/chain.ts";
+import { Sender } from "./tx/sender.ts";
+import type { RpcFn } from "./tx/sender.ts";
 
 // Real mainnet data: X Layer block 70,619,137 (the first derive/2 round) and block 70,617,365 (the
 // first attestation ever, whose uncommitted top-level label was wrong; see DECISIONS D-7).
@@ -126,4 +130,78 @@ test("a malformed bundle never throws: it is a signed failure, not a stuck queue
     assert.equal(c.reproduced, false);
     assert.ok(c.failures.length > 0);
   }
+});
+
+// Attribution (ERC-8021, 24 Sep 2026). With DATA_SUFFIX set, every round carries the X Layer Builder Code
+// AFTER the ABI-encoded arguments. It is not part of the round: the witness must reproduce a suffixed
+// write exactly as it reproduces a plain one, from host A or from host B.
+
+const BUILDER_SUFFIX = "0x6464377535306e636b74356537323966100080218021802180218021802180218021";
+const tagged = (t: TxInfo): TxInfo => ({ ...t, input: t.input + BUILDER_SUFFIX.slice(2) });
+
+test("a real round whose calldata carries the Builder Code suffix is still reproduced, with identical findings", () => {
+  const tx = txOf(`${NEW}.tx.json`);
+  const plain = checkRound(load(`${NEW}.bundle.json`), tx, 196, CLOCK, tsOf(`${NEW}.tx.json`));
+  const c = checkRound(load(`${NEW}.bundle.json`), tagged(tx), 196, CLOCK, tsOf(`${NEW}.tx.json`));
+  assert.deepEqual(c.failures, []);
+  assert.equal(c.reproduced, true);
+  assert.equal(c.labelsConsistent, true);
+  assert.deepEqual(c, plain, "the suffix changes nothing the check reports");
+  // The decoder stops at the arguments; the suffix is invisible to it.
+  assert.deepEqual(
+    clockAbi.decodeFunctionData("attestBatch", tagged(tx).input).toArray(true),
+    clockAbi.decodeFunctionData("attestBatch", tx.input).toArray(true),
+  );
+  assert.equal(clockAbi.parseTransaction({ data: tagged(tx).input })!.name, "attestBatch");
+});
+
+test("the suffix cannot launder a forged write: a lie in the arguments is still caught with the suffix on", () => {
+  const tx = txOf(`${NEW}.tx.json`);
+  const args = clockAbi.decodeFunctionData("attestBatch", tx.input);
+  const caps = [...args[2]].map((x: bigint) => x);
+  caps[0] = 999_999_999n;
+  const forged = tagged({ ...tx, input: clockAbi.encodeFunctionData("attestBatch", [args[0], args[1], caps, args[3], args[4], args[5]]) });
+  const c = checkRound(load(`${NEW}.bundle.json`), forged, 196, CLOCK, tsOf(`${NEW}.tx.json`));
+  assert.equal(c.reproduced, false);
+  assert.ok(c.failures.some((f) => f.startsWith("calldata[0]")), c.failures.join("\n"));
+});
+
+test("end to end: the round the Sender signs with attribution on is the round the witness reproduces", async () => {
+  const fixture = txOf(`${NEW}.tx.json`);
+  const dir = mkdtempSync(join(tmpdir(), "curb-witness-suffix-"));
+  const clock = { t: 1_000_000 };
+  const rpc: RpcFn = async (_url, method) => {
+    switch (method) {
+      case "eth_call": return "0x";
+      case "eth_estimateGas": return "0x" + (257_076).toString(16);
+      case "eth_getBlockByNumber": return { baseFeePerGas: "0x1312d00" };
+      case "eth_getTransactionCount": return "0x7";
+      default: throw new Error(`unexpected ${method}`);
+    }
+  };
+  const host = Wallet.createRandom();
+  const sender = new Sender({
+    wallet: host, rpcs: ["https://a"], chainId: 196, dbPath: join(dir, "outbox.sqlite"), rpc,
+    now: () => clock.t, sleep: async (ms) => { clock.t += ms; }, dataSuffix: BUILDER_SUFFIX,
+  });
+  // main.ts hands prepare() the bare attestBatch encoding; the fixture's input is exactly that.
+  const p = await sender.prepare(CLOCK, fixture.input, { id: load(`${NEW}.bundle.json`).inputRoot, kind: "heartbeat", targetMs: 0 });
+  const signed = Transaction.from(p.raw);
+  assert.equal(signed.data, fixture.input + BUILDER_SUFFIX.slice(2));
+  const written: TxInfo = { hash: signed.hash!, from: signed.from!, to: signed.to, blockNumber: fixture.blockNumber, input: signed.data };
+  const c = checkRound(load(`${NEW}.bundle.json`), written, 196, CLOCK, tsOf(`${NEW}.tx.json`));
+  assert.deepEqual(c.failures, []);
+  assert.equal(c.reproduced, true);
+
+  // The witness signs the hash of the calldata actually on chain, suffix included -- which is what anyone
+  // re-hashing tx.input from an explorer gets. It is NOT the hash of the bare encoding.
+  const doc = await signWitness(Wallet.createRandom(), {
+    chainId: 196, clock: CLOCK, tx: written, writtenAtS: tsOf(`${NEW}.tx.json`), inputRoot: load(`${NEW}.bundle.json`).inputRoot,
+    check: c, observation: { observation: Observation.NO_SAMPLE, sampleAtMs: null, detail: [] }, checkedAtS: 1789388200, hostId: "host-b",
+  });
+  assert.equal(doc.message.calldataHash, keccak256(signed.data));
+  assert.notEqual(doc.message.calldataHash, keccak256(fixture.input));
+  assert.equal(doc.message.reproduced, true);
+  assert.equal(verifyWitness(doc).ok, true);
+  rmSync(dir, { recursive: true, force: true });
 });

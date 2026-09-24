@@ -1,11 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Transaction, Wallet } from "ethers";
 import { buildMarkRound } from "./markRound.ts";
 import type { MarkInputs } from "./markRound.ts";
 import { checkMarkRound } from "./markWitness.ts";
-import { closureId, methodDigestOf, scorecardAbi } from "./sources/scorecard.ts";
+import { closureId, decodeCommitCalldata, methodDigestOf, scorecardAbi } from "./sources/scorecard.ts";
 import type { CommittedRow } from "./sources/scorecard.ts";
 import type { TxInfo } from "./sources/chain.ts";
+import { Sender } from "./tx/sender.ts";
+import type { RpcFn } from "./tx/sender.ts";
 
 const E18 = 10n ** 18n;
 const W = "0x41333Df9E7639188BBfca5522dC4844398Af9f9E";
@@ -193,4 +199,74 @@ test("malformed input is reported, never thrown", () => {
     assert.equal(c.reproduced, false);
     assert.ok(c.failures.length > 0);
   }
+});
+
+// Attribution (ERC-8021, 24 Sep 2026). With DATA_SUFFIX set, every commit and settle carries the X Layer
+// Builder Code AFTER the ABI-encoded arguments. It is not part of the row: the id, the baselines and the
+// check must come out exactly as they do for a bare commit.
+
+const BUILDER_SUFFIX = "0x6464377535306e636b74356537323966100080218021802180218021802180218021";
+
+test("a commit carrying the Builder Code suffix decodes to the same row and still reproduces", () => {
+  const { bundle, row, tx } = build();
+  const tagged: TxInfo = { ...tx, input: tx.input + BUILDER_SUFFIX.slice(2) };
+  const bare = decodeCommitCalldata(tx.input);
+  assert.ok(bare);
+  assert.deepEqual(decodeCommitCalldata(tagged.input), bare, "the decoder stops at the arguments");
+  const c = check(bundle, row, tagged);
+  assert.deepEqual(c.failures, []);
+  assert.equal(c.reproduced, true);
+  assert.equal(c.baselinesChecked, true, "the baselines were read out of the suffixed calldata");
+  assert.equal(c.closureId.toLowerCase(), row.id.toLowerCase());
+  assert.deepEqual(c, check(bundle, row, tx), "the suffix changes nothing the check reports");
+});
+
+test("the suffix cannot launder a wrong commit: a mark that disagrees with the event is still caught", () => {
+  const { bundle, row, tx } = build();
+  const tagged: TxInfo = { ...tx, input: tx.input + BUILDER_SUFFIX.slice(2) };
+  const c = check(bundle, { ...row, mark: (99n * E18).toString() }, tagged);
+  assert.equal(c.reproduced, false);
+  assert.ok(c.failures.some((f) => /calldata disagrees|claim mark/.test(f)), c.failures.join("; "));
+});
+
+test("end to end: the frozen plan is never rewritten, every attempt is signed with one suffix, and the id is unchanged", async () => {
+  const { bundle, row, tx } = build();
+  // What buildPlan freezes and commitPass hands to prepare() on every attempt.
+  const plan = { root: row.inputRoot, id: row.id, data: tx.input, attempts: 0 };
+  const frozen = JSON.stringify(plan);
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-suffix-"));
+  const clock = { t: 1_000_000 };
+  const rpc: RpcFn = async (_url, method) => {
+    switch (method) {
+      case "eth_call": return "0x";
+      case "eth_estimateGas": return "0x" + (180_000).toString(16);
+      case "eth_getBlockByNumber": return { baseFeePerGas: "0x1312d00" };
+      case "eth_getTransactionCount": return "0x3";
+      default: throw new Error(`unexpected ${method}`);
+    }
+  };
+  const sender = new Sender({
+    wallet: Wallet.createRandom(), rpcs: ["https://a"], chainId: 196, dbPath: join(dir, "keeper-outbox.sqlite"), rpc,
+    now: () => clock.t, sleep: async (ms) => { clock.t += ms; }, dataSuffix: BUILDER_SUFFIX,
+  });
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const p = await sender.prepare(SCORECARD, plan.data, { id: `commit:${plan.root}:${attempt}`, kind: "commit", targetMs: 0 });
+    const signed = Transaction.from(p.raw);
+    assert.equal(signed.data, tx.input + BUILDER_SUFFIX.slice(2), `attempt ${attempt} carries the suffix exactly once`);
+    const decoded = decodeCommitCalldata(signed.data)!;
+    assert.equal(closureId(decoded.wrapper, decoded.settleAfter, decoded.inputRoot), row.id, "the id Scorecard will compute");
+    const written: TxInfo = { hash: signed.hash!, from: signed.from!, to: signed.to, blockNumber: COMMIT_BLOCK, input: signed.data };
+    const c = check(bundle, row, written);
+    assert.deepEqual(c.failures, []);
+    assert.equal(c.reproduced, true);
+  }
+  assert.equal(JSON.stringify(plan), frozen, "CommitPlan.data (and the rest of the plan) is never touched by attribution");
+
+  // settle(id): the id argument is read out of the suffixed calldata unchanged.
+  const settleData = scorecardAbi.encodeFunctionData("settle", [row.id]);
+  const s = await sender.prepare(SCORECARD, settleData, { id: `settle:${plan.root}:1`, kind: "settle", targetMs: 0 });
+  const settleSigned = Transaction.from(s.raw);
+  assert.equal(settleSigned.data, settleData + BUILDER_SUFFIX.slice(2));
+  assert.equal(String(scorecardAbi.decodeFunctionData("settle", settleSigned.data)[0]).toLowerCase(), row.id.toLowerCase());
+  rmSync(dir, { recursive: true, force: true });
 });

@@ -6,6 +6,9 @@
 #
 # Idempotent. Run from the repo root on the Mac:   script/hostb/deploy.sh
 #
+# Before anything reaches the box it checks DATA_SUFFIX (below) on the Mac, and stops if the value is
+# malformed or is not Curb's Builder Code.
+#
 # What it does on the box, and nothing else:
 #   /opt/curb/{attestor,w0,keeper}       source, root-owned
 #   /var/lib/curb/{attestor-b,w0,keeper} data volumes, owned by an unprivileged uid (10001) used only by Curb
@@ -23,6 +26,38 @@ HOST="${HOST:-Sonar-VPS2}"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 CURB_UID=10001
 
+# ERC-8021 attribution. DATA_SUFFIX is the X Layer Builder Code BUILDER_CODE as an ERC-8021 suffix, appended
+# to every transaction host B and the keeper sign. It is public by design (it is in the calldata), so it
+# lives here, not in a secret file, and both env files below take this one value. Set DATA_SUFFIX= (empty)
+# to turn attribution off.
+BUILDER_CODE=dd7u50nckt5e729f
+DATA_SUFFIX=0x6464377535306e636b74356537323966100080218021802180218021802180218021
+
+# Checked HERE, on the Mac, before anything reaches the box, with the services' own validator and
+# against the code it is meant to carry. A malformed value would stop both containers at boot, and the
+# script below `docker rm -f`s each container before starting its replacement, so host B (the standby) and
+# the keeper would go down together. A well-formed but wrong code would boot cleanly and credit every
+# transaction to someone else. Neither may reach the box. This needs services/attestor/node_modules.
+# One check covers both services only because their sender.ts copies are byte-identical, so that is
+# checked too.
+#
+# Roll attribution out one host at a time: host A is applied from .railway/railway.ts, separately. Do not
+# run this while host A is mid-deploy on a new DATA_SUFFIX; wait until its /healthz shows
+# attribution.codes, so host B is never on an unproven config while host A is.
+echo "==> check DATA_SUFFIX"
+cmp -s "$REPO/services/attestor/src/tx/sender.ts" "$REPO/services/keeper/src/tx/sender.ts" || {
+  echo "services/attestor and services/keeper sender.ts differ; they must be byte-identical" >&2; exit 1; }
+DATA_SUFFIX="$(node --experimental-strip-types --input-type=module -e '
+  const { pathToFileURL } = await import("node:url");
+  const [sender, suffix, want] = process.argv.slice(1);
+  const { normalizeDataSuffix, builderCodes } = await import(pathToFileURL(sender).href);
+  const value = normalizeDataSuffix(suffix);
+  const codes = builderCodes(value).join(",");
+  if (value !== "" && codes !== want) throw new Error(`DATA_SUFFIX carries Builder Code ${codes}, not ${want}`);
+  console.error(value === "" ? "attribution off" : `attribution on: Builder Code ${codes}`);
+  console.log(value);
+' "$REPO/services/attestor/src/tx/sender.ts" "$DATA_SUFFIX" "$BUILDER_CODE")"
+
 echo "==> sync source to $HOST"
 rsync -a --delete --exclude node_modules --exclude 'src/fixtures' --exclude '*.test.ts' \
   "$REPO/services/attestor/" "$HOST:/tmp/curb-src-attestor/"
@@ -31,7 +66,8 @@ rsync -a --delete --exclude node_modules --exclude '*.test.ts' \
 rsync -a --delete "$REPO/script/w0/" "$HOST:/tmp/curb-src-w0/"
 
 echo "==> install and (re)start containers"
-ssh "$HOST" "sudo CURB_UID=$CURB_UID SCORECARD='${SCORECARD:-}' KEEPER_MODE='${KEEPER_MODE:-shadow}' bash -s" <<'REMOTE'
+# DATA_SUFFIX is safe inside single quotes: the check above leaves it empty or 0x-prefixed hex.
+ssh "$HOST" "sudo CURB_UID=$CURB_UID SCORECARD='${SCORECARD:-}' KEEPER_MODE='${KEEPER_MODE:-shadow}' DATA_SUFFIX='$DATA_SUFFIX' bash -s" <<'REMOTE'
 set -euo pipefail
 install -d -m 755 /opt/curb
 rsync -a --delete /tmp/curb-src-attestor/ /opt/curb/attestor/
@@ -53,7 +89,8 @@ for f in attestor-b.alerts.env keeper.alerts.env; do
 done
 [ -f /etc/curb/w0-observer.alerts.env ] || (umask 077; printf 'HC_URL=\n' > /etc/curb/w0-observer.alerts.env)
 
-(umask 077; cat > /etc/curb/attestor-b.env <<'CONF'
+# DATA_SUFFIX in both env files is the one value checked on the Mac before this ran (top of the script).
+(umask 077; cat > /etc/curb/attestor-b.env <<CONF
 MODE=standby
 HOST_ID=host-b
 CHAIN_ID=196
@@ -66,6 +103,7 @@ TZ=UTC
 PRIMARY_BUNDLE_URL=https://attestor-a-production.up.railway.app
 EXPECTED_ATTESTORS=0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4,0x4c3eD38809FA6469871F4e0cbEa7ae7dBdA87fb8
 WITNESS_FROM_BLOCK=70617365
+DATA_SUFFIX=${DATA_SUFFIX}
 CONF
 )
 
@@ -86,6 +124,7 @@ COMMIT_LEAD_S=600
 COMMIT_FLOOR_S=120
 SETTLE_DELAY_S=300
 TZ=UTC
+DATA_SUFFIX=${DATA_SUFFIX}
 CONF
 )
 
