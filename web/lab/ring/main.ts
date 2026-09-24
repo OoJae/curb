@@ -8,8 +8,10 @@
  *   ?capture=1&size=1600   bare canvas at a fixed CSS size, transparent page (poster/screenshot capture)
  * window.__lab exposes the handle for Playwright.
  */
-import { UNROLL, captionAt, stubWeek, weekCaptions } from '../../src/ring/layout';
+import '../../src/styles/tokens.css';
+import { UNROLL, captionAt, slotsFromOpen, weekCaptions } from '../../src/ring/layout';
 import type { Regime } from '../../src/ring/layout';
+import { weekSlots } from '../../src/data/schedule';
 import { createFallback2d } from '../../src/ring/fallback2d';
 import type { RingHandle } from '../../src/ring/ring';
 
@@ -23,7 +25,8 @@ if (q.has('capture')) {
   document.documentElement.style.setProperty('--capture-size', `${Number(q.get('size') ?? 1600)}px`);
 }
 
-const week = stubWeek();
+const w = weekSlots(Date.now());
+const week = { slots: slotsFromOpen(w.open), nowIndex: w.nowIndex };
 if (q.has('now')) week.nowIndex = Number(q.get('now'));
 const regime = (q.get('regime') as Regime) ?? (week.slots[week.nowIndex] ? 'shut' : 'open');
 const reducedMotion = q.has('reduced');

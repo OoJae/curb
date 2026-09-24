@@ -21,7 +21,7 @@ import {
   span,
   weekCaptions,
 } from './layout';
-import type { Caption, Palette, Regime, Rgb, WeekInput } from './layout';
+import type { Caption, Palette, Rgb, WeekInput } from './layout';
 import type { RingHandle } from './ring';
 
 export interface Fallback2dOptions extends WeekInput {
