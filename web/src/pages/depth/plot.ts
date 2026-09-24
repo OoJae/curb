@@ -106,7 +106,7 @@ export function mountLtvPlot(box: HTMLElement, range: HTMLInputElement, readout:
     const open = priced() ? ltvBpsAt({ ...params(LTV_OPEN_BPS), depthShares: hypo }) : 0;
     const per = priced() ? ltvForBps({ ...params(curve.regimeCapBps), depthShares: hypo }) : 0;
     readout.textContent = priced()
-      ? `At ${fmtShares(Number(hypo.toPrecision(4)))} shares of honoured depth the pool can borrow up to ${fmtPct(shut)} of its collateral while shut, ${fmtPct(open)} while open; each position’s ltvFor is ${fmtPct(per)} now. Maths only; nothing is sent.`
+      ? `Estimate: at ${fmtShares(Number(hypo.toPrecision(4)))} shares of honoured depth the pool could borrow up to ${fmtPct(shut)} of its collateral while shut, ${fmtPct(open)} while open, with each position’s ltvFor at ${fmtPct(per)}. Maths in your browser only; nothing is sent, and the contract’s own views decide.`
       : 'Needs at least one honoured bid to price the curve.';
   };
 

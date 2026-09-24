@@ -36,7 +36,7 @@
               <div class="dp-plot__svg" data-dp-svg></div>
               <p class="dp-plot__legend" aria-hidden="true"><span class="dp-key"><span class="dp-key__line"></span>the pool can borrow, % of its collateral</span><span class="dp-key"><span class="dp-key__line dp-key__line--step"></span>ltvFor, each position</span><span class="dp-key"><span class="dp-key__dot"></span>you are here</span></p>
               <div class="dp-plot__drag">
-                <label class="nt-field dp-plot__range"><span class="nt-field__label">Drag for a hypothetical depth, in shares</span>
+                <label class="nt-field dp-plot__range"><span class="nt-field__label">Drag for a hypothetical depth, in shares (an estimate from the published formula)</span>
                   <input type="range" min="0" max="1" step="0.001" value="0" data-dp-range aria-describedby="dp-readout">
                 </label>
                 <p class="dp-plot__readout" id="dp-readout" data-dp-readout aria-live="polite">—</p>
@@ -93,7 +93,7 @@
           </div>
         </div>
         <ol class="dp-fade__steps" role="list">
-          <li class="dp-fade__step"><span class="dp-fade__n">1</span><h3 class="dp-fade__h">The maker bonds a bid</h3><p>curb-desk posts a cert: 0.028 wTCENTx at 52 USDG a share, bonded with 1 USDG. The USDG for the bid stays in the maker’s wallet, approved to DepthCert.</p></li>
+          <li class="dp-fade__step"><span class="dp-fade__n">1</span><h3 class="dp-fade__h">The maker bonds a bid</h3><p>In the demo the deployer, a team wallet on the maker registry, posts a cert: 0.03 wTCENTx at 52 USDG a share (1.56 USDG), bonded with at least a tenth of that. The USDG for the bid stays in the maker’s wallet, approved to DepthCert.</p></li>
           <li class="dp-fade__step"><span class="dp-fade__n">2</span><h3 class="dp-fade__h">The maker walks away</h3><p>The maker revokes the allowance. Nothing else happens yet: the cert still looks posted, but it drops out of the honoured depth at once.</p></li>
           <li class="dp-fade__step"><span class="dp-fade__n">3</span><h3 class="dp-fade__h">A trader hits it</h3><p>The trader’s shares move first, so a trader who cannot deliver can never cause a fade. Then the contract tries to pull the maker’s USDG, with a fixed gas stipend a caller cannot starve.</p></li>
           <li class="dp-fade__step"><span class="dp-fade__n">4</span><h3 class="dp-fade__h">Same transaction: the bond changes hands</h3><p>The pull fails for want of allowance, so the cert fades: the maker’s whole bond goes to the trader, the trader’s shares come back, and a public <code>Faded</code> event records the reason.</p></li>
@@ -121,7 +121,7 @@
             <h2 class="t-h2 nt-h2" id="dp-cure-h">The cure clock counts open minutes only</h2>
             <div class="nt-prose t-body">
               <p>A position over its limit is not liquidated. Anyone may flag it, which starts a cure clock that counts only market time it has witnessed open: a tick adds the minutes since the last tick only if the market was open then and is open now, and the gap is ten minutes or less. Shut or stale time freezes it.</p>
-              <p>After 30 witnessed open minutes, with the market open and a fresh price, the position can be liquidated, and never for more than a 5% bonus at the price when the breach was flagged. A weekend shut costs the borrower nothing.</p>
+              <p>After 30 witnessed open minutes, with the market open and a fresh price, the position can be liquidated, and never for more than a 5% bonus at the price when the breach was flagged. A partial liquidation leaves the rest of the debt owed; bad debt is booked only when every share has been seized. A weekend shut costs the borrower nothing.</p>
             </div>
           </div>
           <div class="col-instrument">
@@ -149,7 +149,7 @@
           <li class="nt-step">
             <div class="nt-step__body">
               <h3 class="nt-step__title">Post a cert (eligible makers only)</h3>
-              <p class="nt-step__text">A cert that names CurbCredit is depth the lender prices loans off, so only a maker on the eligibility registry may post one. Otherwise anyone could fill the book with dust bids and drag the LTV to zero. Open certs, naming nobody, are permissionless. Every cert promises at least 1 USDG, its bond is at least 10% of that, and to count while Hong Kong is shut it must outlive the next reopen plus a cure (at least 73½ hours). Approve enough USDG for the bond now and for paying the bid later. <span data-dp-maker></span></p>
+              <p class="nt-step__text">A cert that names CurbCredit is depth the lender prices loans off, so only a maker on the maker registry may post one. Otherwise anyone could fill the book with dust bids and drag the LTV to zero. Open certs, naming nobody, are permissionless. Every cert promises at least 1 USDG, its bond is at least 10% of that, and to count while Hong Kong is shut it must outlive the next reopen plus a cure (at least 73½ hours). Approve enough USDG for the bond now and for paying the bid later. <span data-dp-maker></span></p>
               <div class="nt-step__row">
                 <label class="nt-field"><span class="nt-field__label">Shares</span><input class="nt-input" data-dp-in="size" inputmode="decimal" value="0.028" autocomplete="off"></label>
                 <label class="nt-field"><span class="nt-field__label">Bid, USDG a share</span><input class="nt-input" data-dp-in="bid" inputmode="decimal" value="52" autocomplete="off"></label>

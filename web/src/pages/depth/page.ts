@@ -9,10 +9,11 @@ import './page.css';
 import { decodeEventLog, keccak256, parseUnits, toHex, type Hex } from 'viem';
 import {
   approveUsdg, approveWrapper, borrow, creditLive, deposit, depthLive, getCreditPosition, getDepth, minBond, notional,
-  postCert, refusalsIn, repay, takeCert, REFUSAL_REASONS,
+  postCert, refusalsIn, repay, takeCert, CURE_OPEN_SECONDS, MIN_CERT_LIFE_S, REFUSAL_REASONS, SHUT_CERT_LIFE_S,
 } from '../../data/depth';
+import { curbCreditAbi } from '../../data/abi/curbCredit';
 import {
-  AGENTIC_WALLET, ASSETS, CURB_CREDIT, CURB_DESK, DEMO_IDS, DEPTH_CERT, ELIGIBILITY_REGISTRY, MARKET_CLOCK, SCORECARD, USDG,
+  AGENTIC_WALLET, ASSETS, CURB_CREDIT, CURB_DESK, DEMO_IDS, DEPLOYER, DEPTH_CERT, ELIGIBILITY_REGISTRY, MARKET_CLOCK, SCORECARD, USDG,
   type CohortAsset,
 } from '../../data/addresses';
 import { depthCertAbi } from '../../data/abi/depthCert';
@@ -36,6 +37,7 @@ const $ = <T extends Element = HTMLElement>(sel: string) => shell.main.querySele
 const TEAM: Record<string, string> = {
   [CURB_DESK.toLowerCase()]: 'team: curb-desk',
   [AGENTIC_WALLET.toLowerCase()]: 'team: Agentic Wallet',
+  [DEPLOYER.toLowerCase()]: 'team: deployer',
   ...(CURB_CREDIT ? { [CURB_CREDIT.toLowerCase()]: 'CurbCredit' } : {}),
 };
 const ZERO: Address = '0x0000000000000000000000000000000000000000';
@@ -51,6 +53,30 @@ interface State {
   position: CreditPosition | null;
   borrower: Address;
   regime: RegimeState | null;
+  /** CurbCredit.minCertExpiry(asset) in ms (live), or an estimate from the published rule (specimen). */
+  horizon: { ms: number; estimate: boolean } | null;
+}
+
+/** The published cert horizon: now + (open ? 1 h : max(73 h, next transition + 1 h)) + 30 min. Estimate only. */
+function horizonEstimate(r: RegimeState | null, now = Date.now()): number | null {
+  if (!r || r.regime === 'UNKNOWN') return null;
+  const open = r.cap > 0;
+  const toNext = r.nextTransitionAtMs && r.nextTransitionAtMs > now ? r.nextTransitionAtMs - now : 0;
+  const life = open ? MIN_CERT_LIFE_S * 1000 : Math.max(SHUT_CERT_LIFE_S * 1000, toNext + MIN_CERT_LIFE_S * 1000);
+  return now + life + CURE_OPEN_SECONDS * 1000;
+}
+
+async function readHorizon(r: RegimeState | null): Promise<State['horizon']> {
+  if (W4_LIVE && !isMock()) {
+    try {
+      const v = await publicClient().readContract({ address: CURB_CREDIT!, abi: curbCreditAbi, functionName: 'minCertExpiry', args: [asset.wrapper] });
+      return { ms: Number(v) * 1000, estimate: false };
+    } catch {
+      /* fall through to the estimate */
+    }
+  }
+  const e = horizonEstimate(r);
+  return e ? { ms: e, estimate: true } : null;
 }
 let state: State | null = null;
 
@@ -82,7 +108,7 @@ async function load(): Promise<State> {
     getCreditPosition(borrower, asset.wrapper).catch(() => null),
     getRegime({ wrapper: asset.wrapper }).catch(() => null),
   ]);
-  return { depth, position, borrower, regime };
+  return { depth, position, borrower, regime, horizon: await readHorizon(regime) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -110,7 +136,7 @@ function drawPlot(d: DepthView): void {
   if (now) now.textContent = fmtPct(d.ltvBps);
 }
 
-function drawStats(d: DepthView): void {
+function drawStats(d: DepthView, horizon: State['horizon']): void {
   const el = $('[data-dp-stats]');
   if (!el) return;
   const c = d.curve;
@@ -124,7 +150,13 @@ function drawStats(d: DepthView): void {
       ${statHTML({ label: 'Lowest bid counted', value: d.minBidPx !== null ? fmtUsdg(d.minBidPx) : 'none', asOf: at, size: 'data', note: c.priceNow !== null ? `Scorecard price $${c.priceNow.toFixed(2)} a share` : 'Scorecard price unreadable' })}
       ${statHTML({ label: 'Realisable', value: fmtUsdg(d.realisable, 4), asOf: at, size: 'data', note: 'What the bids would pay for the pooled collateral' })}
       ${statHTML({ label: 'Pooled collateral', value: `${fmtShares(c.totalCollateral)} shares`, asOf: at, size: 'data', note: 'totalCollateral, the basis of the LTV' })}
-      ${statHTML({ label: 'Soonest expiry counted', value: d.soonestExpiryMs ? hktShort(d.soonestExpiryMs) : 'none', asOf: at, size: 'data', note: 'A cert counts only if it outlives the next reopen plus a cure' })}
+      ${statHTML({
+        label: 'A cert must outlive',
+        value: horizon ? hktShort(horizon.ms) : '—',
+        asOf: horizon && !horizon.estimate ? at : undefined,
+        size: 'data',
+        note: `${horizon?.estimate ? 'Estimate from the published rule; ' : 'minCertExpiry: '}the next reopen plus a cure.${d.soonestExpiryMs ? ` Soonest counted expiry ${hktShort(d.soonestExpiryMs)}.` : ''}`,
+      })}
     </div>`,
   );
 }
@@ -489,7 +521,7 @@ async function refresh(): Promise<void> {
   }
   drawStatus(state.depth.block);
   drawPlot(state.depth);
-  drawStats(state.depth);
+  drawStats(state.depth, state.horizon);
   drawBook(state.depth);
   drawPosition(state);
   drawCure(state);
