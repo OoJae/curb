@@ -13,7 +13,7 @@ export function toRGB(css: string): RGB | null {
   ctx.fillStyle = 'rgba(0, 0, 0, 0)';
   ctx.fillStyle = css; // an invalid colour leaves the transparent sentinel, read back as null
   ctx.fillRect(0, 0, 1, 1);
-  const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+  const [r = 0, g = 0, b = 0, a = 0] = ctx.getImageData(0, 0, 1, 1).data;
   return a === 0 ? null : [r, g, b];
 }
 
@@ -34,8 +34,9 @@ function lum([r, g, b]: RGB): number {
 
 /** WCAG 2.x contrast ratio, 1–21. */
 export function ratio(a: RGB, b: RGB): number {
-  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
+  const la = lum(a);
+  const lb = lum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
 /** WCAG verdict for normal-size text. */
