@@ -1,0 +1,263 @@
+/* /brand — prefix .brand-, tokens only (no raw colours, no px font sizes). */
+
+/* ADAPTER — lane A token names, assumed from the spec: colours --ink --ivory --streetlamp --slate --brass --graphite,
+   regime pair --ground/--figure, fonts --font-display/--font-text/--font-data, eases --ease-curb/--ease-exit, type
+   scale --t-*. Paper mode assumed as :root[data-regime="open"] or :root[data-theme="paper"]. Rename here only. */
+.brand-page {
+  --brand-ink: var(--ink);
+  --brand-ivory: var(--ivory);
+  --brand-amber: var(--streetlamp);
+  --brand-slate: var(--slate);
+  --brand-brass: var(--brass);
+  --brand-graphite: var(--graphite);
+  --brand-ground: var(--ground, var(--ink));
+  --brand-figure: var(--figure, var(--ivory));
+  --brand-muted: var(--brand-slate);
+  --brand-signal: var(--brand-amber);
+  --brand-display: var(--font-display);
+  --brand-text: var(--font-text);
+  --brand-data: var(--font-data);
+  --brand-ease: var(--ease-curb, cubic-bezier(0.16, 1, 0.3, 1));
+  --brand-ease-exit: var(--ease-exit, cubic-bezier(0.7, 0, 0.84, 0));
+}
+:root[data-regime='open'] .brand-page,
+:root[data-theme='paper'] .brand-page {
+  --brand-muted: var(--brand-graphite);
+  --brand-signal: var(--brand-brass);
+}
+/* Hairlines follow the regime; hairlines inside ink windows are always ivory-on-ink. */
+.brand-page { --brand-hair: color-mix(in oklab, var(--brand-figure) 14%, var(--brand-ground)); }
+.brand-window { --brand-hair: color-mix(in oklab, var(--brand-ivory) 14%, var(--brand-ink)); }
+
+/* ── Frame ──────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-page {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding-inline: clamp(20px, 5.2vw, 80px);
+  color: var(--brand-figure);
+  font-family: var(--brand-text);
+  font-size: var(--t-body);
+  line-height: 1.55;
+}
+.brand-page code { font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; }
+.brand-page a { color: inherit; text-decoration-color: var(--brand-hair); text-underline-offset: 0.2em; }
+.brand-page a:hover { text-decoration-color: var(--brand-signal); }
+
+.brand-hero { padding-block: clamp(48px, 9vw, 136px) clamp(32px, 5vw, 72px); max-width: 62rem; }
+.brand-kicker { font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; color: var(--brand-muted); margin: 0 0 1.5rem; }
+.brand-h1 {
+  font-family: var(--brand-display); font-weight: 400; font-size: var(--t-h1); line-height: 0.96; letter-spacing: -0.02em;
+  margin: 0; text-wrap: balance;
+}
+.brand-h1 em, .brand-spec-hero em, .brand-mo-h em { font-style: italic; }
+.brand-lede { font-size: var(--t-lede); line-height: 1.4; color: var(--brand-muted); max-width: 40rem; margin: 1.75rem 0 0; }
+.brand-toc { display: flex; flex-wrap: wrap; gap: 0.25rem 1.5rem; margin-top: 2.5rem; font-size: var(--t-small); }
+.brand-toc a { display: inline-block; padding-block: 0.625rem; text-decoration: none; }
+
+.brand-sec {
+  display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: clamp(12px, 1.8vw, 28px);
+  border-top: 1px solid var(--brand-hair); padding-block: clamp(40px, 6vw, 96px);
+  scroll-margin-top: 5rem;
+}
+.brand-ledger { grid-column: 1 / span 4; }
+.brand-ledger p { margin: 0 0 1rem; max-width: 34rem; }
+.brand-ledger b { font-weight: 600; }
+.brand-inst { grid-column: 6 / -1; display: grid; gap: clamp(16px, 2vw, 28px); min-width: 0; align-content: start; }
+.brand-h2 { font-family: var(--brand-display); font-weight: 400; font-size: var(--t-h2); line-height: 1.05; letter-spacing: -0.01em; margin: 0 0 1.5rem; }
+.brand-h3 { font-family: var(--brand-text); font-weight: 600; font-size: var(--t-small); margin: 0 0 0.75rem; }
+.brand-note { color: var(--brand-muted); font-size: var(--t-small); margin: 0; }
+.brand-num { font-family: var(--brand-data); font-stretch: 87%; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1023px) {
+  .brand-sec { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .brand-ledger, .brand-inst { grid-column: 1 / -1; }
+}
+
+/* Ink windows: every specimen with Streetlamp in it sits on ink, in either regime (Law 1). */
+.brand-window {
+  background: var(--brand-ink); color: var(--brand-ivory); border-radius: 2px; border: 1px solid var(--brand-hair);
+  padding: clamp(16px, 3vw, 40px); min-width: 0;
+}
+
+/* Buttons: ivory on ink, ink on paper; amber only as focus/hover hairline. */
+.brand-page button {
+  font: 500 var(--t-small) / 1.2 var(--brand-text); color: var(--brand-ink); background: var(--brand-ivory);
+  border: 0; border-radius: 2px; min-height: 2.75rem; padding: 0.625rem 1rem; cursor: pointer;
+  transition: transform 90ms linear;
+}
+.brand-page button:active { transform: scale(0.98); }
+
+/* ── Colour ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-sws { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.brand-sw { margin: 0; display: grid; gap: 0.75rem; align-content: start; }
+.brand-sw-chip {
+  height: 6.5rem; border-radius: 2px; border: 1px solid var(--brand-hair); display: grid; place-items: center;
+  background: var(--brand-ink);
+}
+.brand-sw-dot { width: 2.75rem; height: 2.75rem; border-radius: 50%; }
+.brand-sw--ink .brand-sw-dot, .brand-sw--ivory .brand-sw-dot { display: none; }
+.brand-sw--ivory .brand-sw-chip, .brand-sw--brass .brand-sw-chip, .brand-sw--graphite .brand-sw-chip { background: var(--brand-ivory); }
+.brand-sw--amber .brand-sw-dot { background: var(--brand-amber); }
+.brand-sw--slate .brand-sw-dot { background: var(--brand-slate); }
+.brand-sw--brass .brand-sw-dot { background: var(--brand-brass); }
+.brand-sw--graphite .brand-sw-dot { background: var(--brand-graphite); }
+.brand-sw figcaption { display: grid; gap: 0.125rem; font-size: var(--t-small); }
+.brand-sw b { font-weight: 600; }
+.brand-copy.brand-copy {
+  justify-self: start; background: none; color: inherit; padding: 0.375rem 0; min-height: 2.75rem;
+  font: 400 var(--t-data) / 1.4 var(--brand-data); font-stretch: 87%;
+  text-decoration: underline; text-decoration-color: var(--brand-hair); text-underline-offset: 0.3em;
+}
+.brand-prop { color: var(--brand-muted); }
+.brand-role { color: var(--brand-muted); }
+
+.brand-table { width: 100%; border-collapse: collapse; font-size: var(--t-small); }
+.brand-table caption { caption-side: top; text-align: left; color: var(--brand-muted); padding-bottom: 0.75rem; }
+.brand-table th, .brand-table td { text-align: left; vertical-align: top; padding: 0.625rem 1rem 0.625rem 0; border-bottom: 1px solid var(--brand-hair); }
+.brand-table thead th { font-weight: 500; color: var(--brand-muted); }
+.brand-table tbody th { font-weight: 600; }
+.brand-grade { font-weight: 600; }
+.brand-rule-note { color: var(--brand-muted); }
+
+/* ── Type ───────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-type p { margin: 0; }
+.brand-spec-label { font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; color: var(--brand-slate); margin-top: 2rem !important; }
+.brand-spec-label:first-child { margin-top: 0 !important; }
+.brand-spec-hero { font-family: var(--brand-display); font-weight: 400; font-size: var(--t-h1); line-height: 0.96; letter-spacing: -0.02em; margin-top: 0.75rem !important; }
+.brand-spec-numeral { font-family: var(--brand-display); font-weight: 400; font-size: min(var(--t-numeral), 7.5vw); line-height: 1; letter-spacing: -0.03em; white-space: nowrap; margin-top: 1rem !important; }
+.brand-spec-text { font-size: var(--t-lede); line-height: 1.4; margin-top: 0.5rem !important; }
+.brand-w500 { font-weight: 500; }
+.brand-w600 { font-weight: 600; }
+.brand-spec-data { font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; margin-top: 0.75rem !important; overflow-wrap: anywhere; }
+.brand-spec-code { font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 100%; color: var(--brand-slate); margin-top: 0.5rem !important; overflow-wrap: anywhere; }
+
+/* ── Mark ───────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-mk { display: block; overflow: visible; }
+.brand-mk .brand-mk-c { fill: var(--brand-ivory); }
+/* The arc's ink moat: an ink stroke painted under the fill, so a moving arc never touches the ivory C (Law 2). */
+.brand-mk .brand-mk-arc { fill: var(--brand-amber); stroke: var(--brand-ink); stroke-width: 14; paint-order: stroke; }
+.brand-mk-arc, .brand-mk-up, .brand-mk-lo { transform-box: view-box; transform-origin: 50% 50%; }
+.brand-mk-16 { width: 1rem; height: 1rem; }
+.brand-mk-64 { width: 4rem; height: 4rem; }
+
+.brand-cx { display: block; width: 100%; height: auto; max-height: 26rem; }
+.brand-cx .brand-mk-c { fill: var(--brand-ivory); }
+.brand-cx .brand-mk-arc { fill: var(--brand-amber); }
+.brand-cx-guide { fill: none; stroke: var(--brand-slate); stroke-width: 0.75; stroke-dasharray: 2 4; }
+.brand-cx-ray { fill: none; stroke: var(--brand-slate); stroke-width: 0.75; }
+.brand-cx-dot { fill: var(--brand-slate); }
+.brand-cx text { fill: var(--brand-slate); font-family: var(--brand-data); font-stretch: 87%; }
+
+.brand-lockups { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-around; gap: 2rem; }
+.brand-lockup-h { width: min(100%, 17rem); height: auto; }
+.brand-lockup-s { width: min(100%, 12rem); height: auto; }
+
+.brand-rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.brand-rule { margin: 0; display: grid; gap: 0.625rem; align-content: start; font-size: var(--t-small); }
+.brand-rule-stage { aspect-ratio: 1; display: grid; place-items: center; border-radius: 2px; border: 1px solid var(--brand-hair); overflow: hidden; }
+.brand-rule-stage.is-ink { background: var(--brand-ink); }
+.brand-rule-stage.is-paper { background: var(--brand-ivory); }
+.brand-rule-stage:has(.brand-px16) { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
+.brand-rule-mark { width: 44%; height: auto; display: block; }
+.brand-rule-mark.is-rotated { transform: rotate(180deg); }
+.brand-rule-mark.is-stretched { transform: scaleX(1.45); }
+.brand-mk-arc.is-slate { fill: var(--brand-slate); }
+.brand-clear { width: 84%; aspect-ratio: 1; display: grid; place-items: center; outline: 1px dashed var(--brand-slate); outline-offset: -1px; }
+.brand-clear .brand-rule-mark { width: 50%; }
+.brand-px16 { width: 1rem; height: 1rem; }
+.brand-px24 { width: 1.5rem; height: 1.5rem; }
+.brand-px32 { width: 2rem; height: 2rem; }
+.brand-rule-k { font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; font-weight: 600; margin-right: 0.25rem; }
+.brand-rule--dont .brand-rule-k { color: var(--brand-muted); }
+
+/* ── Glyphs and the week ────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-glyphs { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.5rem; }
+.brand-glyphs li { display: grid; grid-template-columns: 7.5rem 1fr; gap: 1.25rem; align-items: center; font-size: var(--t-small); color: var(--brand-slate); }
+.brand-glyphs b { color: var(--brand-ivory); font-weight: 500; }
+.brand-glyph-sizes { display: flex; align-items: center; gap: 0.75rem; }
+.brand-glyph { color: var(--brand-ivory); display: block; }
+.brand-glyph-arc { fill: var(--brand-amber); }
+.brand-glyph.is-16 { width: 1rem; height: 1rem; }
+.brand-glyph.is-24 { width: 1.5rem; height: 1.5rem; }
+.brand-glyph.is-48 { width: 3rem; height: 3rem; }
+.brand-week { margin: 0; display: grid; gap: 0.75rem; }
+.brand-week img { display: block; width: 100%; height: 2.25rem; }
+.brand-week figcaption { display: grid; grid-template-columns: repeat(7, 1fr); font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; color: var(--brand-slate); }
+.brand-week .brand-note { color: var(--brand-slate); }
+
+/* ── Motion ─────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-mos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.brand-mo {
+  margin: 0; display: grid; grid-template-rows: auto 1fr auto; gap: 1rem; align-content: start;
+  background: var(--brand-ink); color: var(--brand-ivory); border-radius: 2px; padding: clamp(16px, 2.4vw, 28px);
+}
+.brand-mo figcaption { font-size: var(--t-small); color: var(--brand-slate); }
+.brand-mo figcaption b { color: var(--brand-ivory); font-weight: 600; display: block; margin-bottom: 0.25rem; }
+.brand-replay { justify-self: start; }
+.brand-mo-stage { min-height: 8.5rem; display: grid; align-items: center; position: relative; }
+.brand-mo-row { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
+.brand-mo-btn {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: 2.75rem; padding: 0.625rem 1rem;
+  border: 1px solid var(--brand-hair); border-radius: 2px; font-size: var(--t-small); font-weight: 500;
+}
+.brand-mo-note { margin: 0; font-size: var(--t-small); }
+.brand-mo-note span { color: var(--brand-slate); font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; }
+.brand-mo-clock { margin: 0; font-family: var(--brand-data); font-size: var(--t-h2); font-stretch: 87%; line-height: 1; font-variant-numeric: tabular-nums; }
+.brand-mo-digits { display: inline-flex; }
+.brand-cell { display: inline-grid; overflow: hidden; width: 1ch; height: 1.15em; line-height: 1.15; text-align: center; }
+.brand-cell > span { grid-area: 1 / 1; }
+.brand-mo-unit { font-size: var(--t-data); color: var(--brand-slate); }
+.brand-mo-link { position: relative; text-decoration: none !important; font-size: var(--t-body); font-weight: 500; padding-block: 0.625rem; }
+.brand-mo-link::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0.375rem; height: 1px; background: var(--brand-amber);
+  transform: scaleX(0); transform-origin: right; transition: transform 180ms var(--brand-ease-exit);
+}
+.brand-mo-link:hover::after, .brand-mo-link:focus-visible::after, .brand-mo-link.is-demo::after {
+  transform: scaleX(1); transform-origin: left; transition: transform 180ms var(--brand-ease);
+}
+.brand-mo-h { margin: 0; font-family: var(--brand-display); font-weight: 400; font-size: var(--t-h2); line-height: 1.05; letter-spacing: -0.01em; }
+.brand-line { display: block; overflow: hidden; padding-bottom: 0.08em; }
+.brand-line > span { display: block; }
+.brand-mo-pages { position: relative; width: 10rem; height: 3rem; }
+.brand-mo-page {
+  position: absolute; inset: 0; display: grid; place-items: center; border: 1px solid var(--brand-hair); border-radius: 2px;
+  font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%;
+}
+.brand-mo-page.is-new { opacity: 0; }
+.brand-mo-regime { position: relative; height: 8.5rem; border-radius: 2px; overflow: hidden; }
+.brand-mo-face { position: absolute; inset: 0; padding: 1rem; display: grid; align-content: space-between; border: 1px solid var(--brand-hair); border-radius: 2px; }
+.brand-mo-face p { margin: 0; font-family: var(--brand-display); font-size: var(--t-h2); line-height: 1; }
+.brand-mo-face.is-ink { background: var(--brand-ink); color: var(--brand-ivory); }
+.brand-mo-face.is-paper { background: var(--brand-ivory); color: var(--brand-ink); opacity: 0; }
+.brand-mo-regime[data-regime='open'] .is-paper { opacity: 1; }
+.brand-mo-chip { display: inline-flex; align-items: center; gap: 0.5rem; font-size: var(--t-small); }
+.brand-mo-tile { display: inline-grid; place-items: center; background: var(--brand-ink); padding: 0.25rem; border-radius: 2px; }
+
+/* ── Guilloche ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-ros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 17rem); gap: clamp(16px, 3vw, 40px); align-items: center; }
+.brand-ros-art { aspect-ratio: 1; color: var(--brand-ivory); }
+.brand-ros-art svg { display: block; width: 100%; height: 100%; }
+.brand-ros-form { display: grid; gap: 0.75rem; font-size: var(--t-small); }
+.brand-ros-form label { color: var(--brand-slate); }
+.brand-ros-form input {
+  width: 100%; min-height: 2.75rem; padding: 0.5rem 0.625rem; border-radius: 2px; border: 1px solid var(--brand-hair);
+  background: var(--brand-ink); color: var(--brand-ivory); font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%;
+}
+.brand-ros-form input[aria-invalid='true'] { border-color: var(--brand-slate); }
+.brand-ros-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.brand-ros-params { margin: 0; white-space: pre-line; font-family: var(--brand-data); font-size: var(--t-data); font-stretch: 87%; color: var(--brand-slate); }
+
+/* ── Downloads ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+.brand-dls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem clamp(16px, 3vw, 40px); }
+.brand-dl ul { list-style: none; margin: 0; padding: 0; }
+.brand-dl li { display: flex; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--brand-hair); font-size: var(--t-small); }
+.brand-dl li:last-child { border-bottom: 1px solid var(--brand-hair); }
+.brand-dl a { padding-block: 0.625rem; min-height: 2.75rem; display: inline-flex; align-items: center; }
+.brand-dl code { color: var(--brand-muted); padding-block: 0.75rem; overflow-wrap: anywhere; text-align: right; }
+
+@media (max-width: 767px) {
+  .brand-sws { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brand-rules { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .brand-mos, .brand-dls, .brand-ros { grid-template-columns: minmax(0, 1fr); }
+  .brand-glyphs li { grid-template-columns: 1fr; gap: 0.5rem; }
+}

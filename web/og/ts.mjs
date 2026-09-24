@@ -1,4 +1,4 @@
-// Import a dependency-free .ts module as ESM whatever the nearest package.json says (the repo root is "commonjs").
+// Import a dependency-free .ts module as ESM whatever the nearest package.json says about module type.
 import { readFile } from 'node:fs/promises';
 import { stripTypeScriptTypes } from 'node:module';
 
