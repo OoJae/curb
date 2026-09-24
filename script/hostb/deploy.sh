@@ -125,8 +125,19 @@ COMMIT_FLOOR_S=120
 SETTLE_DELAY_S=300
 TZ=UTC
 DATA_SUFFIX=${DATA_SUFFIX}
+# mark/2's cross-market signal. This box is in the US, where Binance answers 451, so the perp leg goes
+# through curb-asp's byte-exact relay in Singapore (the upstream bytes are committed and re-fetchable).
+SIGNAL=on
+SIGNAL_RELAY_BASE=https://api.curb.markets
+SIGNAL_BINANCE_DIRECT=off
 CONF
 )
+
+# Archive (R2) credentials: created empty once and never overwritten, like the alerts files. Publishing
+# stays off until they are filled on the box; the values never pass through this script.
+for f in attestor-b.r2.env keeper.r2.env; do
+  [ -f "/etc/curb/$f" ] || (umask 077; : > "/etc/curb/$f")
+done
 
 docker build -q -t curb-attestor:latest   /opt/curb/attestor
 docker build -q -t curb-keeper:latest     /opt/curb/keeper
@@ -140,6 +151,7 @@ docker rm -f curb-attestor-b >/dev/null 2>&1 || true
 docker run -d --name curb-attestor-b "${HARDEN[@]}" \
   --memory 384m --memory-swap 384m --cpus 1 \
   --env-file /etc/curb/attestor-b.env --env-file /etc/curb/attestor-b.alerts.env --env-file /etc/curb/attestor-b.secret.env \
+  --env-file /etc/curb/attestor-b.r2.env \
   -v /var/lib/curb/attestor-b:/data -p 127.0.0.1:8091:8080 \
   curb-attestor:latest >/dev/null
 
@@ -147,6 +159,7 @@ docker rm -f curb-keeper >/dev/null 2>&1 || true
 docker run -d --name curb-keeper "${HARDEN[@]}" \
   --memory 384m --memory-swap 384m --cpus 1 \
   --env-file /etc/curb/keeper.env --env-file /etc/curb/keeper.alerts.env --env-file /etc/curb/keeper.secret.env \
+  --env-file /etc/curb/keeper.r2.env \
   -v /var/lib/curb/keeper:/data -p 127.0.0.1:8092:8080 \
   curb-keeper:latest >/dev/null
 

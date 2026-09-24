@@ -1,0 +1,232 @@
+/* Reset, ground, grain, focus, skip link. Tokens only (no raw hex / px font sizes). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--ground);
+  color: var(--figure);
+  scroll-padding-top: var(--s-3);
+  hanging-punctuation: first last;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  color: var(--figure);
+  font-family: var(--font-text);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: 400;
+  font-kerning: normal;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+main {
+  flex: 1 0 auto;
+  display: block;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+svg {
+  overflow: visible;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+dd,
+dt,
+figcaption,
+blockquote {
+  overflow-wrap: break-word;
+}
+
+ul[role='list'],
+ol[role='list'] {
+  list-style: none;
+  padding: 0;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration-thickness: var(--rule);
+  text-underline-offset: 0.2em;
+  text-decoration-color: var(--hairline-strong);
+  transition: text-decoration-color var(--dur-micro) var(--ease-curb), color var(--dur-micro) var(--ease-curb);
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+hr {
+  border: 0;
+  border-top: var(--rule) solid var(--hairline);
+}
+
+::selection {
+  background: var(--figure);
+  color: var(--ground);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ── Surfaces: a local ground inside either regime (see tokens.css) ─────────────────────────── */
+.surface-ink,
+.surface-paper {
+  background: var(--ground);
+  color: var(--figure);
+}
+
+/* ── Focus: 2 px Streetlamp, 3 px offset on ink; Bell brass on paper (via --focus) ─────────── */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: var(--radius);
+}
+
+/* Scripted focus on the <main> landmark (skip link target) does not need a ring. */
+main:focus-visible,
+[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
+/* ── Skip link ─────────────────────────────────────────────────────────────────────────────── */
+.skip-link {
+  position: fixed;
+  top: var(--s-1);
+  left: var(--s-1);
+  z-index: var(--z-skip);
+  padding: var(--s-1) var(--s-2);
+  min-height: var(--touch);
+  display: inline-flex;
+  align-items: center;
+  background: var(--figure);
+  color: var(--ground);
+  font-size: var(--t-small);
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: var(--radius);
+  transform: translateY(calc(-100% - var(--s-2)));
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* ── Grain: static 256 px tile, 4% on ink, 3% on paper. Never animated. ────────────────────── */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-grain);
+  pointer-events: none;
+  background-image: url('/textures/grain-256.png');
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  opacity: var(--grain-opacity);
+  view-transition-name: grain;
+}
+
+[data-grain='off'] .grain {
+  display: none;
+}
+
+/* ── Visually hidden but announced ────────────────────────────────────────────────────────── */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Reveal fail-safe: [data-reveal] text is hidden until motion/reveal.ts splits it. If the
+   script never runs, it shows itself after 2.5 s. Reduced motion never hides it. ─────────── */
+@keyframes curb-reveal-failsafe {
+  to {
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal]:not([data-revealed]) {
+    visibility: hidden;
+    animation: curb-reveal-failsafe 0s linear 2.5s forwards;
+  }
+}
+
+/* ── Capture mode (?capture=1): no cursor, no popovers, no hover chrome ───────────────────── */
+[data-capture],
+[data-capture] * {
+  cursor: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}

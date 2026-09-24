@@ -1,0 +1,100 @@
+/**
+ * Footer ledger: this HK week as a slot strip, the live "now" row, and the site's ledger of links.
+ * Week slots come from lane B's `src/data/schedule.ts` (export `weekSlots(nowMs)`) when present,
+ * else from the timetable fallback in shell/hkt.ts.
+ */
+import { EXTERNAL } from './markup';
+import { fmtHKT, SLOT_MS, timetableWeekSlots, type SlotState } from './hkt';
+import { subscribeRegime, type RegimeState } from './regime';
+import { fmtAgo, fmtBlock, fmtUsd } from '../ui/format';
+import { escapeHTML } from '../ui/html';
+import { slotStrip, summarizeSlots } from '../ui/slotstrip';
+
+type WeekSlots = (nowMs: number) => { slots: SlotState[]; nowIndex: number };
+
+const schedModules = import.meta.glob<{ weekSlots?: WeekSlots }>('../data/schedule.ts', { eager: true });
+const bWeekSlots = Object.values(schedModules)[0]?.weekSlots;
+
+export function weekSlotsNow(nowMs = Date.now()): { slots: SlotState[]; nowIndex: number; source: 'schedule' | 'timetable' } {
+  if (bWeekSlots) {
+    try {
+      // Lane B's schedule returns `open: boolean[]` (one per five-minute slot); the strip wants states.
+      const w = bWeekSlots(nowMs) as unknown as { slots?: SlotState[]; open?: readonly boolean[]; nowIndex: number };
+      const slots = w.slots ?? (w.open ?? []).map((o): SlotState => (o ? 'open' : 'shut'));
+      if (slots.length === 0) throw new Error('schedule.weekSlots returned no slots');
+      return { slots, nowIndex: w.nowIndex, source: 'schedule' };
+    } catch (err) {
+      console.warn('schedule.weekSlots failed; using the timetable', err);
+    }
+  }
+  const t = timetableWeekSlots(nowMs);
+  return { slots: t.slots, nowIndex: t.nowIndex, source: 'timetable' };
+}
+
+const REGIME_WORD = { open: 'open', shut: 'shut', unknown: 'stale' } as const;
+
+function nowRowHTML(s: RegimeState, now = Date.now()): string {
+  const r = s.reading;
+  if (!s.settled) return 'wTCENTx · reading MarketClock';
+  if (!r) return 'wTCENTx · MarketClock unreadable just now';
+  if (r.source === 'fallback') return 'wTCENTx · specimen: live reading not wired in yet';
+  const parts = [
+    'wTCENTx',
+    REGIME_WORD[s.live],
+    r.cap !== null ? `cap ${escapeHTML(fmtUsd(r.cap))}` : null,
+    `attested ${escapeHTML(fmtAgo(r.asOfMs, now))} (${fmtHKT(r.asOfMs)} HKT)`,
+    r.block !== null
+      ? `<a href="${EXTERNAL.oklink}/block/${r.block}" rel="noopener" target="_blank">block ${escapeHTML(fmtBlock(r.block))}<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a>`
+      : null,
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+
+export interface FooterLedger {
+  el: HTMLElement;
+  destroy(): void;
+}
+
+export function mountFooterLedger(root: ParentNode = document): FooterLedger | null {
+  const footer = root.querySelector<HTMLElement>('[data-shell="footer"]');
+  if (!footer) return null;
+  const stripEl = footer.querySelector<HTMLElement>('[data-footer-strip]');
+  const nowEl = footer.querySelector<HTMLElement>('[data-footer-now]');
+  const amber = footer.querySelector<HTMLElement>('[data-footer-amber]');
+  const total = footer.querySelector<HTMLElement>('[data-footer-total]');
+  const sourceNote = footer.querySelector<HTMLElement>('[data-footer-source]');
+
+  let strip: ReturnType<typeof slotStrip> | null = null;
+  const drawWeek = () => {
+    if (!stripEl) return;
+    const w = weekSlotsNow();
+    if (strip) strip.update(w.slots, w.nowIndex);
+    else strip = slotStrip(stripEl, w.slots, { nowIndex: w.nowIndex });
+    const sum = summarizeSlots(w.slots);
+    if (amber) amber.textContent = sum.shut.toLocaleString('en-US');
+    if (total) total.textContent = sum.total.toLocaleString('en-US');
+    if (sourceNote) sourceNote.hidden = w.source !== 'timetable';
+  };
+  drawWeek();
+  // Redraw on each slot boundary (the "now" tick moves every five minutes).
+  let weekTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleWeek = () => {
+    weekTimer = setTimeout(() => {
+      drawWeek();
+      scheduleWeek();
+    }, SLOT_MS - (Date.now() % SLOT_MS) + 100);
+  };
+  scheduleWeek();
+
+  const unsub = subscribeRegime((s) => {
+    if (nowEl) nowEl.innerHTML = nowRowHTML(s);
+  });
+
+  return {
+    el: footer,
+    destroy() {
+      unsub();
+      clearTimeout(weekTimer);
+    },
+  };
+}

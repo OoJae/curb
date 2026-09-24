@@ -632,22 +632,77 @@ as such.
 
 ---
 
-## D-13 — `curb.scorecard.mark/2` (stub)
+## D-13 — `curb.scorecard.mark/2`: a signal from markets that trade while Hong Kong is shut (24 Sept 2026)
 
-**Status: TODO(lead): fill from the mark/2 lane.**
+**Why.** D-11's contingency was met. All 15 rows settled under `curb.scorecard.mark/1` were ties, because
+the wrapper pools carry no information while primary capacity is off, yet the reopens moved 30–105 bp.
+Beating the last print needs information from outside the pool.
 
-Context: the D-11 update met the contingency D-11 fixed in advance. 15 of 15 settled rows tied under
-`curb.scorecard.mark/1`, because the wrapper pools carry no information while the primary market is shut, while
-the reopens moved 30 to 105 bp.
+**Which signals exist.** Surveyed and tested 24 Sept, 12:07–12:30Z:
 
-To record here once decided:
+- **Binance USDⓈ-M perpetuals trade 24/7 on the Hong Kong names:** `HK0700USDT` (Tencent, HKD/share),
+  `HK1810USDT` (Xiaomi, HKD/share) and `MEITUANUSDT` (Meituan, USD/share). They are keyless. **A closed
+  minute's kline is byte-identical on refetch**, so a third party can reproduce the evidence exactly.
+- **US ADRs** (TCEHY 1 share/ADR, XIACY 5, MPNGY 2) trade in US hours, which fall entirely inside the Hong
+  Kong overnight closure. Yahoo's chart API needs a User-Agent and no key. Its bytes are *not*
+  reproducible on refetch, so this leg is verified against the committed bytes only, and the bundle says so.
+- **Rejected:**
+  - Stooq: now behind a JavaScript challenge.
+  - Pyth Hermes: prices now need a key.
+  - HSI futures: Hong Kong futures also break 12:00–13:00, and the only free night-session quote (Sina) is
+    GBK-encoded JavaScript that can change without notice.
+  - OKX: lists only Xiaomi, and its index is 58% Binance.
+  - Binance `indexPrice`: it drifts toward the perp during closures.
 
-- the method: its inputs, formula and damping, and the external signal(s) that trade while HKEX is shut (and
-  which were rejected);
-- where each signal comes from, and how its exact bytes are committed as evidence (leaf kinds, schema);
-- the method digest, and how `curb-verify`, the keeper and curb-asp name it;
-- what the keeper does when the external signal is unavailable (fall back to mark/1, or commit no row);
-- the first row committed under mark/2 (block, tx, closure id), and its grade once settled;
-- tests, including byte-identical re-derivation of existing mark/1 rows.
+**The method.**
 
-Unchanged rule: every existing row keeps the method that produced it. **No row is ever re-marked.**
+    mark = lastPrint × (1 + β · r),   β = 0.79
+
+- `r` is the mean of the perp return and the FX-adjusted ADR return, each measured from the cut to the
+  commit. One leg alone is used if the other is missing (flag `perp-missing` / `adr-missing`). A leg that
+  moves more than 20% is set aside as a bad print.
+- **Lunch recess (closures under 4 h): weight 0.** The mark stays the last print, flag `recess-no-edge`.
+  Over 23 recesses, the perp-adjusted mark *lost* on all three names (Tencent 26 vs 18 bp, Xiaomi 29 vs 22,
+  Meituan 32 vs 19), and halving the weight was still worse. The perp's move is still committed as
+  evidence.
+- **wNVDAx / wAAPLx:** no proxy (`no-proxy`); mark/1 behaviour.
+- **Nothing available:** `no-signal`, and the mark equals mark/1's.
+- **β** was fitted on 118 overnight and weekend closures (22 Jul – 22 Sep, ending *before* the D-11 rows),
+  regressing the Hong Kong open-over-close on `r` through the origin:
+
+  | sample | β | std. error |
+  |---|---|---|
+  | pooled | 0.983 | 0.093 |
+  | Tencent | 1.048 | — |
+  | Xiaomi | 0.901 | — |
+  | Meituan | 0.976 | — |
+
+  Pooled uncentred R² 0.49. Published damped as round(0.8 × 0.983, 2) = 0.79. In-sample mean error fell
+  from 92.7 → 58.2 bp (Tencent), 96.6 → 78.5 (Xiaomi) and 93.2 → 67.3 (Meituan) against the opening
+  auction. That is not the pool print the Scorecard grades.
+
+**Evidence.** Each response's exact bytes are committed as a `signal:<wrapper>:<leg>` leaf with its
+upstream URL, keccak256 and sha256. Every fetch attempt, including failures, goes into a fetch-log leaf.
+`verifyMarkBundleOffline` re-derives `r` and the mark from the committed bytes with the same pure function
+(`services/keeper/src/sources/signal.ts`), and checks the committed β and proxies against the method's
+own. The bundle shape is unchanged (`markbundle/1`). The method digest is `keccak256("curb.scorecard.mark/2")`.
+
+**Geography.** Binance answers HTTP 451 to US IPs, and the keeper runs in Silicon Valley. The perp leg
+therefore goes through curb-asp in Singapore (`GET /v1/relay/binance/klines`). The relay forwards the
+upstream bytes verbatim and adds `x-curb-upstream-url` and `x-curb-upstream-sha256`. The bundle commits
+the *upstream* URL, so anyone outside the US can refetch from Binance directly and compare hashes. Verified
+live 24 Sept: the relay's sha256 for `HK0700USDT` @ 1790236440000 matched the expected
+`2457e23f…767e11`.
+
+**An honest out-of-sample replay** on the six D-11 overnight rows, graded the way the Scorecard grades:
+mark/2 would have **won 4 of 6** outright, but its mean error was slightly worse (47.0 vs 44.3 bp). Both
+losses were the 22→23 Sept night, when both signals pointed up and the pool's post-reopen print came in
+down. Six rows prove nothing either way; the live record will.
+
+**Known limit.** A keeper could omit a leg's bytes it didn't like. The fetch log makes that visible but
+cannot prove it. The perp leg can be checked by refetching; the Yahoo leg cannot.
+
+**Unchanged rule:** every existing row keeps the method that produced it. **No row is ever re-marked.**
+The mark/1 verification range closes at block 71,486,953 (`MARK2_CUTOVER_BLOCK`).
+
+First mark/2 row: TODO(lead) block, tx and closure id once committed, and its grade once settled.
