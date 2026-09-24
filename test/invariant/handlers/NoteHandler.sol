@@ -196,7 +196,7 @@ contract NoteHandler is Test {
     /// The first actor, starting from `seed`, holding units of `id` (address(0) if none does).
     function _holder(uint256 seed, uint256 id) internal view returns (address) {
         for (uint256 i; i < 3; ++i) {
-            address a = actors[(seed + i) % 3];
+            address a = actors[(seed % 3 + i) % 3];
             if (note.balanceOf(a, id) > 0) return a;
         }
         return address(0);
