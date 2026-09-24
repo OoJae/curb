@@ -23,7 +23,8 @@ import {NoteHandler} from "./handlers/NoteHandler.sol";
 /// changes, time jumps, pointer pokes, prints, mints, transfers, auction lists/bids/withdrawals, redeems
 /// and cancels:
 ///   - per note: delivered + cancelled + outstanding == wrapperShares, and units held == outstanding;
-///   - per wrapper: the note's wrapper balance == Σ outstanding == openInterest <= cap;
+///   - per wrapper: the note's wrapper balance == Σ outstanding == openInterest;
+///   - per closure: mintedInEpoch[w][e] == Σ outstanding of the notes minted in epoch e, and <= cap;
 ///   - the epoch never decreases; every bracket is shutSeenAt < openedAt <= next shutSeenAt;
 ///   - prints are write-once;
 ///   - every successful redeem was unlocked (epoch moved past epochAtMint, or the 10-day fallback)
@@ -129,8 +130,27 @@ contract NoteInvariant is StdInvariant, Test {
             }
             assertEq(ws[k].balanceOf(address(note)), sum, "escrow == sum outstanding");
             assertEq(note.openInterest(w), sum, "openInterest == sum outstanding");
-            assertLe(sum, note.capShares(w), "within cap");
         }
+    }
+
+    function invariant_per_closure_count_matches_and_is_capped() public view {
+        MockWrapper4626[2] memory ws = [wT, wA];
+        uint256 n = handler.idCount();
+        for (uint256 k; k < 2; ++k) {
+            address w = address(ws[k]);
+            uint32 head = pointer.epochOf(w);
+            for (uint32 e = 0; e <= head; ++e) {
+                uint256 sum;
+                for (uint256 i; i < n; ++i) {
+                    uint256 id = handler.ids(i);
+                    IReopenNote.Unit memory u = note.unitOf(id);
+                    if (u.wrapper == w && u.epochAtMint == e) sum += note.outstanding(id);
+                }
+                assertEq(note.mintedInEpoch(w, e), sum, "mintedInEpoch == closure outstanding");
+                assertLe(sum, note.capShares(w), "closure within cap");
+            }
+        }
+        assertFalse(handler.strandedRedeem(), "redeemed to the note itself");
     }
 
     // --- pointer -------------------------------------------------------------------------------------
@@ -274,13 +294,16 @@ contract NoteInvariant is StdInvariant, Test {
         handler.warp(301);
         handler.recordPrint(0, 1);
         assertEq(handler.prints(), 1);
-        handler.grade(0);                        // lot 1 graded against the epoch-1 print
-        assertEq(handler.grades(), 1);
+        assertEq(handler.grades(), 1, "the print graded lot 1 at once");
+        handler.grade(0);                        // and it grades the same on request
+        assertEq(handler.grades(), 2);
         assertFalse(handler.badGrade());
         handler.corporateAction(0, 2e18);        // rate and nonce move before anyone redeems
         handler.redeem(1, 0, 5e18, 1);           // bob redeems 5
         handler.redeem(2, 0, 4e18, 2);           // carol redeems the lot's 4
-        handler.redeem(0, 0, 1e18, 0);           // alice redeems 1
+        handler.redeem(0, 0, 1e18, 0);           // alice aims her 1 at the note itself: refused
+        assertEq(handler.redeems(), 2);
+        handler.redeem(0, 0, 1e18, 4);           // alice redeems 1 to herself
         assertEq(handler.redeems(), 3);
         assertEq(note.outstanding(1), 0);
         handler.cancel(1, 1);                    // issuer carol cancels the wA note she holds whole
@@ -289,12 +312,13 @@ contract NoteInvariant is StdInvariant, Test {
         handler.warp(4 days);
         handler.warp(4 days);
         handler.warp(2 days);
-        handler.redeem(0, 2, 1e18, 0);           // the 10-day fallback
+        handler.redeem(0, 2, 1e18, 4);           // the 10-day fallback
         assertEq(handler.fallbackRedeems(), 1);
 
         invariant_delivered_plus_cancelled_plus_outstanding_is_wrapperShares();
         invariant_units_held_equal_outstanding();
         invariant_escrow_equals_sum_outstanding_equals_open_interest();
+        invariant_per_closure_count_matches_and_is_capped();
         invariant_epoch_never_decreases();
         invariant_brackets_are_strict_and_chained();
         invariant_prints_are_write_once();

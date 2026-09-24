@@ -41,6 +41,7 @@ contract NoteHandler is Test {
 
     bool public lockedRedeem;       // a redeem succeeded although neither unlock held afterwards
     bool public inexactDelivery;    // a redeem/cancel delivered other than exactly its amount
+    bool public strandedRedeem;     // a redeem to the note itself succeeded
     bool public badBid;             // a bid cleared while open, in a later epoch, or outside [floor, start]
     bool public badPayment;         // a clearing moved USDG other than exactly `price` from buyer to seller
     bool public ineligibleCleared;  // the ineligible actor won a lot
@@ -182,6 +183,7 @@ contract NoteHandler is Test {
             s.print = p;
             s.printedAt = uint64(block.timestamp);
             prints++;
+            _gradeSold(w);
         } catch {}
     }
 
@@ -203,12 +205,14 @@ contract NoteHandler is Test {
         address holder = _holder(actorSeed, id);
         if (holder == address(0)) return;
         amount = bound(amount, 1, note.balanceOf(holder, id));
-        address to = _actor(toSeed);
+        // Now and then aim the shares at the note itself: that must always be refused.
+        address to = toSeed % 16 == 0 ? address(note) : _actor(toSeed);
         IReopenNote.Unit memory u = note.unitOf(id);
         uint256 before = MockWrapper4626(u.wrapper).balanceOf(to);
 
         vm.prank(holder);
         try note.redeem(id, uint128(amount), to) {
+            if (to == address(note)) strandedRedeem = true;
             delivered[id] += amount;
             redeems++;
             bool byEpoch = pointer.epochOf(u.wrapper) > u.epochAtMint;
@@ -247,6 +251,16 @@ contract NoteHandler is Test {
 
     // --- auction path (the real ClosedAuction) -------------------------------------------------------
 
+    /// The first lot, starting from `seed`, in `want` status; any lot if none is (so refusals are hit too).
+    function _lot(uint256 seed, uint256 n, ClosedAuction.Status want) internal view returns (uint256) {
+        uint256 first = seed % n;
+        for (uint256 i; i < n; ++i) {
+            uint256 lotId = 1 + (first + i) % n;
+            if (auction.lotOf(lotId).status == want) return lotId;
+        }
+        return 1 + first;
+    }
+
     function list(uint256 actorSeed, uint256 idSeed, uint256 amount, uint256 start, uint256 floorBps, uint256 decay, uint256 life)
         external
         tracked
@@ -269,7 +283,7 @@ contract NoteHandler is Test {
     function bid(uint256 actorSeed, uint256 lotSeed, uint256 slack) external tracked {
         uint256 n = auction.lotCount();
         if (n == 0) return;
-        uint256 lotId = 1 + lotSeed % n;
+        uint256 lotId = _lot(lotSeed, n, ClosedAuction.Status.LIVE);
         address bidder = _actor(actorSeed);
         ClosedAuction.Lot memory l = auction.lotOf(lotId);
         uint256 maxPrice = uint256(l.startPrice) + bound(slack, 0, 1e6);
@@ -306,7 +320,7 @@ contract NoteHandler is Test {
     function withdrawLot(uint256 lotSeed) external tracked {
         uint256 n = auction.lotCount();
         if (n == 0) return;
-        uint256 lotId = 1 + lotSeed % n;
+        uint256 lotId = _lot(lotSeed, n, ClosedAuction.Status.LIVE);
         vm.prank(auction.lotOf(lotId).seller);
         try auction.withdraw(lotId) {
             withdrawals++;
@@ -318,7 +332,19 @@ contract NoteHandler is Test {
     function grade(uint256 lotSeed) external tracked {
         uint256 n = auction.lotCount();
         if (n == 0) return;
-        uint256 lotId = 1 + lotSeed % n;
+        _grade(_lot(lotSeed, n, ClosedAuction.Status.SOLD));
+    }
+
+    /// After a print, the operator reads the grade of every sold lot on that wrapper.
+    function _gradeSold(address w) internal {
+        uint256 n = auction.lotCount();
+        for (uint256 lotId = 1; lotId <= n; ++lotId) {
+            ClosedAuction.Lot memory l = auction.lotOf(lotId);
+            if (l.wrapper == w && l.status == ClosedAuction.Status.SOLD) _grade(lotId);
+        }
+    }
+
+    function _grade(uint256 lotId) internal {
         ClosedAuction.Lot memory l = auction.lotOf(lotId);
         uint128 print = pointer.epochInfo(l.wrapper, l.epochAtMint + 1).print;
         uint256 v = MulDiv.mulDiv(l.amount, print, 1e30);
