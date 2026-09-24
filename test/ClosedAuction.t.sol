@@ -17,6 +17,9 @@ import {MockScorecardPrice} from "./mocks/MockScorecardPrice.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 import {MockPointer} from "./mocks/MockPointer.sol";
 import {MockNote} from "./mocks/MockNote.sol";
+import {MockWrapper4626} from "./mocks/MockWrapper4626.sol";
+import {ReopenPointer} from "../src/ReopenPointer.sol";
+import {ReopenNote} from "../src/ReopenNote.sol";
 
 /// A bidder contract that tries to re-enter the auction from its ERC-1155 hook.
 contract ReentrantBidder {
@@ -791,5 +794,140 @@ contract ClosedAuctionTest is Test {
         (ok, ret) = _sameWithSuffix(stranger, address(auction), abi.encodeCall(ClosedAuction.realisedDiscountBps, (1)));
         assertTrue(ok);
         assertEq(abi.decode(ret, (int256)), 324);
+    }
+}
+
+/// The auction against the REAL ReopenPointer and ReopenNote (package P1), driven by the settable clock and
+/// price mocks: the whole cycle without a fork, so it runs in the merge gate.
+contract ClosedAuctionWithRealNoteTest is Test {
+    uint128 constant AMOUNT = 0.1e18;
+    uint128 constant START = 5_600_000;
+    uint128 constant FLOOR = 5_430_000;
+    uint32 constant DECAY = 1200;
+
+    MockClock clock;
+    MockScorecardPrice sc;
+    MockERC20 usdg;
+    MockWrapper4626 w;
+    ReopenPointer pointer;
+    ReopenNote note;
+    EligibilityRegistry registry;
+    ClosedAuction auction;
+
+    address seller = makeAddr("seller");
+    address bidder = makeAddr("bidder");
+    uint64 t0;
+
+    function setUp() public {
+        vm.warp(1_790_000_000);
+        t0 = uint64(block.timestamp);
+        clock = new MockClock();
+        sc = new MockScorecardPrice();
+        usdg = new MockERC20("Global Dollar", "USDG", 6);
+        w = new MockWrapper4626(makeAddr("raw"), "Wrapped TCENTx", "wTCENTx");
+        sc.setPrice(address(w), 55.78e18);
+
+        pointer = new ReopenPointer(IMarketClock(address(clock)), IScorecardPrice(address(sc)));
+        address[] memory ws = new address[](1);
+        uint256[] memory caps = new uint256[](1);
+        (ws[0], caps[0]) = (address(w), 175e18);
+        note = new ReopenNote(IMarketClock(address(clock)), pointer, IScorecardPrice(address(sc)), ws, caps, "u");
+        registry = new EligibilityRegistry(address(this));
+        registry.setEligible(bidder, true, keccak256("test:bidder"));
+        auction = new ClosedAuction(
+            note, pointer, IMarketClock(address(clock)), IScorecardPrice(address(sc)), IERC20(address(usdg)),
+            IEligibility(address(registry))
+        );
+
+        clock.set(address(w), IMarketClock.Regime.CLOSED, 0);
+        pointer.observe(address(w)); // the pointer witnesses the shut
+
+        w.mint(seller, 1e18);
+        vm.startPrank(seller);
+        w.approve(address(note), type(uint256).max);
+        note.setApprovalForAll(address(auction), true);
+        vm.stopPrank();
+        usdg.mint(bidder, 100e6);
+        vm.prank(bidder);
+        usdg.approve(address(auction), type(uint256).max);
+    }
+
+    function _mintAndList() internal returns (uint256 id, uint256 lotId) {
+        vm.startPrank(seller);
+        id = note.mint(address(w), AMOUNT, seller);
+        lotId = auction.list(id, AMOUNT, START, FLOOR, DECAY, uint64(vm.getBlockTimestamp() + 2400));
+        vm.stopPrank();
+    }
+
+    function _reopen() internal {
+        clock.set(address(w), IMarketClock.Regime.MARKET, 20_000_000);
+        pointer.observe(address(w));
+    }
+
+    function test_full_cycle_with_the_real_note_and_pointer() public {
+        (uint256 id, uint256 lotId) = _mintAndList();
+        assertEq(auction.lotOf(lotId).epochAtMint, 0);
+        assertEq(auction.lotOf(lotId).refPrice, 5_578_000);
+
+        vm.warp(t0 + 600);
+        vm.prank(bidder);
+        uint256 price = auction.bid(lotId, START);
+        assertEq(price, 5_515_000);
+        assertEq(usdg.balanceOf(seller), price, "seller delta = price");
+        assertEq(note.balanceOf(bidder, id), AMOUNT);
+
+        vm.prank(bidder);
+        vm.expectRevert(abi.encodeWithSelector(ReopenNote.NotReopened.selector, id, uint32(0), uint32(0)));
+        note.redeem(id, AMOUNT, bidder);
+
+        vm.warp(t0 + 900);
+        _reopen();
+        assertEq(pointer.epochOf(address(w)), 1);
+        vm.expectRevert(ClosedAuction.NotPrinted.selector); // reopened, not printed: epochInfo reads zeroes
+        auction.realisedDiscountBps(lotId);
+
+        vm.warp(t0 + 1200);
+        sc.setPrice(address(w), 57e18);
+        assertEq(pointer.recordPrint(address(w), 1), 57e18);
+
+        vm.prank(bidder);
+        note.redeem(id, AMOUNT, bidder);
+        assertEq(w.balanceOf(bidder), AMOUNT, "exactly the escrowed shares");
+        assertEq(auction.realisedDiscountBps(lotId), 324);
+    }
+
+    function test_no_hindsight_with_the_real_pointer() public {
+        (uint256 id, uint256 lotId) = _mintAndList();
+        vm.warp(t0 + 600);
+        _reopen();
+        vm.prank(bidder);
+        vm.expectRevert(ClosedAuction.MarketNotClosed.selector);
+        auction.bid(lotId, START);
+
+        vm.warp(t0 + 1200);
+        clock.set(address(w), IMarketClock.Regime.CLOSED, 0); // shut again, not yet witnessed
+        vm.prank(bidder);
+        vm.expectRevert(ClosedAuction.ReopenedSinceMint.selector);
+        auction.bid(lotId, START);
+        vm.prank(seller);
+        vm.expectRevert(ClosedAuction.ReopenedSinceMint.selector);
+        auction.list(id, 1, START, FLOOR, DECAY, uint64(vm.getBlockTimestamp() + 600));
+
+        vm.prank(seller);
+        auction.withdraw(lotId);
+        assertEq(note.balanceOf(seller, id), AMOUNT);
+    }
+
+    /// The pointer can only refuse what it witnessed: a reopen-and-shut that nobody observed does not move
+    /// the epoch, so the lot stays biddable. This is why poke.sh observes at every reopen.
+    function test_an_unwitnessed_reopen_does_not_move_the_epoch() public {
+        (, uint256 lotId) = _mintAndList();
+        vm.warp(t0 + 600);
+        clock.set(address(w), IMarketClock.Regime.MARKET, 20_000_000); // nobody observes
+        vm.warp(t0 + 700);
+        clock.set(address(w), IMarketClock.Regime.CLOSED, 0);
+        vm.prank(bidder);
+        auction.bid(lotId, START);
+        assertEq(pointer.epochOf(address(w)), 0);
     }
 }
