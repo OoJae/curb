@@ -246,6 +246,49 @@ answer re-serialised with its keys sorted, so its output is not the bytes the se
 does not reproduce `responseDigest`. The receipt binds the exact bytes on the wire; a buyer that wants to
 check it must keep the raw response body (or restore the server's key order, as above).
 
+## W3 — ReopenPointer, ReopenNote, ClosedAuction, EligibilityRegistry — 24 Sept 2026 ~18:00Z
+
+Deployed from `curb-deployer` with `script/DeployW3.s.sol` (`DESK`/`AGENTIC` = the two disclosed team
+wallets). Every contract is verified **Sourcify `exact_match`** (solc 0.8.28, prague, 200 runs). None of the
+four has an upgrade path; only the registry has an admin (the deployer), and it can only allowlist
+addresses.
+
+| contract | address | tx | block |
+|---|---|---|---|
+| EligibilityRegistry | `0xd7251b562eD07374ccD2436a7EfC0bA3A28ce938` | `0xbcfa3232843a3f9ab72527027b32ebea8269028f1aaf0fff5db6e89746ae2918` | 71,503,708 |
+| setEligible(curb-desk) | — | `0xac68b06045aeee1856adabbace31b08e6aaa4dc2c52274ed29cbed0b9a2bb65f` | 71,503,711 |
+| setEligible(Agentic Wallet) | — | `0xc87a92c1b8dc84daa7d82a3a3a47090e76f2db6a96b2d16d424bd6807e370370` | 71,503,714 |
+| ReopenPointer | `0x85AB0FebdFa7201E65eA01bd3e4CC6F9c0Ac4471` | `0x5932cfa10a7cf35ffac945c1585367a9ed74f88e8a7055c11675b09cade5ac57` | 71,503,717 |
+| ReopenNote (CURB-RN) | `0x7B2AcB0Db3316f7B8cf1B287796a2273871F011B` | `0xf7b5a5c2b009605692cc9a71b51260302b6e865da56db18e144a7616a71ea567` | 71,503,720 |
+| ClosedAuction | `0xAc74864d69DdB940ADfDB39E69751759a32bb80D` | `0x88dffc00aac47f6e099fcad1b5278793bd7968dd0109e241f07d54a4ca640af3` | 71,503,723 |
+| first `observe(wTCENTx)` (shut) | — | `0x425cafd15dc74f55a77ea9032c819db54ea6ecab67e1e7709f8e0feb89837e1a` | 71,503,726 |
+
+Note caps (immutable, from D-3): wTCENTx 175e18, wNVDAx 220e18, wAAPLx 14e18 wrapper shares per closure.
+
+**Before deploy, two adversarial reviews** (correctness, security/griefing, economics; every finding
+independently re-verified) changed the code:
+- A per-closure open-interest cap, so notes that unlocked but were never redeemed can't block later closures.
+- `redeem` to the note contract itself is refused.
+- Lots end by MarketClock's attested next transition (`NoCutoff` / `SpansTransition`). The pointer only
+  counts *witnessed* reopens, and a session nobody observed could otherwise have allowed a bid made with
+  hindsight. This also keeps overnight lots clear of HKEX's 09:00 pre-open auction.
+
+### Oracle depth for the Hong Kong pools — 24 Sept 2026
+
+The review also found that the wTCENTx pool's TWAP ring held only 32 observations against Scorecard's
+120-second window. For well under $1 of dust mints, anyone could make `priceNow` unreadable and so block a
+reopen print, or a Scorecard settlement. The deployer called the permissionless
+`increaseObservationCardinalityNext(256)` on all three pools (with the Builder Code suffix):
+
+| pool | tx | block | gas |
+|---|---|---|---|
+| wTCENTx/USDG `0xC89d…992f` | `0xec2a0c5ae2e9601be8e83e126583fdec1b008d3aaf4cf372f27a2735edc7cc07` | 71,503,966 | 5,010,748 |
+| wXIAOx `0xdc7f…8417` | `0x25ab8c7c6489e889a9482787dcb98ab8f63eebfcf8c89e6943790020193c9379` | 71,503,972 | 5,010,748 |
+| wMEITx `0x54E8…70C7` | `0x210dc4c8b91a97e66dade3f1f7582844f3818bf8284c8f95849b06e704a80056` | 71,503,979 | 5,010,748 |
+
+The ring grows to 256 as trading writes observations into it. Once it exceeds 120, the attack can't
+succeed, because the pool writes at most one observation per second.
+
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 
 `DATA_SUFFIX` set on host A (Railway variable, then a code upload: one restart), host B and the keeper

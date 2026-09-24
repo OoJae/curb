@@ -33,10 +33,10 @@ export const USDT0: Address = "0x779Ded0c9e1022225f8E0630b35a9b54bE713736";
 
 // --- W3 / W4 (null until deployed → "Specimen") -----------------------------------------------
 
-export const ELIGIBILITY_REGISTRY: Address | null = null;
-export const REOPEN_POINTER: Address | null = null;
-export const REOPEN_NOTE: Address | null = null;
-export const CLOSED_AUCTION: Address | null = null;
+export const ELIGIBILITY_REGISTRY: Address | null = "0xd7251b562eD07374ccD2436a7EfC0bA3A28ce938";
+export const REOPEN_POINTER: Address | null = "0x85AB0FebdFa7201E65eA01bd3e4CC6F9c0Ac4471";
+export const REOPEN_NOTE: Address | null = "0x7B2AcB0Db3316f7B8cf1B287796a2273871F011B";
+export const CLOSED_AUCTION: Address | null = "0xAc74864d69DdB940ADfDB39E69751759a32bb80D";
 export const DEPTH_CERT: Address | null = null;
 export const CURB_CREDIT: Address | null = null;
 
