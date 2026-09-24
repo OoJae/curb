@@ -1,0 +1,13 @@
+/* Served as /src/styles/tokens.css only while lane A's file does not exist, so OG renders work standalone.
+   Values are the frozen spec (docs/specs/brand-site-video.md §1); lane A's tokens.css is the source of truth. */
+:root {
+  --ink: #0F1720;
+  --ivory: #F4EFE6;
+  --streetlamp: #F5A524;
+  --slate: #8A96A3;
+  --brass: #8A5A00;
+  --graphite: #5B6470;
+  --font-display: 'Bodoni Moda';
+  --font-text: 'Libre Franklin';
+  --font-data: 'Martian Mono';
+}

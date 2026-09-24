@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Social · square</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  /* 1080×1080: the Week Ring with the line inside it. */
+  body { --w: 1080px; --h: 1080px; }
+  .og-guilloche { width: 1080px; height: 1080px; left: 0; top: 0; opacity: .06; }
+  #ring { position: absolute; left: 110px; top: 110px; }
+  .copy { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: grid; place-content: center; text-align: center; gap: 26px; }
+  .og-h { --hs: 60px; width: 470px; margin: 0 auto; }
+  .og-sub { --ss: 20px; margin: 0 auto; max-width: 25ch; }
+  .mast { position: absolute; left: 64px; top: 56px; }
+  .mast img { height: 36px; display: block; }
+  .addr { position: absolute; right: 64px; top: 62px; }
+  .foot { position: absolute; left: 64px; right: 64px; bottom: 56px; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <canvas id="ring" aria-hidden="true"></canvas>
+  <div class="copy">
+    <h1 class="og-h">The market that trades when the exchange is <em>shut</em>.</h1>
+    <p class="og-sub">141&nbsp;h&nbsp;20&nbsp;m of every 168 hours, on X&nbsp;Layer.</p>
+  </div>
+  <div class="mast"><img src="/brand/lockup-horizontal.svg" alt="Curb"></div>
+  <span class="addr og-addr">curb.markets</span>
+  <footer class="foot og-foot"><span>ivory: Hong Kong open</span><span class="og-amber">amber: shut, still trading</span></footer>
+  <script type="module">
+    import { guillocheInto, weekRing, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'square');
+    weekRing(document.getElementById('ring'), { size: 860 });
+    await ready();
+  </script>
+</body>
+</html>

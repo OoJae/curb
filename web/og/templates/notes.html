@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OG · notes</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  body { --w: 1200px; --h: 630px; --pad-x: 64px; --pad-y: 52px; }
+  .og-frame { grid-template-rows: auto 1fr auto auto; row-gap: 26px; }
+  .og-copy { align-self: center; display: grid; gap: 24px; max-width: 560px; }
+  .og-h { --hs: 72px; }
+  .og-sub { --ss: 22px; --sub-w: 32ch; }
+  .og-guilloche { width: 640px; height: 640px; left: 700px; top: -210px; opacity: .05; }
+  /* The certificate: an ink note with an engraved double rule and its own rosette, tilted a few degrees. */
+  .cert-wrap { position: absolute; left: 660px; top: 128px; perspective: 1400px; }
+  .cert {
+    width: 470px; height: 300px; position: relative; padding: 22px 26px;
+    background: var(--og-ink); border: 1px solid color-mix(in oklab, var(--og-ivory) 55%, var(--og-ink));
+    outline: 1px solid color-mix(in oklab, var(--og-ivory) 22%, var(--og-ink)); outline-offset: 6px;
+    transform: rotateY(-8deg) rotateX(4deg) rotateZ(-2deg);
+    display: grid; grid-template-rows: auto 1fr auto;
+  }
+  .cert .ros { position: absolute; right: 14px; top: 26px; width: 248px; height: 248px; color: var(--og-ivory); opacity: .5; }
+  .cert .ros svg { width: 100%; height: 100%; }
+  .cert .t { font-family: var(--og-display); font-size: 34px; line-height: 1; letter-spacing: -.01em; position: relative; font-variation-settings: 'opsz' 48; }
+    .cert .m { font-family: var(--og-data); font-size: 13px; font-stretch: 87%; color: var(--og-slate); line-height: 1.7; position: relative; max-width: 214px; }
+  .cert .m b { font-weight: 400; color: var(--og-ivory); }
+  .cert .foot { display: flex; justify-content: space-between; align-items: end; position: relative; }
+  .cert .foot img { height: 30px; }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <div class="cert-wrap" aria-hidden="true">
+    <div class="cert">
+      <div class="ros" id="ros"></div>
+      <div class="t">Reopen note</div>
+      <div class="m" style="align-self:end">
+        <div><b>wTCENTx</b></div>
+        <div>wrapper shares</div>
+        <div>redeemable at the reopen</div>
+        <div>ERC-1155 · CURB-RN</div>
+      </div>
+      <div class="foot"><span class="m">Specimen</span></div>
+    </div>
+  </div>
+  <div class="og-frame">
+    <header class="og-mast"><img src="/brand/lockup-horizontal.svg" alt="Curb"><span class="og-addr">curb.markets/notes</span></header>
+    <div class="og-copy">
+      <h1 class="og-h">Sell the <em>reopen</em>, not the asset.</h1>
+      <p class="og-sub">A Reopen Note is a claim on wrapper shares, minted while the exchange is shut and redeemable once it reopens. It sells on a descending clock.</p>
+    </div>
+    <hr class="og-rule">
+    <footer class="og-foot"><b>curb.markets/notes</b><span>X Layer</span></footer>
+  </div>
+  <script type="module">
+    import { guillocheInto, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'notes');
+    // the certificate's own fingerprint: a specimen seed (a real note uses keccak256 of its tokenId)
+    await guillocheInto(document.getElementById('ros'), 'notes:specimen-note');
+    await ready();
+  </script>
+</body>
+</html>
