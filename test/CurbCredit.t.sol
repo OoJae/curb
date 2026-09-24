@@ -131,6 +131,12 @@ abstract contract CreditBase is Test {
 
         clock.set(address(wA), IMarketClock.Regime.MARKET, 20_000_000);
         clock.set(address(wB), IMarketClock.Regime.MARKET, 20_000_000);
+        // Registered as the real clock registers wTCENTx (Regular) and wNVDAx (TwentyFourFive), each with a
+        // published next transition 3 h out, as host A publishes it mid-session.
+        modes.setHoursMode(address(wA), 2);
+        modes.setHoursMode(address(wB), 1);
+        clock.setNextTransition(address(wA), uint64(block.timestamp + 3 hours));
+        clock.setNextTransition(address(wB), uint64(block.timestamp + 3 hours));
         // 10 days: outlives the shut horizon (73 h + 30 min), so the depth counts open and shut.
         dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 10 days));
 
@@ -598,6 +604,47 @@ contract CurbCreditTest is CreditBase {
     }
 
     /// Unknown mode (0), a reverting `assets()`, or malformed return data all fail closed to the conservative rule.
+    /// The last hardening: a Regular (HK) name whose scheduled close has passed while the regime still reads MARKET
+    /// (host A has not yet written CLOSED; its last write is < 30 min old) has toNext == 0. That must NOT read as
+    /// "no close coming". (Regression of ReviewPoC2::test_toNext_zero_after_scheduled_close_fails_open.)
+    function test_toNext_zero_after_scheduled_close_fails_closed() public {
+        uint256 t = block.timestamp;
+        clock.setNextTransition(address(wA), uint64(t + 2 hours)); // HK close at T + 2 h
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(t + 4 hours));
+        _deposit(alice, address(wA), 100e18);
+        assertEq(credit.ltvFor(address(wA)), 6000, "T: the close is 2 h away, a 4 h cert counts");
+
+        vm.warp(t + 2 hours - 1);
+        assertEq(credit.ltvFor(address(wA)), 0, "close imminent: the 4 h cert is refused");
+        _refuseBorrow(alice, address(wA), 900e6, CurbCredit.NoDepth.selector, 0);
+
+        vm.warp(t + 2 hours + 20); // past the scheduled close, before the attestor's CLOSED write
+        _open(address(wA)); // regime still reads MARKET with capacity
+        assertEq(credit.minCertExpiry(address(wA)), block.timestamp + 73 hours + 30 minutes, "toNext == 0: shut rule");
+        assertEq(credit.ltvFor(address(wA)), 0, "fails closed, not open");
+        _refuseBorrow(alice, address(wA), 900e6, CurbCredit.NoDepth.selector, 0);
+
+        // A cert that outlives the closure plus a cure is unaffected.
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 73 hours + 30 minutes));
+        assertEq(credit.ltvFor(address(wA)), 6000);
+    }
+
+    /// For HK-type names an unpublished next transition (0) is treated the same way; a 24/5 name is unaffected.
+    function test_toNext_zero_by_hours_mode() public {
+        clock.setNextTransition(address(wA), 0);
+        clock.setNextTransition(address(wB), 0);
+        dc.setDepth(address(wA), address(credit), DEPTH, BID, uint64(block.timestamp + 26 hours));
+        _usBook(26 hours);
+        assertEq(credit.ltvFor(address(wA)), 0, "Regular, nothing published: conservative");
+        assertEq(credit.ltvFor(address(wB)), 6000, "TwentyFourFive, nothing published: plain open rule");
+        modes.setHoursMode(address(wA), 3);
+        assertEq(credit.ltvFor(address(wA)), 0, "MarketHours: conservative");
+        modes.setHoursMode(address(wA), 0);
+        assertEq(credit.ltvFor(address(wA)), 0, "unknown mode: conservative");
+        modes.setHoursMode(address(wA), 4);
+        assertEq(credit.ltvFor(address(wA)), 6000, "Always: plain open rule");
+    }
+
     function test_unknown_or_unreadable_hours_mode_fails_closed() public {
         clock.setNextTransition(address(wB), uint64(block.timestamp + 1 hours));
         _usBook(26 hours);
@@ -1781,11 +1828,14 @@ contract CurbCreditRealDepthTest is Test {
         vm.warp(1_760_000_000);
         usdg = new MockERC20("Global Dollar", "USDG", 6);
         wA = new MockWrapper4626(address(0xA0), "Wrapped TCENTx", "wTCENTx");
-        clock = new MockClock();
+        ModeClock mc = new ModeClock();
+        clock = mc;
         sc = new MockScorecardPrice();
         elig = new AllowList();
         sc.setPrice(address(wA), 50e18);
         clock.set(address(wA), IMarketClock.Regime.MARKET, 20_000_000);
+        mc.setHoursMode(address(wA), 2); // Regular (HKEX)
+        clock.setNextTransition(address(wA), uint64(block.timestamp + 3 hours));
         depth = new DepthCert(IERC20(address(usdg)), IEligibility(address(elig)));
         address[] memory list = new address[](1);
         list[0] = address(wA);

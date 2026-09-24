@@ -52,10 +52,11 @@ interface IClockAssets {
 ///
 ///          expiry >= minCertExpiry(a) = now + life + CURE_OPEN_SECONDS, where with toNext =
 ///          clock.secondsToNextTransition(a):
-///            open, toNext = 0 or >= MIN_CERT_LIFE + CURE_OPEN_SECONDS  -> life = MIN_CERT_LIFE
-///            open, 0 < toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS,
-///                  and the asset's transitions can close it             -> life = toNext + SHUT_CERT_LIFE
+///            open, toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS (including 0: the scheduled transition has
+///                  passed but the attestor has not yet written it, or none is published), and the asset's
+///                  transitions can close it                             -> life = toNext + SHUT_CERT_LIFE
 ///                                                     (a close is imminent: the cert must see the next reopen)
+///            open, otherwise                                         -> life = MIN_CERT_LIFE
 ///            open, clock read reverts                                -> life = SHUT_CERT_LIFE (fail closed)
 ///            shut / UNKNOWN                                          -> life = max(SHUT_CERT_LIFE, toNext + 1 h)
 ///
@@ -710,8 +711,8 @@ contract CurbCredit {
         if (open) {
             if (!ok) {
                 life = SHUT_CERT_LIFE; // cannot tell whether a close is imminent: assume it is
-            } else if (toNext > 0 && toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS && _closesAtTransitions(asset)) {
-                life = toNext + SHUT_CERT_LIFE;
+            } else if (toNext < MIN_CERT_LIFE + CURE_OPEN_SECONDS && _closesAtTransitions(asset)) {
+                life = toNext + SHUT_CERT_LIFE; // toNext == 0: a transition is due or unpublished -- a close, maybe
             } else {
                 life = MIN_CERT_LIFE;
             }
