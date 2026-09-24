@@ -88,7 +88,9 @@ export function mountRegimeChip(root: ParentNode = document): RegimeChip | null 
     if (preview) {
       preview.hidden = !!s.forced;
       preview.setAttribute('aria-pressed', String(s.preview));
-      preview.textContent = s.preview ? 'Back to live hours' : s.shown === 'open' ? 'Preview street hours' : 'Preview paper hours';
+      const text = s.preview ? 'Back to live hours' : s.shown === 'open' ? 'Preview street hours' : 'Preview paper hours';
+      const previewLabel = preview.querySelector('.btn__label') ?? preview;
+      previewLabel.textContent = text;
     }
   };
 

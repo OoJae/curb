@@ -69,7 +69,7 @@ export function mastheadHTML(page: PageId): string {
     <nav class="masthead__nav" aria-label="Primary"><ul role="list">${nav}</ul></nav>
     <div class="masthead__regime">
       <button type="button" class="chip" data-shell="chip" popovertarget="regime-popover">
-        <span class="chip__glyph" data-chip-glyph>${glyphSVG('shut', { className: 'chip__svg' })}</span>
+        <span class="visually-hidden">Hong Kong hours: </span><span class="chip__glyph" data-chip-glyph>${glyphSVG('shut', { className: 'chip__svg' })}</span>
         <span class="chip__label" data-chip-label>Shut</span>
         <span class="chip__sep" aria-hidden="true">·</span>
         <span class="chip__time" data-chip-time><span class="chip__hhmm">--:--</span> HKT</span>
@@ -83,7 +83,7 @@ export function mastheadHTML(page: PageId): string {
           <div><dt>Block</dt><dd data-chip-block>—</dd></div>
         </dl>
         <div class="chip-pop__actions">
-          <button type="button" class="btn btn--quiet chip-pop__preview" data-chip-preview aria-pressed="false">Preview paper hours</button>
+          <button type="button" class="btn btn--quiet chip-pop__preview" data-chip-preview aria-pressed="false"><span class="btn__label">Preview paper hours</span></button>
           <a class="link-arrow" href="/clock">Read the clock${arrowHTML('int')}</a>
         </div>
       </div>
