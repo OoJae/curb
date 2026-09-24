@@ -3,8 +3,8 @@
  * cure clock, refusals), per docs/specs/W3W4-contracts.md and src/interfaces/IDepthCert.sol.
  *
  * While DEPTH_CERT / CURB_CREDIT are null, readers return the specimen fixtures (`specimen: true`) and
- * writers throw. CurbCredit's Solidity types are not in the spec: abi/curbCredit.ts is provisional (GUESS)
- * until `node web/scripts/sync-abi.mjs` regenerates it from forge out/.
+ * writers throw. ABIs are generated from forge out/ by `node web/scripts/sync-abi.mjs` (24 Sep, src/*.sol on
+ * main): CurbCredit.positionOf/cureOf return structs, DepthCert.bookOf lists a (wrapper, beneficiary) book.
  */
 import { decodeEventLog, maxUint256, toFunctionSelector } from "viem";
 import { CURB_CREDIT, DEPTH_CERT, MARKET_CLOCK, USDG, symbolOf } from "./addresses.ts";
@@ -158,6 +158,13 @@ export async function getCerts(ids: (number | bigint)[] = knownIds("certs")): Pr
   return Promise.all(ids.map((id) => getCert(id)));
 }
 
+/** DepthCert.bookOf(wrapper, beneficiary): the cert ids a book lists, takeable or not. Specimen: fixture ids. */
+export async function getBook(wrapper: Address, beneficiary: Address): Promise<number[]> {
+  if (!depthLive()) return (await fixture("certs")).filter((c) => c.wrapper.toLowerCase() === wrapper.toLowerCase()).map((c) => Number(c.id));
+  const ids = await publicClient().readContract({ address: DEPTH_CERT!, abi: depthCertAbi, functionName: "bookOf", args: [wrapper, beneficiary] });
+  return ids.map((x) => Number(x));
+}
+
 async function regimeOf(wrapper: Address): Promise<{ regime: RegimeName; cap: number }> {
   const pc = publicClient();
   const [r, cap] = await pc.multicall({
@@ -207,7 +214,10 @@ export async function getDepth(wrapper: Address, certIds: (number | bigint)[] = 
   const capBps = regimeCapBps(regime, cap);
   const minBidPx = minBid > 0n ? units(minBid, 6) : null;
   const honouredShares = units(dS);
-  const certs = (await getCerts(certIds)).filter((c) => c.wrapper.toLowerCase() === wrapper.toLowerCase());
+  // The book CurbCredit reads (certs naming it), plus any other ids this browser knows for the asset.
+  const book = await getBook(wrapper, CURB_CREDIT!).catch(() => [] as number[]);
+  const ids = [...new Set([...book, ...certIds.map(Number)])].sort((a, b) => b - a);
+  const certs = (await getCerts(ids)).filter((c) => c.wrapper.toLowerCase() === wrapper.toLowerCase());
   const maxDepth = Math.max(honouredShares * 2, totalCollateral * 1.5, 0.01);
   const curve: LtvCurve = {
     wrapper,
@@ -251,7 +261,8 @@ export async function getCreditPosition(borrower: Address, wrapper: Address): Pr
     blockNumber: block,
     allowFailure: true,
     contracts: [
-      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "positions", args: [borrower, wrapper] }, // GUESS getter
+      // positionOf(b, a) → Position { uint256 collateral; uint256 principal; uint256 accrued; uint64 lastAccrual }
+      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "positionOf", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "debtOf", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "limitOf", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "ltvFor", args: [wrapper] },
@@ -260,7 +271,7 @@ export async function getCreditPosition(borrower: Address, wrapper: Address): Pr
     ],
   });
   const ok = <T,>(i: number, d: T): T => (res[i].status === "success" ? (res[i].result as T) : d);
-  const pos = ok<readonly [bigint, bigint, bigint, bigint]>(0, [0n, 0n, 0n, 0n]);
+  const pos = ok<{ collateral: bigint; principal: bigint; accrued: bigint; lastAccrual: bigint }>(0, { collateral: 0n, principal: 0n, accrued: 0n, lastAccrual: 0n });
   const debt = ok<bigint>(1, 0n);
   const limit = ok<bigint>(2, 0n);
   const [known, breached] = ok<readonly [boolean, boolean]>(4, [false, false]);
@@ -271,8 +282,8 @@ export async function getCreditPosition(borrower: Address, wrapper: Address): Pr
     borrower,
     wrapper,
     symbol: symbolOf(wrapper),
-    collateralRaw: pos[0].toString(),
-    collateral: units(pos[0]),
+    collateralRaw: pos.collateral.toString(),
+    collateral: units(pos.collateral),
     debt: units(debt, 6),
     debtRaw: debt.toString(),
     limit: units(limit, 6),
