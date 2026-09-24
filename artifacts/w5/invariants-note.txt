@@ -1,16 +1,18 @@
-# NoteInvariant (P1) — stage 1 (MiniAuction stand-in for the auction path)
-# date (UTC): 2026-09-24 13:41:37
-# commit: 52d3695 (branch worktree-agent-a4ce7faf151e8be82)
+# NoteInvariant (P1) — stage 2 (real ClosedAuction with list-time cutoff + EligibilityRegistry; mallory ineligible) + review fixes (per-closure cap)
+# date (UTC): 2026-09-24 15:00:30
+# commit: 4fb1942 (branch worktree-agent-a4ce7faf151e8be82)
 # forge Version: 1.8.3-Homebrew
 # profile: foundry.toml [profile.default.invariant] runs = 256, depth = 64, fail_on_revert = false
 # command: NOTE_INV_STATS=artifacts/w5/.note-inv-stats.tmp forge test --match-path test/invariant/NoteInvariant.t.sol -vv
 
-No files changed, compilation skipped
-Warning: Failure from "/Users/oluwademilade/Desktop/Okx Dev Day/curb/.claude/worktrees/agent-a4ce7faf151e8be82/cache/invariant/failures/NoteInvariant/invariants/invariant_epoch_never_decreases" file was ignored because invariant test settings have changed: fail_on_revert changed from true to false
+Compiling 1 files with Solc 0.8.28
+Solc 0.8.28 finished in 261.67ms
+Compiler run successful!
 
 Ran 2 tests for test/invariant/NoteInvariant.t.sol:NoteInvariant
 [PASS]
 NoteInvariant invariants:
+[PASS] invariant_auction_escrow_equals_live_lots
 [PASS] invariant_bids_clear_shut_same_epoch_within_bounds
 [PASS] invariant_brackets_are_strict_and_chained
 [PASS] invariant_delivered_plus_cancelled_plus_outstanding_is_wrapperShares
@@ -18,58 +20,69 @@ NoteInvariant invariants:
 [PASS] invariant_epoch_never_decreases
 [PASS] invariant_escrow_equals_sum_outstanding_equals_open_interest
 [PASS] invariant_every_redeem_was_unlocked_and_exact
+[PASS] invariant_grades_match_the_print
+[PASS] invariant_per_closure_count_matches_and_is_capped
 [PASS] invariant_prints_are_write_once
 [PASS] invariant_units_held_equal_outstanding
+[PASS] invariant_usdg_only_moves_buyer_to_seller
  NoteInvariant invariants (runs: 256, calls: 16384, reverts: 0)
 
 ╭-------------+-----------------+-------+---------+----------╮
 | Contract    | Selector        | Calls | Reverts | Discards |
 +============================================================+
-| NoteHandler | bid             | 1090  | 0       | 0        |
+| NoteHandler | bid             | 972   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | cancel          | 1147  | 0       | 0        |
+| NoteHandler | cancel          | 972   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | corporateAction | 1088  | 0       | 0        |
+| NoteHandler | corporateAction | 986   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | keeperReopen    | 1099  | 0       | 0        |
+| NoteHandler | grade           | 891   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | list            | 1129  | 0       | 0        |
+| NoteHandler | keeperReopen    | 1011  | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | mint            | 1148  | 0       | 0        |
+| NoteHandler | list            | 1030  | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | observe         | 1043  | 0       | 0        |
+| NoteHandler | mint            | 1003  | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | poke            | 1109  | 0       | 0        |
+| NoteHandler | observe         | 930   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | recordPrint     | 1093  | 0       | 0        |
+| NoteHandler | poke            | 968   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | redeem          | 1127  | 0       | 0        |
+| NoteHandler | recordPrint     | 990   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | setBlackout     | 1071  | 0       | 0        |
+| NoteHandler | redeem          | 898   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | setRegime       | 1021  | 0       | 0        |
+| NoteHandler | setBlackout     | 926   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | transfer        | 1091  | 0       | 0        |
+| NoteHandler | setRegime       | 987   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | warp            | 1043  | 0       | 0        |
+| NoteHandler | transfer        | 943   | 0       | 0        |
 |-------------+-----------------+-------+---------+----------|
-| NoteHandler | withdrawLot     | 1085  | 0       | 0        |
+| NoteHandler | unsolicited     | 945   | 0       | 0        |
+|-------------+-----------------+-------+---------+----------|
+| NoteHandler | warp            | 959   | 0       | 0        |
+|-------------+-----------------+-------+---------+----------|
+| NoteHandler | withdrawLot     | 973   | 0       | 0        |
 ╰-------------+-----------------+-------+---------+----------╯
 
-[PASS] test_handler_paths_all_succeed() (gas: 4057532)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 10.01s (10.02s CPU time)
+[PASS] test_handler_paths_all_succeed() (gas: 6077760)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 25.50s (25.52s CPU time)
 
-Ran 1 test suite in 10.02s (10.01s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+Ran 1 test suite in 25.50s (25.50s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
 
 # Ghost coverage across the campaign's runs (successful handler actions, from afterInvariant):
-#   afterInvariant samples: 259 (the 256 runs, plus forge's replays)
-#   mints                        total    503   mean/run  1.94   runs with none 46
-#   redeems                      total    318   mean/run  1.23   runs with none 123
-#     of which 10-day fallback   total     41   mean/run  0.16   runs with none 234
-#   cancels                      total     59   mean/run  0.23   runs with none 201
-#   prints                       total    731   mean/run  2.82   runs with none 17
-#   reopens (epoch advances)     total   1182   mean/run  4.56   runs with none 4
-#   bids cleared                 total     51   mean/run  0.20   runs with none 215
-#   lots listed                  total    255   mean/run  0.98   runs with none 134
-#   notes                        total    503   mean/run  1.94   runs with none 46
+#   afterInvariant samples: 257 (the 256 runs, plus forge's replays)
+#   mints                        total    551   mean/run  2.14   runs with none 30
+#   redeems                      total    191   mean/run  0.74   runs with none 148
+#     of which 10-day fallback   total     11   mean/run  0.04   runs with none 247
+#   cancels                      total     42   mean/run  0.16   runs with none 216
+#   prints                       total    634   mean/run  2.47   runs with none 20
+#   reopens (epoch advances)     total   1078   mean/run  4.19   runs with none 7
+#   bids cleared                 total     54   mean/run  0.21   runs with none 216
+#   lots listed                  total    214   mean/run  0.83   runs with none 138
+#   notes                        total    551   mean/run  2.14   runs with none 30
+#   ineligible bids refused      total     65   mean/run  0.25   runs with none 207
+#   lots withdrawn               total    113   mean/run  0.44   runs with none 179
+#   lots graded                  total      6   mean/run  0.02   runs with none 255
+#   lists refused at the cutoff  total     72   mean/run  0.28   runs with none 205
 # exit code: 0

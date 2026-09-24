@@ -654,13 +654,13 @@ button:hover .arrow--ext {
   animation-play-state: paused;
 }
 
-/* Confirmed: the two C halves rotate ±55° to meet; the arc gives way. */
+/* Confirmed: the two C halves rotate ±62° (MARK.cHalfGapDeg) to meet; the arc gives way. */
 .btn[data-state='confirmed'] .spin__top {
-  transform: rotate(55deg);
+  transform: rotate(62deg);
 }
 
 .btn[data-state='confirmed'] .spin__bottom {
-  transform: rotate(-55deg);
+  transform: rotate(-62deg);
 }
 
 .btn[data-state='confirmed'] .spin__arc {
