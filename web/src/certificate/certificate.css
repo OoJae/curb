@@ -1,0 +1,209 @@
+/* The Curb certificate (certificate.ts). An ivory card in both regimes (it is paper: .surface-paper),
+   ruled not boxed, with the seeded guilloche engraved behind the text. Tokens only; the tilt animates
+   transform only and is at most 6°. */
+
+.crt {
+  perspective: 1100px;
+  container-type: inline-size;
+}
+
+.crt__card {
+  position: relative;
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-3) var(--s-3);
+  overflow: hidden;
+  border: var(--rule) solid var(--figure);
+  border-radius: var(--radius);
+  background: var(--ground);
+  color: var(--figure);
+  transform: rotateX(var(--crt-rx, 0deg)) rotateY(var(--crt-ry, 0deg));
+  transform-origin: 50% 50%;
+  transition: transform var(--dur-ui) var(--ease-curb);
+  will-change: transform;
+}
+
+.crt[data-tilting] .crt__card {
+  transition: transform var(--dur-micro) linear;
+}
+
+/* The inner engraved frame. */
+.crt__card::before {
+  content: '';
+  position: absolute;
+  inset: var(--s-1);
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+.crt__engraving {
+  position: absolute;
+  top: 50%;
+  right: -18%;
+  width: 82%;
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+  color: var(--figure);
+  opacity: 0.2;
+  pointer-events: none;
+}
+
+.crt__engraving svg,
+.crt__seal svg {
+  width: 100%;
+  height: 100%;
+}
+
+.crt__head,
+.crt__body,
+.crt__fields,
+.crt__foot {
+  position: relative;
+}
+
+.crt__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding-bottom: var(--s-1);
+  border-bottom: var(--rule) solid var(--hairline-strong);
+}
+
+.crt__title {
+  font-size: var(--t-small);
+  font-weight: 600;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+
+.crt__serial {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.crt__body {
+  display: grid;
+  gap: var(--s-1);
+}
+
+.crt__asset {
+  font-family: var(--font-display);
+  font-size: var(--t-h2);
+  line-height: var(--lh-h2);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.crt__face {
+  font-size: var(--t-lede);
+  line-height: var(--lh-lede);
+}
+
+.crt__promise {
+  max-width: 34ch;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.crt__promise strong {
+  color: var(--figure);
+  font-weight: 600;
+}
+
+.crt__fields {
+  display: grid;
+  border-top: var(--rule) solid var(--hairline);
+}
+
+.crt__field {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, 2fr) 3fr;
+  gap: var(--s-2);
+  padding-block: var(--s-half);
+  border-bottom: var(--rule) solid var(--hairline);
+  font-size: var(--t-small);
+}
+
+.crt__field dt {
+  color: var(--muted);
+}
+
+.crt__field dd {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.crt__gloss {
+  display: block;
+  font-family: var(--font-text);
+  font-size: var(--t-small);
+  font-stretch: normal;
+  color: var(--muted);
+}
+
+@container (max-width: 360px) {
+  .crt__field {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+.crt__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1-5);
+  color: var(--muted);
+  font-size: var(--t-small);
+}
+
+.crt__seal {
+  flex: none;
+  width: var(--s-6);
+  height: var(--s-6);
+  color: var(--figure);
+}
+
+.crt__fingerprint code {
+  color: var(--figure);
+}
+
+.crt__fp-label {
+  margin-inline-end: var(--s-half);
+}
+
+/* A specimen is overprinted, as a banknote specimen is. */
+.crt__specimen {
+  position: absolute;
+  top: var(--s-6);
+  right: var(--s-3);
+  padding: var(--s-half) var(--s-1);
+  border: var(--rule-strong) solid var(--figure);
+  border-radius: var(--radius);
+  font-size: var(--t-small);
+  font-weight: 600;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--figure);
+  opacity: 0.6;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crt__card {
+    transform: none;
+    transition: none;
+  }
+}

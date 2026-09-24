@@ -1,0 +1,299 @@
+/* Shared instrument UI for /notes and /depth (lane E): the wallet bar, the wallet picker dialog,
+   numbered transaction steps, and the ink window that holds live plots. Tokens only. */
+
+/* ── Wallet bar ───────────────────────────────────────────────────────────────────────────── */
+.nt-wallet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-3);
+  min-height: calc(var(--touch) + var(--s-2));
+  padding-block: var(--s-1);
+  border-block: var(--rule) solid var(--hairline);
+}
+
+.nt-wallet__who {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  min-width: 0;
+  font-size: var(--t-small);
+}
+
+.nt-wallet__dot {
+  flex: none;
+  width: var(--s-1);
+  height: var(--s-1);
+  border-radius: 50%;
+  background: var(--figure);
+  transform: translateY(-1px);
+}
+
+.nt-wallet__dot--off {
+  background: none;
+  border: var(--rule) solid var(--muted);
+}
+
+.nt-wallet__btn {
+  flex: none;
+}
+
+/* ── Wallet picker ────────────────────────────────────────────────────────────────────────── */
+.nt-dialog {
+  width: min(460px, calc(100vw - 2 * var(--margin)));
+  margin: auto;
+  padding: 0;
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--ground);
+  color: var(--figure);
+}
+
+.nt-dialog::backdrop {
+  background: color-mix(in oklab, var(--ink) 72%, transparent);
+}
+
+.nt-dialog__form {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3);
+}
+
+.nt-dialog__list {
+  display: grid;
+  gap: var(--s-1);
+  padding: 0;
+  list-style: none;
+}
+
+.nt-dialog__wallet {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--s-1-5);
+  align-items: center;
+  width: 100%;
+  min-height: var(--touch);
+  padding: var(--s-1) var(--s-1-5);
+  border: var(--rule) solid var(--hairline);
+  border-radius: var(--radius);
+  text-align: start;
+  transition: border-color var(--dur-micro) var(--ease-curb);
+}
+
+.nt-dialog__wallet:hover {
+  border-color: var(--figure);
+}
+
+.nt-dialog__wallet img,
+.nt-dialog__noicon {
+  grid-row: 1 / span 2;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+}
+
+.nt-dialog__noicon {
+  border: var(--rule) dashed var(--hairline-strong);
+}
+
+.nt-dialog__name {
+  font-weight: 500;
+}
+
+.nt-dialog__rdns {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  color: var(--muted);
+}
+
+.nt-dialog__status:empty {
+  display: none;
+}
+
+.nt-dialog__actions {
+  justify-content: flex-end;
+}
+
+/* ── Numbered steps (the flow) ────────────────────────────────────────────────────────────── */
+.nt-steps {
+  counter-reset: nt-step;
+  display: grid;
+  padding: 0;
+  list-style: none;
+}
+
+.nt-step {
+  counter-increment: nt-step;
+  display: grid;
+  grid-template-columns: var(--s-5) minmax(0, 1fr);
+  column-gap: var(--s-2);
+  padding-block: var(--s-3);
+  border-top: var(--rule) solid var(--hairline);
+}
+
+.nt-step:last-child {
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+.nt-step::before {
+  content: counter(nt-step, decimal-leading-zero);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  color: var(--muted);
+  padding-top: 0.35em;
+}
+
+.nt-step__body {
+  display: grid;
+  gap: var(--s-1-5);
+  min-width: 0;
+}
+
+.nt-step__title {
+  font-size: var(--t-lede);
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.nt-step__text {
+  max-width: 62ch;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.nt-step__text strong,
+.nt-step__text code {
+  color: var(--figure);
+}
+
+.nt-step__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-1-5) var(--s-2);
+}
+
+.nt-step__hint {
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.nt-step__hint[hidden] {
+  display: none;
+}
+
+.nt-step .tx-status {
+  margin-top: 0;
+}
+
+/* ── Inputs ───────────────────────────────────────────────────────────────────────────────── */
+.nt-field {
+  display: grid;
+  gap: var(--s-half);
+  min-width: 0;
+}
+
+.nt-field__label {
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.nt-input {
+  width: 100%;
+  min-width: 9ch;
+  max-width: 22ch;
+  min-height: var(--touch);
+  padding: 0 var(--s-1-5);
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--ground);
+  color: var(--figure);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.nt-input:hover {
+  border-color: var(--figure);
+}
+
+select.nt-input {
+  max-width: 26ch;
+  font-family: var(--font-text);
+  font-size: var(--t-small);
+}
+
+/* ── The ink window: live plots keep Streetlamp legal in paper hours (Law 1) ──────────────── */
+.nt-window {
+  position: relative;
+  padding: var(--s-3);
+  border-radius: var(--radius);
+  background: var(--ground);
+  color: var(--figure);
+}
+
+[data-regime='open'] .nt-window {
+  border: var(--rule) solid var(--ink);
+}
+
+.nt-window__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-2);
+  margin-bottom: var(--s-2);
+}
+
+.nt-window__title {
+  font-size: var(--t-small);
+  font-weight: 600;
+}
+
+.nt-window__asof {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  color: var(--muted);
+}
+
+/* ── Plain-words ledger beside an instrument ──────────────────────────────────────────────── */
+.nt-prose {
+  display: grid;
+  gap: var(--s-2);
+  max-width: 62ch;
+}
+
+.nt-prose p {
+  text-wrap: pretty;
+}
+
+.nt-prose strong {
+  font-weight: 600;
+}
+
+.nt-kicker {
+  margin-bottom: var(--s-2);
+}
+
+.nt-h2 {
+  margin-bottom: var(--s-3);
+}
+
+/* Horizontal scroll for wide tables, inside their own box (never the page). */
+.nt-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.nt-scroll:focus-visible {
+  outline: var(--rule-strong) solid var(--focus);
+  outline-offset: var(--s-half);
+}

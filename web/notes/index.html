@@ -4,14 +4,199 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Notes · Curb</title>
-    <meta name="description" content="Sell the reopen, not the asset: reopen notes on X Layer.">
+    <meta name="description" content="Sell the reopen, not the asset: reopen notes on X Layer, sold on a descending clock while Hong Kong is shut and settled share for share after the verified reopen.">
+    <meta property="og:title" content="Notes · Curb">
+    <meta property="og:description" content="Sell the reopen, not the asset.">
+    <meta property="og:image" content="https://curb.markets/og/notes.png">
+    <meta name="twitter:card" content="summary_large_image">
   </head>
   <body data-page="notes">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
     <main id="main" class="page page--notes" tabindex="-1">
-      <section class="wrap section stub">
-        <h1 class="t-h1 vt-title-notes" data-reveal>Notes</h1>
-        <p class="t-lede muted measure stub__note">This page is in build. The shell around it is live.</p>
+      <!-- 1. The note -->
+      <section class="wrap nt-hero" aria-labelledby="nt-title">
+        <div class="grid">
+          <div class="col-ledger nt-hero__text">
+            <p class="t-label nt-kicker">Reopen notes · ReopenNote, ClosedAuction, ReopenPointer</p>
+            <h1 class="t-h1 vt-title-notes" id="nt-title" data-reveal>Sell the <em>reopen</em>, not the asset.</h1>
+            <p class="t-lede measure nt-lede">While Hong Kong is shut, a holder who needs out can only hit a thin pool. A reopen note lets them sell a claim instead: wrapper shares locked in escrow tonight, delivered share for share once the market has verifiably reopened. The buyer prices the reopen; the seller keeps the stock’s upside out of a fire sale.</p>
+            <p class="nt-status" data-nt-status><span class="tag tag--specimen">Specimen · in build</span></p>
+            <p class="t-small muted nt-disclose">Demo counterparties are team wallets: curb-desk sells, the Agentic Wallet buys. No third party has traded a note.</p>
+          </div>
+          <div class="col-instrument nt-hero__cert" data-nt-cert aria-live="off"></div>
+        </div>
+      </section>
+
+      <!-- 2. The descending clock -->
+      <section class="wrap section nt-clock" id="clock" aria-labelledby="nt-clock-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="nt-clock-h">A clock that only falls</h2>
+            <div class="nt-prose t-body">
+              <p>A note is sold on a descending clock. The price starts high, falls in a straight line to a floor over a set number of minutes, then waits at the floor. The first bid at or above the clock takes the whole lot, so it clears with a single buyer at three in the morning.</p>
+              <p>Bids are accepted only while the market is still shut and before anyone has witnessed a reopen. And a lot can’t outlive the closure it was listed in: it must end by MarketClock’s next attested transition, which falls before HKEX’s pre-open auction starts publishing prices. Nobody buys a note at a price set before the news.</p>
+              <p class="t-small muted" data-nt-clock-note></p>
+            </div>
+          </div>
+          <div class="col-instrument">
+            <div class="nt-window surface-ink" data-nt-clock>
+              <div class="nt-window__head"><span class="nt-window__title" data-nt-clock-title>Lot —</span><span class="nt-window__asof" data-nt-clock-asof>reading…</span></div>
+              <div class="nt-clock__now">
+                <span class="nt-clock__label">Price now, whole lot</span>
+                <span class="nt-clock__price" data-nt-price>—</span>
+              </div>
+              <div class="nt-clock__chart" data-nt-chart aria-hidden="true"></div>
+              <dl class="nt-clock__stats">
+                <div><dt>Start</dt><dd data-nt-start>—</dd></div>
+                <div><dt>Floor</dt><dd data-nt-floor>—</dd></div>
+                <div><dt>Against the reference</dt><dd data-nt-disc>—</dd></div>
+                <div><dt>Ends</dt><dd data-nt-ends>—</dd></div>
+                <div><dt>Ends in</dt><dd data-nt-countdown>—</dd></div>
+                <div><dt>Status</dt><dd data-nt-lotstatus>—</dd></div>
+              </dl>
+              <p class="visually-hidden" data-nt-chart-text></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. The flow -->
+      <section class="wrap section nt-flow" id="flow" aria-labelledby="nt-flow-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="nt-flow-h">Mint, list, bid, redeem</h2>
+            <p class="t-body measure nt-flow__lede">Every step is one transaction you sign in your own wallet. Each is simulated first, sent with Curb’s Builder Code attached, and linked to OKLink when it lands. A revert shows its reason.</p>
+          </div>
+        </div>
+        <div class="nt-flow__wallet" id="nt-wallet" data-nt-wallet></div>
+        <div class="nt-flow__asset">
+          <label class="nt-field"><span class="nt-field__label">Asset</span>
+            <select class="nt-input" data-nt-asset></select>
+          </label>
+          <p class="t-small muted" data-nt-asset-state>Reading MarketClock…</p>
+        </div>
+        <p class="nt-step__hint nt-flow__hint" data-nt-gate></p>
+        <ol class="nt-steps" data-nt-steps>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Approve the wrapper</h3>
+              <p class="nt-step__text">ReopenNote pulls exactly the shares you escrow, so it needs an allowance on the wrapper token first.</p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">Wrapper shares</span><input class="nt-input" data-nt-in="shares" inputmode="decimal" value="0.1" autocomplete="off"></label>
+                <button type="button" class="btn btn--secondary" data-nt-tx="approve">Approve</button>
+              </div>
+              <p class="tx-status" data-nt-status-for="approve"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Mint the note</h3>
+              <p class="nt-step__text">Allowed only while MarketClock says the market is <strong>closed with zero primary capacity</strong>, outside a multiplier blackout, and under the asset’s open-interest cap. The pointer witnesses the market shut in the same call and stamps the note with that epoch.</p>
+              <div class="nt-step__row"><button type="button" class="btn btn--primary" data-nt-tx="mint">Mint</button></div>
+              <p class="tx-status" data-nt-status-for="mint"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Let the auction hold it</h3>
+              <p class="nt-step__text">ClosedAuction escrows a listed note, so you let it move your notes (ERC-1155 <code>setApprovalForAll</code>). It accepts only notes it pulled itself.</p>
+              <div class="nt-step__row"><button type="button" class="btn btn--secondary" data-nt-tx="approveAll">Approve the auction</button></div>
+              <p class="tx-status" data-nt-status-for="approveAll"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">List it on the clock</h3>
+              <p class="nt-step__text">Prices are USDG for the whole lot. The lot must end by the market’s next attested transition, read now from MarketClock: a lot can’t outlive the closure it was listed in, and must end before HKEX’s pre-open auction. <span data-nt-cutoff></span></p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">Note id</span><input class="nt-input" data-nt-in="noteId" inputmode="numeric" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Start, USDG</span><input class="nt-input" data-nt-in="start" inputmode="decimal" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Floor, USDG</span><input class="nt-input" data-nt-in="floor" inputmode="decimal" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Falls over, minutes</span><input class="nt-input" data-nt-in="decay" inputmode="numeric" value="20" autocomplete="off"></label>
+              </div>
+              <div class="nt-step__row"><button type="button" class="btn btn--primary" data-nt-tx="list">List</button></div>
+              <p class="tx-status" data-nt-status-for="list"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Bid</h3>
+              <p class="nt-step__text">Approve USDG to the auction, then bid with the most you will pay. You pay the clock’s price at the block your bid lands, never more than your maximum; USDG goes straight to the seller and the note to you. Bidders must be on the eligibility registry (the demo lists team wallets only).</p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">Lot id</span><input class="nt-input" data-nt-in="lotId" inputmode="numeric" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Most you’ll pay, USDG</span><input class="nt-input" data-nt-in="maxPrice" inputmode="decimal" autocomplete="off"></label>
+              </div>
+              <div class="nt-step__row">
+                <button type="button" class="btn btn--secondary" data-nt-tx="approveUsdg">Approve USDG</button>
+                <button type="button" class="btn btn--primary" data-nt-tx="bid">Bid</button>
+              </div>
+              <p class="tx-status" data-nt-status-for="bid"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">After the reopen: witness, print, redeem</h3>
+              <p class="nt-step__text">Anyone may tell the pointer to look (<code>observe</code>): it advances the epoch only when it sees the market open after having seen it shut. Between 5 and 35 minutes later anyone may record the print, Scorecard’s guarded price, once for every note of that asset and epoch. Then the holder redeems and receives exactly the wrapper shares the note promised. If no reopen is ever witnessed, a note unlocks anyway ten days after mint.</p>
+              <div class="nt-step__row">
+                <button type="button" class="btn btn--secondary" data-nt-tx="observe">Witness (observe)</button>
+                <button type="button" class="btn btn--secondary" data-nt-tx="print">Record the print</button>
+              </div>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">Note id</span><input class="nt-input" data-nt-in="redeemId" inputmode="numeric" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Units, in shares</span><input class="nt-input" data-nt-in="redeemAmt" inputmode="decimal" autocomplete="off"></label>
+                <button type="button" class="btn btn--primary" data-nt-tx="redeem">Redeem</button>
+              </div>
+              <p class="tx-status" data-nt-status-for="redeem"></p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- 4. The pointer -->
+      <section class="wrap section nt-pointer" id="pointer" aria-labelledby="nt-pointer-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="nt-pointer-h">The pointer only believes what it saw</h2>
+            <div class="nt-prose t-body">
+              <p>ReopenPointer keeps one number per asset, the <strong>epoch</strong>: how many reopens it has witnessed. It moves only when someone asks it to look while the market is open and it last saw the market shut, so the true reopen lies inside a bracket it recorded itself: after the last time it saw the market shut, at or before the moment it saw it open. A stale clock changes nothing.</p>
+              <p>The <strong>print</strong> is written once per asset and epoch: Scorecard’s TWAP-guarded price, taken between 5 and 35 minutes after the witnessed reopen. Every note of that asset and epoch shares it, so nobody can pick a better moment.</p>
+            </div>
+          </div>
+        </div>
+        <div class="nt-scroll" tabindex="0" role="region" aria-labelledby="nt-pointer-cap">
+          <table class="table nt-table">
+            <caption id="nt-pointer-cap" data-nt-pointer-cap>ReopenPointer, per note asset</caption>
+            <thead><tr><th scope="col">Asset</th><th scope="col" class="num">Epoch</th><th scope="col">Pointer sees</th><th scope="col">Last reopen bracket (HKT)</th><th scope="col">Print</th><th scope="col">Next scheduled reopen</th></tr></thead>
+            <tbody data-nt-pointer><tr><td colspan="6" class="muted">Reading ReopenPointer…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 5. Lots and the graded price -->
+      <section class="wrap section nt-lots" id="lots" aria-labelledby="nt-lots-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="nt-lots-h">Every sale is graded after the reopen</h2>
+            <div class="nt-prose t-body">
+              <p>Once the print is recorded, <code>realisedDiscountBps</code> values each sold lot at the reopen print and compares it with what the buyer paid: (value at the print − price paid) ÷ value at the print. Positive means the buyer bought below where the market reopened; negative means they paid a premium.</p>
+              <p>It is the first graded price for an hour of Hong Kong closure risk.</p>
+            </div>
+          </div>
+          <div class="col-instrument nt-lots__stat" data-nt-realised></div>
+        </div>
+        <div class="nt-scroll" tabindex="0" role="region" aria-labelledby="nt-lots-cap">
+          <table class="table nt-table">
+            <caption id="nt-lots-cap" data-nt-lots-cap>Lots on ClosedAuction</caption>
+            <thead><tr><th scope="col">Lot</th><th scope="col">Note</th><th scope="col">Asset</th><th scope="col" class="num">Shares</th><th scope="col" class="num">Start → floor, USDG</th><th scope="col" class="num">Now or cleared</th><th scope="col">Ends</th><th scope="col">Status</th><th scope="col" class="num">Realised</th></tr></thead>
+            <tbody data-nt-lots><tr><td colspan="9" class="muted">Reading ClosedAuction…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 6. Provenance -->
+      <section class="wrap section nt-prov" aria-labelledby="nt-prov-h">
+        <h2 class="t-h3 nt-prov__h" id="nt-prov-h">Contracts and wallets</h2>
+        <dl class="ledger" data-nt-prov></dl>
       </section>
     </main>
     <script type="module" src="/src/pages/notes/page.ts"></script>
