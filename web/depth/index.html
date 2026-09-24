@@ -4,14 +4,222 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Depth · Curb</title>
-    <meta name="description" content="Bond depth and watch the loan-to-value move.">
+    <meta name="description" content="Bond depth and watch the loan-to-value move: CurbCredit lends only what a bonded bid would pay for the collateral, and a faded bid pays its bond to the trader in the same transaction.">
+    <meta property="og:title" content="Depth · Curb">
+    <meta property="og:description" content="Bond depth and watch the loan-to-value move.">
+    <meta property="og:image" content="https://curb.markets/og/depth.png">
+    <meta name="twitter:card" content="summary_large_image">
   </head>
   <body data-page="depth">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
     <main id="main" class="page page--depth" tabindex="-1">
-      <section class="wrap section stub">
-        <h1 class="t-h1 vt-title-depth" data-reveal>Depth</h1>
-        <p class="t-lede muted measure stub__note">This page is in build. The shell around it is live.</p>
+      <!-- 1. The LTV function -->
+      <section class="wrap dp-hero" aria-labelledby="dp-title">
+        <div class="grid">
+          <div class="col-ledger dp-hero__text">
+            <p class="t-label">Depth · DepthCert, CurbCredit</p>
+            <h1 class="t-h1 vt-title-depth" id="dp-title" data-reveal>Lend what a bonded bid will pay, even while Hong Kong is <em>shut</em>.</h1>
+            <p class="t-lede measure dp-lede">For 140 hours a week a Hong Kong share token trades with its creation and redemption switched off. The only honest collateral value then is what someone has committed, with money at risk, to pay for it. CurbCredit’s loan-to-value is published, and it never lends more than the bonded bids would pay.</p>
+            <p class="dp-status" data-dp-status><span class="tag tag--specimen">Specimen · in build</span></p>
+            <p class="t-small muted dp-disclose">Demo counterparties are team wallets: curb-desk posts the bonds and funds the reserve, the Agentic Wallet borrows and takes.</p>
+          </div>
+          <div class="col-instrument">
+            <div class="nt-window surface-ink dp-plot" data-dp-plot>
+              <div class="nt-window__head">
+                <span class="nt-window__title" data-dp-plot-title>Loan-to-value against honoured depth</span>
+                <span class="nt-window__asof" data-dp-plot-asof>reading…</span>
+              </div>
+              <div class="dp-plot__asset">
+                <label class="nt-field"><span class="nt-field__label">Asset</span><select class="nt-input" data-dp-asset></select></label>
+                <p class="dp-plot__now"><span class="dp-plot__now-label">ltvFor now</span> <span class="dp-plot__now-value" data-dp-ltv-now>—</span></p>
+              </div>
+              <div class="dp-plot__svg" data-dp-svg></div>
+              <div class="dp-plot__drag">
+                <label class="nt-field dp-plot__range"><span class="nt-field__label">Drag for a hypothetical depth, in shares</span>
+                  <input type="range" min="0" max="1" step="0.001" value="0" data-dp-range aria-describedby="dp-readout">
+                </label>
+                <p class="dp-plot__readout" id="dp-readout" data-dp-readout aria-live="polite">—</p>
+              </div>
+              <p class="visually-hidden" data-dp-svg-text></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. The numbers and how they are made -->
+      <section class="wrap section dp-numbers" aria-labelledby="dp-numbers-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="dp-numbers-h">The number is a function, not an opinion</h2>
+            <div class="nt-prose t-body">
+              <p>Makers post <strong>DepthCerts</strong>: firm bids for the asset’s wrapper shares, each backed by a USDG bond of at least a tenth of what it promises to pay. CurbCredit counts only the certs that name it, that live at least another hour, and whose makers still hold and allow enough USDG to pay every bid they have standing. That is the <strong>honoured depth</strong>.</p>
+              <p>The LTV is the share of the pooled collateral those bids cover, times the lowest bid, divided by the price. It is capped at <strong>60%</strong> while Hong Kong is open and <strong>30%</strong> while it is shut, and it is zero when the clock is stale, the price is unreadable or nobody has bonded a bid. So the reserve never lends more against an asset than the bids would pay for all of it.</p>
+              <p class="t-small muted">Revoking an allowance removes all of a maker’s depth at once, and the LTV moves in the same block.</p>
+            </div>
+          </div>
+          <div class="col-instrument dp-stats" data-dp-stats></div>
+        </div>
+      </section>
+
+      <!-- 3. The book -->
+      <section class="wrap section dp-book" id="book" aria-labelledby="dp-book-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="dp-book-h">The book CurbCredit reads</h2>
+            <div class="nt-prose t-body">
+              <p>Each cert is one price for a number of shares; several certs make a curve. A cert can be taken by the address it names, or by anyone if it names nobody. Certs that name CurbCredit are the depth the lender prices loans off, and only CurbCredit can sell into them (when it has seized collateral to realise).</p>
+              <p data-dp-honoured class="t-small muted">Reading honouredDepth…</p>
+            </div>
+          </div>
+          <div class="col-instrument dp-book__cert" data-dp-cert></div>
+        </div>
+        <div class="nt-scroll" tabindex="0" role="region" aria-labelledby="dp-book-cap">
+          <table class="table dp-table">
+            <caption id="dp-book-cap" data-dp-book-cap>DepthCert book for the asset, naming CurbCredit</caption>
+            <thead><tr><th scope="col">Cert</th><th scope="col">Maker</th><th scope="col" class="num">Shares left / size</th><th scope="col" class="num">Bid, USDG a share</th><th scope="col" class="num">Bond, USDG</th><th scope="col">Expires</th><th scope="col">Status</th><th scope="col">Maker can pay</th></tr></thead>
+            <tbody data-dp-book><tr><td colspan="8" class="muted">Reading DepthCert…</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 4. Fade -->
+      <section class="wrap section dp-fade" id="fade" aria-labelledby="dp-fade-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="dp-fade-h">A bid that fades pays for it</h2>
+            <p class="t-lede measure">If a maker fades a fill, the bond goes to the trader in the same transaction; no oracle, no vote.</p>
+          </div>
+        </div>
+        <ol class="dp-fade__steps" role="list">
+          <li class="dp-fade__step"><span class="dp-fade__n">1</span><h3 class="dp-fade__h">The maker bonds a bid</h3><p>curb-desk posts a cert: 0.028 wTCENTx at 52 USDG a share, bonded with 1 USDG. The USDG for the bid stays in the maker’s wallet, approved to DepthCert.</p></li>
+          <li class="dp-fade__step"><span class="dp-fade__n">2</span><h3 class="dp-fade__h">The maker walks away</h3><p>The maker revokes the allowance. Nothing else happens yet: the cert still looks posted, but it drops out of the honoured depth at once.</p></li>
+          <li class="dp-fade__step"><span class="dp-fade__n">3</span><h3 class="dp-fade__h">A trader hits it</h3><p>The trader’s shares move first, so a trader who cannot deliver can never cause a fade. Then the contract tries to pull the maker’s USDG, with a fixed gas stipend a caller cannot starve.</p></li>
+          <li class="dp-fade__step"><span class="dp-fade__n">4</span><h3 class="dp-fade__h">Same transaction: the bond changes hands</h3><p>The pull fails for want of allowance, so the cert fades: the maker’s whole bond goes to the trader, the trader’s shares come back, and a public <code>Faded</code> event records the reason.</p></li>
+        </ol>
+      </section>
+
+      <!-- 5. Credit: position, refusal, cure -->
+      <section class="wrap section dp-credit" id="credit" aria-labelledby="dp-credit-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="dp-credit-h">A refusal is a transaction too</h2>
+            <div class="nt-prose t-body">
+              <p><code>borrow</code> and <code>withdraw</code> never revert on a policy refusal. They succeed, emit <code>Refusal</code> with the reason, what was asked and what was allowed, and change nothing, so every no leaves a trace on chain.</p>
+            </div>
+            <div class="dp-refusal" data-dp-refusal></div>
+            <dl class="ledger dp-reasons" data-dp-reasons></dl>
+          </div>
+          <div class="col-instrument dp-position" data-dp-position></div>
+        </div>
+      </section>
+
+      <section class="wrap section dp-cure" id="cure" aria-labelledby="dp-cure-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="dp-cure-h">The cure clock counts open minutes only</h2>
+            <div class="nt-prose t-body">
+              <p>A position over its limit is not liquidated. Anyone may flag it, which starts a cure clock that counts only market time it has witnessed open: a tick adds the minutes since the last tick only if the market was open then and is open now, and the gap is ten minutes or less. Shut or stale time freezes it.</p>
+              <p>After 30 witnessed open minutes, with the market open and a fresh price, the position can be liquidated, and never for more than a 5% bonus at the price when the breach was flagged. A weekend shut costs the borrower nothing.</p>
+            </div>
+          </div>
+          <div class="col-instrument">
+            <div class="nt-window surface-ink dp-cure__window" data-dp-cure>
+              <div class="nt-window__head"><span class="nt-window__title">Cure clock</span><span class="nt-window__asof" data-dp-cure-asof>reading…</span></div>
+              <p class="dp-cure__state" data-dp-cure-state>—</p>
+              <div class="dp-cure__cells" data-dp-cure-cells aria-hidden="true"></div>
+              <p class="dp-cure__legend t-small" data-dp-cure-legend></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Actions -->
+      <section class="wrap section dp-act" id="act" aria-labelledby="dp-act-h">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 class="t-h2 nt-h2" id="dp-act-h">Post, take, deposit, borrow, repay</h2>
+            <p class="t-body measure">Every step is one transaction you sign in your own wallet, simulated first and sent with Curb’s Builder Code attached. The plot above only does maths; these send.</p>
+          </div>
+        </div>
+        <div class="nt-flow__wallet" id="dp-wallet" data-dp-wallet></div>
+        <p class="nt-step__hint dp-gate" data-dp-gate></p>
+        <ol class="nt-steps">
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Post a cert (eligible makers only)</h3>
+              <p class="nt-step__text">A cert that names CurbCredit is depth the lender prices loans off, so only a maker on the eligibility registry may post one. Otherwise anyone could fill the book with dust bids and drag the LTV to zero. Open certs, naming nobody, are permissionless. The bond is at least 10% of the bid’s notional; approve enough USDG for the bond now and for paying the bid later. <span data-dp-maker></span></p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">Shares</span><input class="nt-input" data-dp-in="size" inputmode="decimal" value="0.028" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Bid, USDG a share</span><input class="nt-input" data-dp-in="bid" inputmode="decimal" value="52" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Lives for, hours</span><input class="nt-input" data-dp-in="hours" inputmode="decimal" value="26" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Bond, USDG</span><input class="nt-input" data-dp-in="bond" inputmode="decimal" value="1" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Reserved for</span><select class="nt-input" data-dp-in="ben"><option value="credit">CurbCredit (counts toward the LTV)</option><option value="open">Anyone (an open cert)</option></select></label>
+              </div>
+              <p class="t-small muted" data-dp-minbond></p>
+              <div class="nt-step__row">
+                <button type="button" class="btn btn--secondary" data-dp-tx="approvePost">Approve USDG</button>
+                <button type="button" class="btn btn--primary" data-dp-tx="post">Post the cert</button>
+              </div>
+              <p class="tx-status" data-dp-status-for="post"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Take a cert: fill or fade</h3>
+              <p class="nt-step__text">Sell shares into an open cert (or one naming you). Your shares move first. If the maker pays, you receive the USDG; if the maker can’t, the cert fades and the whole bond comes to you instead, with your shares back, in the same transaction.</p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">Cert id</span><input class="nt-input" data-dp-in="certId" inputmode="numeric" autocomplete="off"></label>
+                <label class="nt-field"><span class="nt-field__label">Shares</span><input class="nt-input" data-dp-in="takeShares" inputmode="decimal" autocomplete="off"></label>
+              </div>
+              <div class="nt-step__row">
+                <button type="button" class="btn btn--secondary" data-dp-tx="approveTake">Approve shares</button>
+                <button type="button" class="btn btn--primary" data-dp-tx="take">Take</button>
+              </div>
+              <p class="tx-status" data-dp-status-for="take"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Deposit collateral</h3>
+              <p class="nt-step__text">Post wrapper shares to CurbCredit. Depositors must be on the eligibility registry; a debt-free position can always withdraw.</p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">Shares</span><input class="nt-input" data-dp-in="deposit" inputmode="decimal" value="0.05" autocomplete="off"></label>
+                <button type="button" class="btn btn--secondary" data-dp-tx="approveDeposit">Approve shares</button>
+                <button type="button" class="btn btn--primary" data-dp-tx="deposit">Deposit</button>
+              </div>
+              <p class="tx-status" data-dp-status-for="deposit"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Borrow</h3>
+              <p class="nt-step__text">Fixed 5% a year, simple. If the policy says no, the transaction still succeeds and this line shows the reason, what you asked for and what you were allowed.</p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">USDG</span><input class="nt-input" data-dp-in="borrow" inputmode="decimal" value="1.4" autocomplete="off"></label>
+                <button type="button" class="btn btn--primary" data-dp-tx="borrow">Borrow</button>
+              </div>
+              <p class="tx-status" data-dp-status-for="borrow"></p>
+            </div>
+          </li>
+          <li class="nt-step">
+            <div class="nt-step__body">
+              <h3 class="nt-step__title">Repay</h3>
+              <p class="nt-step__text">Anyone may repay any position; accrued interest is paid first, and only what is owed is pulled. Repaying can clear a cure.</p>
+              <div class="nt-step__row">
+                <label class="nt-field"><span class="nt-field__label">USDG</span><input class="nt-input" data-dp-in="repay" inputmode="decimal" value="1.4" autocomplete="off"></label>
+                <button type="button" class="btn btn--secondary" data-dp-tx="approveRepay">Approve USDG</button>
+                <button type="button" class="btn btn--primary" data-dp-tx="repay">Repay</button>
+              </div>
+              <p class="tx-status" data-dp-status-for="repay"></p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- 7. Provenance -->
+      <section class="wrap section dp-prov" aria-labelledby="dp-prov-h">
+        <h2 class="t-h3 nt-h2" id="dp-prov-h">Contracts and wallets</h2>
+        <dl class="ledger" data-dp-prov></dl>
       </section>
     </main>
     <script type="module" src="/src/pages/depth/page.ts"></script>

@@ -1,2 +1,387 @@
-/* Depth page styles: STUB from lane A. The page owner replaces this file.
-   Rules: every class starts with .dp- ; tokens only (no raw hex, no px font sizes). */
+/* /depth (lane E). Every class starts with .dp- ; tokens only. Shared instrument UI (.nt-window,
+   .nt-steps, the wallet bar) comes from pages/notes/instrument.css; the certificate from
+   src/certificate/certificate.css. Streetlamp appears only inside ink windows. */
+
+/* ── 1. Hero: ledger left, the LTV plot right ─────────────────────────────────────────────── */
+.dp-hero {
+  padding-block: var(--s-8) var(--section);
+}
+
+.dp-hero .grid,
+.dp-numbers .grid,
+.dp-book .grid,
+.dp-credit .grid,
+.dp-cure .grid {
+  row-gap: var(--s-5);
+  align-items: start;
+}
+
+.dp-hero__text {
+  display: grid;
+  gap: var(--s-3);
+  align-content: start;
+}
+
+.dp-lede {
+  max-width: 44ch;
+}
+
+.dp-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  min-height: var(--s-3);
+}
+
+.dp-disclose {
+  max-width: 52ch;
+}
+
+.dp-plot__asset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-3);
+}
+
+.dp-plot__now {
+  display: grid;
+  justify-items: end;
+  gap: var(--s-half);
+}
+
+.dp-plot__now-label {
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.dp-plot__now-value {
+  font-family: var(--font-data);
+  font-size: var(--t-h2);
+  line-height: 1.1;
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-plot__svg {
+  position: relative;
+  height: 18rem;
+  margin-block: var(--s-3) var(--s-2);
+  touch-action: pan-y;
+  cursor: ew-resize;
+  user-select: none;
+}
+
+.dp-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dp-svg__axis {
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.dp-svg__cap {
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+.dp-svg__cap.is-active {
+  stroke: var(--slate);
+  stroke-dasharray: none;
+}
+
+.dp-svg__caplabel,
+.dp-svg__tick {
+  fill: var(--slate);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+}
+
+.dp-svg__caplabel.is-active {
+  fill: var(--ivory);
+}
+
+.dp-svg__curve {
+  fill: none;
+  stroke: var(--ivory);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.dp-svg__other {
+  fill: none;
+  stroke: var(--slate);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.dp-svg__here circle {
+  fill: var(--streetlamp);
+}
+
+.dp-svg__here text {
+  fill: var(--streetlamp);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+}
+
+.dp-svg__handle line {
+  stroke: var(--ivory);
+  stroke-width: 1;
+  opacity: 0.4;
+}
+
+.dp-svg__handle circle {
+  fill: var(--ink);
+  stroke: var(--ivory);
+  stroke-width: 2;
+}
+
+.dp-svg__empty {
+  position: absolute;
+  inset: 20% 12% auto 18%;
+  color: var(--slate);
+  text-align: center;
+}
+
+.dp-plot__drag {
+  display: grid;
+  gap: var(--s-1);
+  padding-top: var(--s-2);
+  border-top: var(--rule) solid var(--hairline);
+}
+
+.dp-plot__range input {
+  width: 100%;
+  min-height: var(--touch);
+  accent-color: var(--ivory);
+}
+
+.dp-plot__readout {
+  min-height: calc(2 * var(--lh-small) * 1em);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
+/* ── 2. Stats ─────────────────────────────────────────────────────────────────────────────── */
+.dp-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3) var(--s-2);
+}
+
+.dp-stats {
+  min-height: 20rem;
+}
+
+/* ── 3. The book ──────────────────────────────────────────────────────────────────────────── */
+.dp-book .nt-scroll {
+  margin-top: var(--s-5);
+}
+
+.dp-book__cert {
+  min-height: 30rem;
+}
+
+.dp-table {
+  min-width: 46rem;
+}
+
+.dp-table td,
+.dp-table th {
+  white-space: nowrap;
+}
+
+.dp-table th[scope='row'] {
+  font-weight: 500;
+  padding: var(--s-1) var(--s-2) var(--s-1) 0;
+  border-bottom: var(--rule) solid var(--hairline);
+  text-align: start;
+}
+
+/* ── 4. Fade ──────────────────────────────────────────────────────────────────────────────── */
+.dp-fade__steps {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 768px) {
+  .dp-fade__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .dp-fade__steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.dp-fade__step {
+  display: grid;
+  align-content: start;
+  gap: var(--s-1);
+  padding-top: var(--s-2);
+  border-top: var(--rule-strong) solid var(--figure);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
+.dp-fade__step:last-child {
+  border-top-color: var(--signal);
+}
+
+.dp-fade__step p {
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.dp-fade__n {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  color: var(--muted);
+}
+
+.dp-fade__h {
+  font-size: var(--t-body);
+  font-weight: 600;
+}
+
+/* ── 5. Refusal and position ──────────────────────────────────────────────────────────────── */
+.dp-refusal {
+  margin-block: var(--s-4);
+}
+
+.dp-refusal__fig {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  border-inline-start: var(--rule-strong) solid var(--figure);
+}
+
+.dp-refusal__call,
+.dp-refusal__result {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
+.dp-refusal__call {
+  color: var(--muted);
+}
+
+.dp-refusal__ok {
+  font-weight: 600;
+}
+
+.dp-refused code {
+  color: var(--figure);
+}
+
+.dp-reasons {
+  margin-top: var(--s-3);
+}
+
+.dp-reasons code {
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  white-space: nowrap;
+}
+
+.dp-stats__tag {
+  margin-bottom: var(--s-3);
+}
+
+.dp-position {
+  min-height: 16rem;
+}
+
+.dp-pos__who {
+  margin-bottom: var(--s-2);
+}
+
+.dp-pos__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+}
+
+.dp-pos__grid dt {
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.dp-pos__grid dd {
+  margin: 0;
+  font-family: var(--font-data);
+  font-size: var(--t-lede);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-pos__wide {
+  grid-column: 1 / -1;
+}
+
+.dp-pos__wide dd {
+  font-family: var(--font-text);
+  font-size: var(--t-body);
+}
+
+/* ── 6. Cure clock ────────────────────────────────────────────────────────────────────────── */
+.dp-cure__state {
+  min-height: calc(2 * var(--lh-body) * 1em);
+  font-size: var(--t-body);
+}
+
+.dp-cure__cells {
+  display: grid;
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+  gap: var(--s-half);
+  margin-block: var(--s-2);
+}
+
+@media (min-width: 560px) {
+  .dp-cure__cells {
+    grid-template-columns: repeat(30, minmax(0, 1fr));
+  }
+}
+
+.dp-cure__cell {
+  aspect-ratio: 1 / 2.4;
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: 1px;
+}
+
+.dp-cure__cell.is-used {
+  background: var(--ivory);
+  border-color: var(--ivory);
+}
+
+/* Frozen while shut: the cells sit under the amber of the shut hours. */
+[data-state='frozen'] + .dp-cure__cells .dp-cure__cell {
+  border-color: var(--streetlamp);
+}
+
+.dp-cure__legend {
+  color: var(--muted);
+}
+
+/* ── 7. Actions ───────────────────────────────────────────────────────────────────────────── */
+.dp-gate {
+  padding: var(--s-1-5) 0;
+  max-width: 72ch;
+}
+
+.dp-act .nt-flow__wallet {
+  margin-top: var(--s-4);
+}
