@@ -1,0 +1,61 @@
+/* Shared OG / social template styles. Served by og/render.mjs from the web/ root, so these URLs are the site's own:
+   /src/styles/tokens.css (lane A) and /fonts/*.woff2 (web/public/fonts, lane A), public/ at the root as Vite serves it. render.mjs substitutes fallbacks while those
+   files do not exist yet. */
+@import url('/src/styles/tokens.css');
+
+@font-face { font-family: 'Bodoni Moda'; font-style: normal; font-weight: 400 900; font-display: block; src: url('/fonts/bodoni-moda.woff2') format('woff2'); }
+@font-face { font-family: 'Bodoni Moda'; font-style: italic; font-weight: 400 900; font-display: block; src: url('/fonts/bodoni-moda-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Libre Franklin'; font-style: normal; font-weight: 100 900; font-display: block; src: url('/fonts/libre-franklin.woff2') format('woff2'); }
+@font-face { font-family: 'Martian Mono'; font-style: normal; font-weight: 100 800; font-stretch: 75% 112.5%; font-display: block; src: url('/fonts/martian-mono.woff2') format('woff2'); }
+
+/* ADAPTER — lane A token names (assumed: --ink --ivory --streetlamp --slate --brass --graphite, --font-*). The literal
+   fallbacks are the frozen spec values, so an OG image is right even if a name differs. Change names here only. */
+:root {
+  --og-ink: var(--ink, #0F1720);
+  --og-ivory: var(--ivory, #F4EFE6);
+  --og-amber: var(--streetlamp, #F5A524);
+  --og-slate: var(--slate, #8A96A3);
+  --og-brass: var(--brass, #8A5A00);
+  --og-graphite: var(--graphite, #5B6470);
+  --og-hair: color-mix(in oklab, var(--og-ivory) 14%, var(--og-ink));
+  --og-display: var(--font-display, 'Bodoni Moda'), 'Bodoni 72', Didot, serif;
+  --og-text: var(--font-text, 'Libre Franklin'), 'Helvetica Neue', Arial, sans-serif;
+  --og-data: var(--font-data, 'Martian Mono'), ui-monospace, Menlo, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; }
+html, body { background: var(--og-ink); }
+body {
+  width: var(--w); height: var(--h); overflow: hidden; position: relative;
+  color: var(--og-ivory); font-family: var(--og-text);
+  -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+  font-kerning: normal; font-optical-sizing: auto;
+}
+
+/* Layers */
+.og-guilloche { position: absolute; pointer-events: none; color: var(--og-ivory); opacity: .075; }
+.og-guilloche svg { width: 100%; height: 100%; display: block; }
+.og-frame { position: absolute; inset: var(--pad-y) var(--pad-x); display: grid; }
+
+/* Masthead: lockup left, address right */
+.og-mast { display: flex; justify-content: space-between; align-items: center; }
+.og-mast img { height: var(--lockup, 34px); display: block; }
+.og-addr { font-family: var(--og-data); font-size: var(--data, 17px); font-stretch: 87%; color: var(--og-slate); letter-spacing: 0; }
+
+/* Ledger column */
+.og-h {
+  font-family: var(--og-display); font-weight: 400; font-size: var(--hs, 76px); line-height: .96; letter-spacing: -.02em;
+  font-variation-settings: 'opsz' 96; text-wrap: balance;
+}
+.og-h em { font-style: italic; }
+.og-sub { font-size: var(--ss, 24px); line-height: 1.4; color: var(--og-slate); max-width: var(--sub-w, 34ch); text-wrap: pretty; }
+.og-rule { height: 1px; background: var(--og-hair); border: 0; }
+.og-foot { display: flex; gap: 28px; font-family: var(--og-data); font-size: var(--data, 17px); font-stretch: 87%; color: var(--og-slate); }
+.og-foot b { font-weight: 400; color: var(--og-ivory); }
+
+/* Instruments */
+.og-inst { position: absolute; }
+.og-label { font-family: var(--og-data); font-size: 15px; font-stretch: 87%; color: var(--og-slate); }
+.og-mono { font-family: var(--og-data); font-stretch: 100%; }
+.og-ivory { color: var(--og-ivory); }
+.og-amber { color: var(--og-amber); }
