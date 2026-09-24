@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OG · api</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  body { --w: 1200px; --h: 630px; --pad-x: 64px; --pad-y: 52px; }
+  .og-frame { grid-template-rows: auto 1fr auto auto; row-gap: 26px; }
+  .og-copy { align-self: center; display: grid; gap: 24px; max-width: 540px; }
+  .og-h { --hs: 72px; }
+  .og-sub { --ss: 22px; --sub-w: 31ch; }
+  .og-guilloche { width: 700px; height: 700px; left: 640px; top: -60px; }
+  /* A call, drawn as the exchange of an agent and api.curb.markets: ask, 402, pay, 200. */
+  .term {
+    position: absolute; left: 648px; top: 150px; width: 488px; padding: 26px 28px 24px;
+    background: var(--og-ink); border: 1px solid var(--og-hair); border-radius: 2px;
+    font-family: var(--og-data); font-stretch: 100%; font-size: 15px; line-height: 1.95; color: var(--og-slate);
+  }
+  .term .q { color: var(--og-ivory); }
+  .term .s { color: var(--og-ivory); }
+  .term .a { color: var(--og-amber); }
+  .term hr { border: 0; height: 1px; background: var(--og-hair); margin: 12px 0; }
+  .term .r { display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <div class="term" aria-hidden="true">
+    <div class="q">GET /v1/closure-calendar?symbol=wTCENTx</div>
+    <div>← <span class="s">402</span> Payment Required · x402</div>
+    <div>→ pay, then ask again</div>
+    <div>← <span class="s">200</span> every window the cap is zero</div>
+    <hr>
+    <div class="r"><span>/v1/closure-calendar</span><span>when it shuts</span></div>
+    <div class="r"><span>/v1/accuracy-record</span><span>graded marks</span></div>
+    <div class="r"><span>/v1/discount-curve</span><span>closure discounts</span></div>
+  </div>
+  <div class="og-frame">
+    <header class="og-mast"><img src="/brand/lockup-horizontal.svg" alt="Curb"><span class="og-addr">api.curb.markets</span></header>
+    <div class="og-copy">
+      <h1 class="og-h">Agents ask. Agents <em>pay</em>.</h1>
+      <p class="og-sub">Three priced routes over x402 on X&nbsp;Layer, listed on the OKX AI marketplace.</p>
+    </div>
+    <hr class="og-rule">
+    <footer class="og-foot"><b>curb.markets/api</b><span>x402</span><span>X Layer</span><span>OKX AI agent #13869</span></footer>
+  </div>
+  <script type="module">
+    import { guillocheInto, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'api');
+    await ready();
+  </script>
+</body>
+</html>
