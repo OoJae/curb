@@ -8,22 +8,27 @@ import {Vm} from "forge-std/Vm.sol";
 import {DepthCert} from "../../../src/DepthCert.sol";
 import {IDepthCert} from "../../../src/interfaces/IDepthCert.sol";
 import {MockERC20} from "../../mocks/MockERC20.sol";
+import {MockEligibility} from "../../DepthCert.t.sol";
 
-/// Bounded actor for DepthCertInvariant: three makers, three takers, two wrappers, two books per wrapper
-/// (open, and gated to takers[0]). Makers' USDG allowance, balance and freeze state are moved at random,
-/// time moves forward, and every `take` is sent with a random gas budget.
+/// Bounded actor for DepthCertInvariant: four makers (0-2 on the maker allowlist, toggled at random; 3 an
+/// outsider never on it), three takers, two wrappers, two books per wrapper (open, and gated to takers[0]).
+/// Makers' USDG allowance, balance, freeze state and eligibility are moved at random, time moves forward,
+/// and every `take` is sent with a random gas budget.
 ///
 /// Ghosts, checked by the invariant contract:
 ///  - fadeWhileAble: a take faded although, just before the call, the maker had allowance >= cost,
 ///    balance >= cost and was not frozen (the maker state is recorded before each call);
 ///  - remainingIncreased / statusRegressed: a cert's `remainingShares` went up, or it left FADED/CLOSED;
 ///  - bondLeftEarly: a cert went LIVE -> CLOSED (bond back to the maker) before expiry while shares were
-///    still owed. The only other way out for a bond is LIVE -> FADED.
+///    still owed. The only other way out for a bond is LIVE -> FADED;
+///  - ineligibleGatedPosts: a cert naming a beneficiary was posted by a maker not eligible just before.
 contract DepthHandler is CommonBase, StdCheats, StdUtils {
     DepthCert public immutable dc;
     MockERC20 public immutable usdg;
+    MockEligibility public immutable elig;
+    uint256 public constant MAKERS = 4;
     MockERC20[2] internal _wrappers;
-    address[3] internal _makers;
+    address[4] internal _makers;
     address[3] internal _takers;
     address public immutable sink; // every `to`; never frozen
 
@@ -36,9 +41,12 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
     uint256 public remainingIncreased;
     uint256 public statusRegressed;
     uint256 public bondLeftEarly;
+    uint256 public ineligibleGatedPosts;
 
     // --- call statistics (reported, not asserted) ---
     uint256 public posts;
+    uint256 public gatedPosts;
+    uint256 public refusedIneligible;
     uint256 public fills;
     uint256 public fades;
     uint256 public fadesAllowance;
@@ -50,18 +58,22 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
     uint256 public claims;
     uint256 public prunes;
 
-    constructor(DepthCert dc_, MockERC20 usdg_, MockERC20 w0, MockERC20 w1) {
+    constructor(DepthCert dc_, MockERC20 usdg_, MockEligibility elig_, MockERC20 w0, MockERC20 w1) {
         dc = dc_;
         usdg = usdg_;
+        elig = elig_;
         _wrappers[0] = w0;
         _wrappers[1] = w1;
         sink = makeAddr("sink");
-        for (uint256 i; i < 3; ++i) {
+        for (uint256 i; i < MAKERS; ++i) {
             _makers[i] = makeAddr(string.concat("maker", vm.toString(i)));
-            _takers[i] = makeAddr(string.concat("taker", vm.toString(i)));
             usdg.mint(_makers[i], 5_000e6);
             vm.prank(_makers[i]);
             usdg.approve(address(dc), type(uint256).max);
+            if (i < 3) elig.set(_makers[i], true); // maker3 is the outsider
+        }
+        for (uint256 i; i < 3; ++i) {
+            _takers[i] = makeAddr(string.concat("taker", vm.toString(i)));
             for (uint256 j; j < 2; ++j) {
                 vm.prank(_takers[i]);
                 _wrappers[j].approve(address(dc), type(uint256).max);
@@ -82,9 +94,10 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
     function post(uint256 mSeed, uint256 wSeed, bool gated, uint256 size, uint256 px, uint256 life, uint256 extra)
         external
     {
-        address m = _makers[mSeed % 3];
+        address m = _makers[mSeed % MAKERS];
         address w = address(_wrappers[wSeed % 2]);
         address ben = gated ? _takers[0] : address(0);
+        bool eligible = elig.isEligible(m);
         size = bound(size, 1e15, 20e18);
         px = bound(px, 1e5, 500e6);
         uint256 n = size * px / 1e18;
@@ -109,7 +122,11 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
             _lastRemaining[id] = uint128(size);
             _lastStatus[id] = IDepthCert.Status.LIVE;
             ++posts;
-        } catch {}
+            if (gated) ++gatedPosts;
+            if (gated && !eligible) ++ineligibleGatedPosts;
+        } catch (bytes memory err) {
+            if (err.length == 4 && bytes4(err) == DepthCert.IneligibleMaker.selector) ++refusedIneligible;
+        }
         _sweep();
     }
 
@@ -166,7 +183,7 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
     }
 
     function claim(uint256 mSeed, uint256 wSeed) external {
-        address m = _makers[mSeed % 3];
+        address m = _makers[mSeed % MAKERS];
         vm.prank(m);
         try dc.claimShares(address(_wrappers[wSeed % 2]), m) returns (uint256 s) {
             if (s > 0) ++claims;
@@ -182,7 +199,7 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
 
     /// Revoke, trim, restore or max out a maker's allowance.
     function setAllowance(uint256 mSeed, uint256 mode, uint256 amt) external {
-        address m = _makers[mSeed % 3];
+        address m = _makers[mSeed % MAKERS];
         uint256 need = dc.committed(m);
         uint256 a;
         mode = mode % 5;
@@ -198,7 +215,7 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
 
     /// Top a maker's USDG up, or drain some of it.
     function moveBalance(uint256 mSeed, uint256 amt, bool up) external {
-        address m = _makers[mSeed % 3];
+        address m = _makers[mSeed % MAKERS];
         if (up) {
             usdg.mint(m, bound(amt, 0, 2_000e6));
         } else {
@@ -210,9 +227,16 @@ contract DepthHandler is CommonBase, StdCheats, StdUtils {
 
     /// Freeze a maker (one call in three) or thaw it, so makers spend most of their time unfrozen.
     function setFrozen(uint256 mSeed) external {
-        address m = _makers[mSeed % 3];
-        if ((mSeed / 3) % 3 == 0) usdg.freeze(m);
+        address m = _makers[mSeed % MAKERS];
+        if ((mSeed / MAKERS) % 3 == 0) usdg.freeze(m);
         else usdg.unfreeze(m);
+        _sweep();
+    }
+
+    /// Delist one of the allowlisted makers (one call in four) or relist it. The outsider never gets on.
+    function setEligible(uint256 mSeed) external {
+        address m = _makers[mSeed % 3];
+        elig.set(m, (mSeed / 3) % 4 != 0);
         _sweep();
     }
 

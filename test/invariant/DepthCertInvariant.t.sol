@@ -6,7 +6,9 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DepthCert} from "../../src/DepthCert.sol";
 import {IDepthCert} from "../../src/interfaces/IDepthCert.sol";
 import {IERC20} from "../../src/interfaces/IERC20.sol";
+import {IEligibility} from "../../src/interfaces/IEligibility.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
+import {MockEligibility} from "../DepthCert.t.sol";
 import {DepthHandler} from "./handlers/DepthHandler.sol";
 
 /// DepthCert invariants (W4 spec, "DepthCertInvariant (P3)"), under random posts, takes with random gas,
@@ -20,9 +22,11 @@ import {DepthHandler} from "./handlers/DepthHandler.sol";
 ///  6. No bond leaves before expiry except by a fade (or once the cert is filled in full, which the spec's
 ///     withdraw rule allows: the bond then backs nothing).
 ///  7. Books stay within MAX_LIVE_PER_BOOK, and every takeable cert is listed in its book.
+///  8. Only a maker eligible at the time can post a cert that names a beneficiary.
 contract DepthCertInvariant is StdInvariant, Test {
     DepthCert dc;
     MockERC20 usdg;
+    MockEligibility elig;
     MockERC20 w0;
     MockERC20 w1;
     DepthHandler h;
@@ -32,11 +36,12 @@ contract DepthCertInvariant is StdInvariant, Test {
         usdg = new MockERC20("Global Dollar", "USDG", 6);
         w0 = new MockERC20("Wrapped TCENTx", "wTCENTx", 18);
         w1 = new MockERC20("Wrapped NVDAx", "wNVDAx", 18);
-        dc = new DepthCert(IERC20(address(usdg)));
-        h = new DepthHandler(dc, usdg, w0, w1);
+        elig = new MockEligibility();
+        dc = new DepthCert(IERC20(address(usdg)), IEligibility(address(elig)));
+        h = new DepthHandler(dc, usdg, elig, w0, w1);
 
         targetContract(address(h));
-        bytes4[] memory sel = new bytes4[](9);
+        bytes4[] memory sel = new bytes4[](10);
         sel[0] = DepthHandler.post.selector;
         sel[1] = DepthHandler.take.selector;
         sel[2] = DepthHandler.withdraw.selector;
@@ -46,6 +51,7 @@ contract DepthCertInvariant is StdInvariant, Test {
         sel[6] = DepthHandler.moveBalance.selector;
         sel[7] = DepthHandler.setFrozen.selector;
         sel[8] = DepthHandler.warp.selector;
+        sel[9] = DepthHandler.setEligible.selector;
         targetSelector(FuzzSelector({addr: address(h), selectors: sel}));
     }
 
@@ -69,14 +75,14 @@ contract DepthCertInvariant is StdInvariant, Test {
         for (uint256 j; j < 2; ++j) {
             MockERC20 w = h.wrapperAt(j);
             uint256 sum;
-            for (uint256 i; i < 3; ++i) sum += dc.claimableShares(h.makerAt(i), address(w));
+            for (uint256 i; i < h.MAKERS(); ++i) sum += dc.claimableShares(h.makerAt(i), address(w));
             assertEq(w.balanceOf(address(dc)), sum, "wrapper held != sum of claimable");
         }
     }
 
     // 3
     function invariant_committed_equals_sum_notional_remaining() public view {
-        for (uint256 k; k < 3; ++k) {
+        for (uint256 k; k < h.MAKERS(); ++k) {
             address m = h.makerAt(k);
             uint256 sum;
             for (uint256 i; i < h.idsLength(); ++i) {
@@ -122,6 +128,15 @@ contract DepthCertInvariant is StdInvariant, Test {
         }
     }
 
+    // 8
+    function invariant_only_eligible_makers_name_a_beneficiary() public view {
+        assertEq(h.ineligibleGatedPosts(), 0, "an ineligible maker posted a beneficiary-named cert");
+        for (uint256 i; i < h.idsLength(); ++i) {
+            IDepthCert.Cert memory c = dc.certOf(h.idAt(i));
+            if (c.beneficiary != address(0)) assertTrue(c.maker != h.makerAt(3), "the outsider holds a gated cert");
+        }
+    }
+
     /// Not vacuous: the same handler, driven through a long seeded sequence, must reach every path the
     /// invariants are about -- fills, all three fade reasons, starved takes, withdrawals and claims --
     /// with every invariant checked along the way.
@@ -141,6 +156,7 @@ contract DepthCertInvariant is StdInvariant, Test {
             else if (op < 16) h.setAllowance(a, b, c);
             else if (op < 17) h.moveBalance(a, b, c % 2 == 0);
             else if (op < 18) h.setFrozen(a);
+            else if (op < 19) h.setEligible(a);
             else h.warp(a);
             if (i % 50 == 49) _checkAll();
         }
@@ -150,7 +166,10 @@ contract DepthCertInvariant is StdInvariant, Test {
         console2.log("fade reasons: allowance", h.fadesAllowance(), "balance", h.fadesBalance());
         console2.log("fade reasons: transfer_failed", h.fadesTransfer(), "other take reverts", h.takeReverts());
         console2.log("withdraws", h.withdraws(), "claims", h.claims());
+        console2.log("gated posts", h.gatedPosts(), "IneligibleMaker refusals", h.refusedIneligible());
         assertGt(h.fills(), 0, "fills");
+        assertGt(h.gatedPosts(), 0, "gated posts");
+        assertGt(h.refusedIneligible(), 0, "IneligibleMaker refusals");
         assertGt(h.fadesAllowance(), 0, "ALLOWANCE fades");
         assertGt(h.fadesBalance(), 0, "BALANCE fades");
         assertGt(h.fadesTransfer(), 0, "TRANSFER_FAILED fades");
@@ -167,5 +186,6 @@ contract DepthCertInvariant is StdInvariant, Test {
         invariant_remaining_never_increases();
         invariant_no_bond_leaves_before_expiry_except_by_fade();
         invariant_books_bounded_and_complete();
+        invariant_only_eligible_makers_name_a_beneficiary();
     }
 }

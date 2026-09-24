@@ -1,11 +1,14 @@
 DepthCert invariants (P3, W4 spec "DepthCertInvariant")
-Generated 2026-09-24 14:03 UTC. forge 1.8.3, solc 0.8.28, legacy codegen, optimizer 200.
+Generated 2026-09-24 14:14 UTC. forge 1.8.3, solc 0.8.28, legacy codegen, optimizer 200.
 Suite: test/invariant/DepthCertInvariant.t.sol, handler test/invariant/handlers/DepthHandler.sol.
 
-Handler: 3 makers, 3 takers, 2 wrappers (MockERC20, 18 dp), USDG (MockERC20, 6 dp); books = wrapper x
-{open, gated to taker0}. Actions: post (random size/px/life/bond >= min), take (random cert, shares,
+DepthCert is built gated, as deployed: constructor(usdg, makers) with a MockEligibility maker allowlist.
+Handler: 4 makers (0-2 allowlisted and delisted/relisted at random, 3 an outsider never listed), 3 takers,
+2 wrappers (MockERC20, 18 dp), USDG (MockERC20, 6 dp); books = wrapper x {open, gated to taker0}.
+Actions: post (random size/px/life/bond >= min), take (random cert, shares,
 taker, and gas: 1 in 4 in [40k, 450k], else [250k, 1.5M]), withdraw, claim, prune, setAllowance
-(0 / committed-1 / committed / max / random), moveBalance (mint or burn), setFrozen, warp (<= 3 h).
+(0 / committed-1 / committed / max / random), moveBalance (mint or burn), setFrozen, setEligible,
+warp (<= 3 h).
 The maker's allowance, balance and frozen flag are recorded before every take.
 
 Invariants:
@@ -18,8 +21,11 @@ Invariants:
   6 invariant_no_bond_leaves_before_expiry_except_by_fade
                                                       LIVE -> CLOSED only at/after expiry or with nothing owed
   7 invariant_books_bounded_and_complete              book <= MAX_LIVE_PER_BOOK; every takeable cert listed
+  8 invariant_only_eligible_makers_name_a_beneficiary ghost: no beneficiary-named cert from a maker who was
+                                                      ineligible just before posting; the outsider holds none
 Plus test_handler_reaches_every_path: a seeded 600-step drive of the same handler that must hit fills, all
-three fade reasons, InsufficientGas reverts, withdrawals and claims, checking all seven invariants every 50 steps.
+three fade reasons, InsufficientGas reverts, withdrawals, claims, gated posts and IneligibleMaker refusals,
+checking all eight invariants every 50 steps.
 
 === Run 1: repo config (runs 256, depth 64, fail_on_revert false) ===
 $ FOUNDRY_INVARIANT_SHOW_METRICS=true forge test --match-path test/invariant/DepthCertInvariant.t.sol -vv
@@ -31,6 +37,7 @@ DepthCertInvariant invariants:
 [PASS] invariant_committed_equals_sum_notional_remaining
 [PASS] invariant_no_bond_leaves_before_expiry_except_by_fade
 [PASS] invariant_no_fade_while_maker_able
+[PASS] invariant_only_eligible_makers_name_a_beneficiary
 [PASS] invariant_remaining_never_increases
 [PASS] invariant_usdg_balance_equals_totalBonds
 [PASS] invariant_wrapper_balance_equals_sum_claimable
@@ -39,36 +46,39 @@ DepthCertInvariant invariants:
 ╭--------------+--------------+-------+---------+----------╮
 | Contract     | Selector     | Calls | Reverts | Discards |
 +==========================================================+
-| DepthHandler | claim        | 1850  | 0       | 0        |
+| DepthHandler | claim        | 1649  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | moveBalance  | 1777  | 0       | 0        |
+| DepthHandler | moveBalance  | 1681  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | post         | 1729  | 0       | 0        |
+| DepthHandler | post         | 1621  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | prune        | 1830  | 0       | 0        |
+| DepthHandler | prune        | 1717  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setAllowance | 1827  | 0       | 0        |
+| DepthHandler | setAllowance | 1622  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setFrozen    | 1808  | 0       | 0        |
+| DepthHandler | setEligible  | 1625  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | take         | 1898  | 0       | 0        |
+| DepthHandler | setFrozen    | 1586  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | warp         | 1831  | 0       | 0        |
+| DepthHandler | take         | 1598  | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | withdraw     | 1834  | 0       | 0        |
+| DepthHandler | warp         | 1658  | 0       | 0        |
+|--------------+--------------+-------+---------+----------|
+| DepthHandler | withdraw     | 1627  | 0       | 0        |
 ╰--------------+--------------+-------+---------+----------╯
 
-[PASS] test_handler_reaches_every_path() (gas: 704155926)
+[PASS] test_handler_reaches_every_path() (gas: 764671578)
 Logs:
-  posts 62 fills 58
-  fades 55 InsufficientGas reverts 3
-  fade reasons: allowance 31 balance 19
-  fade reasons: transfer_failed 5 other take reverts 95
-  withdraws 1 claims 8
+  posts 64 fills 128
+  fades 43 InsufficientGas reverts 9
+  fade reasons: allowance 13 balance 10
+  fade reasons: transfer_failed 20 other take reverts 31
+  withdraws 1 claims 20
+  gated posts 31 IneligibleMaker refusals 26
 
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 9.57s (10.00s CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 20.83s (21.58s CPU time)
 
-Ran 1 test suite in 9.58s (9.57s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+Ran 1 test suite in 20.83s (20.83s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
 
 === Run 2: deeper, handler must never revert (runs 1024, depth 128, fail_on_revert true) ===
 $ FOUNDRY_INVARIANT_SHOW_METRICS=true FOUNDRY_INVARIANT_FAIL_ON_REVERT=true FOUNDRY_INVARIANT_RUNS=1024 \
@@ -81,6 +91,7 @@ DepthCertInvariant invariants:
 [PASS] invariant_committed_equals_sum_notional_remaining
 [PASS] invariant_no_bond_leaves_before_expiry_except_by_fade
 [PASS] invariant_no_fade_while_maker_able
+[PASS] invariant_only_eligible_makers_name_a_beneficiary
 [PASS] invariant_remaining_never_increases
 [PASS] invariant_usdg_balance_equals_totalBonds
 [PASS] invariant_wrapper_balance_equals_sum_claimable
@@ -89,25 +100,27 @@ DepthCertInvariant invariants:
 ╭--------------+--------------+-------+---------+----------╮
 | Contract     | Selector     | Calls | Reverts | Discards |
 +==========================================================+
-| DepthHandler | claim        | 14751 | 0       | 0        |
+| DepthHandler | claim        | 13024 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | moveBalance  | 14454 | 0       | 0        |
+| DepthHandler | moveBalance  | 13272 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | post         | 14739 | 0       | 0        |
+| DepthHandler | post         | 12903 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | prune        | 14560 | 0       | 0        |
+| DepthHandler | prune        | 13039 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setAllowance | 14579 | 0       | 0        |
+| DepthHandler | setAllowance | 13092 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | setFrozen    | 14675 | 0       | 0        |
+| DepthHandler | setEligible  | 13123 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | take         | 14362 | 0       | 0        |
+| DepthHandler | setFrozen    | 13059 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | warp         | 14534 | 0       | 0        |
+| DepthHandler | take         | 13244 | 0       | 0        |
 |--------------+--------------+-------+---------+----------|
-| DepthHandler | withdraw     | 14418 | 0       | 0        |
+| DepthHandler | warp         | 13114 | 0       | 0        |
+|--------------+--------------+-------+---------+----------|
+| DepthHandler | withdraw     | 13202 | 0       | 0        |
 ╰--------------+--------------+-------+---------+----------╯
 
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 121.48s (121.48s CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 233.50s (233.49s CPU time)
 
-Ran 1 test suite in 121.48s (121.48s CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+Ran 1 test suite in 233.50s (233.50s CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

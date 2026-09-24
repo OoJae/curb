@@ -6,6 +6,8 @@ import {DepthCert} from "../../src/DepthCert.sol";
 import {IDepthCert} from "../../src/interfaces/IDepthCert.sol";
 import {IERC20} from "../../src/interfaces/IERC20.sol";
 import {SafeTransfer} from "../../src/lib/SafeTransfer.sol";
+import {IEligibility} from "../../src/interfaces/IEligibility.sol";
+import {MockEligibility} from "../DepthCert.t.sol";
 
 /// The admin and compliance surface of the live USDG (Paxos Global Dollar, EIP-1967 proxy whose
 /// implementation routes pause/freeze to a facet). Read from the bytecode on 24 Sep 2026: the
@@ -64,6 +66,7 @@ contract DepthCertForkTest is Test {
     bytes32 constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
 
     DepthCert dc;
+    MockEligibility elig; // stands in for EligibilityRegistry (P2), which DeployW4 passes in
     address maker = makeAddr("fork-maker");
     address taker = makeAddr("fork-taker");
     address to = makeAddr("fork-to");
@@ -75,7 +78,9 @@ contract DepthCertForkTest is Test {
 
     function setUp() public {
         vm.createSelectFork("xlayer");
-        dc = new DepthCert(IERC20(USDG));
+        elig = new MockEligibility();
+        elig.set(maker, true);
+        dc = new DepthCert(IERC20(USDG), IEligibility(address(elig)));
 
         vm.startPrank(POOL_TCENT);
         IERC20(USDG).transfer(maker, 100e6);
@@ -170,6 +175,42 @@ contract DepthCertForkTest is Test {
         assertEq(IERC20(USDG).balanceOf(maker), makerUsdg0 - 1.04e6 + BOND);
         assertEq(IERC20(USDG).balanceOf(address(dc)), 0);
         assertEq(IERC20(W_TCENT).balanceOf(address(dc)), 0);
+    }
+
+    // --- maker eligibility --------------------------------------------------------------------------------
+
+    /// A cert reserved for one taker (as K's cert for CurbCredit will be) needs an eligible maker; the
+    /// eligible one fills for its beneficiary with real tokens.
+    function test_real_gated_cert_needs_an_eligible_maker() public {
+        address credit = makeAddr("fork-credit");
+        address outsider = makeAddr("fork-outsider");
+        vm.prank(POOL_TCENT);
+        IERC20(USDG).transfer(outsider, 10e6);
+        vm.prank(outsider);
+        IERC20(USDG).approve(address(dc), type(uint256).max);
+        vm.prank(outsider);
+        vm.expectRevert(DepthCert.IneligibleMaker.selector);
+        dc.post(W_TCENT, credit, SIZE, 1, uint64(block.timestamp + 30 days), 1);
+
+        vm.prank(maker);
+        uint256 id = dc.post(W_TCENT, credit, SIZE, PX, uint64(block.timestamp + 26 hours), BOND);
+        (uint256 depth,, uint128 minPx,) = dc.honouredDepth(W_TCENT, credit, uint64(block.timestamp + 1 hours));
+        assertEq(depth, SIZE);
+        assertEq(minPx, PX);
+
+        vm.prank(taker);
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.NotBeneficiary.selector, taker, credit));
+        dc.take(id, SIZE, to);
+
+        vm.prank(POOL_TCENT);
+        IERC20(W_TCENT).transfer(credit, SIZE);
+        vm.prank(credit);
+        IERC20(W_TCENT).approve(address(dc), SIZE);
+        vm.prank(credit);
+        (bool filled, uint256 amount) = dc.take(id, SIZE, credit);
+        assertTrue(filled);
+        assertEq(amount, 1.04e6);
+        assertEq(IERC20(USDG).balanceOf(credit), 1.04e6);
     }
 
     // --- real fades --------------------------------------------------------------------------------------

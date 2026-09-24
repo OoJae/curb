@@ -5,10 +5,18 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {DepthCert} from "../src/DepthCert.sol";
 import {IDepthCert} from "../src/interfaces/IDepthCert.sol";
 import {IERC20} from "../src/interfaces/IERC20.sol";
+import {IEligibility} from "../src/interfaces/IEligibility.sol";
 import {SafeTransfer} from "../src/lib/SafeTransfer.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
 
-// --- test tokens -------------------------------------------------------------------------------
+// --- test helpers ------------------------------------------------------------------------------
+
+/// Settable maker allowlist standing in for EligibilityRegistry (P2).
+contract MockEligibility is IEligibility {
+    mapping(address => bool) public isEligible;
+
+    function set(address who, bool ok) external { isEligible[who] = ok; }
+}
 
 /// A USDG whose `transferFrom` burns `burn` gas before moving anything: close to the stipend, so a
 /// stipend that arrived short would run out of gas and show up as a (fake) TRANSFER_FAILED fade.
@@ -99,6 +107,7 @@ contract DepthCertTest is Test {
     bytes4 constant R_TRANSFER_FAILED = bytes4(keccak256("TRANSFER_FAILED"));
 
     DepthCert dc;
+    MockEligibility elig;
     MockERC20 usdg;
     MockERC20 wrapper;
     MockERC20 wrapper2;
@@ -118,7 +127,11 @@ contract DepthCertTest is Test {
         usdg = new MockERC20("Global Dollar", "USDG", 6);
         wrapper = new MockERC20("Wrapped TCENTx", "wTCENTx", 18);
         wrapper2 = new MockERC20("Wrapped NVDAx", "wNVDAx", 18);
-        dc = new DepthCert(IERC20(address(usdg)));
+        elig = new MockEligibility();
+        elig.set(maker, true);
+        elig.set(maker2, true);
+        // Gated as deployed: only eligible makers may name a beneficiary.
+        dc = new DepthCert(IERC20(address(usdg)), IEligibility(address(elig)));
 
         _fundMaker(maker, 10_000e6);
         _fundMaker(maker2, 10_000e6);
@@ -204,7 +217,7 @@ contract DepthCertTest is Test {
 
     function test_constructor_rejects_zero_usdg() public {
         vm.expectRevert(DepthCert.ZeroAddress.selector);
-        new DepthCert(IERC20(address(0)));
+        new DepthCert(IERC20(address(0)), IEligibility(address(elig)));
     }
 
     function test_post_rejects_zero_wrapper_and_usdg_as_wrapper() public {
@@ -305,6 +318,7 @@ contract DepthCertTest is Test {
         assertEq(dc.BALANCE(), R_BALANCE);
         assertEq(dc.TRANSFER_FAILED(), R_TRANSFER_FAILED);
         assertEq(address(dc.usdg()), address(usdg));
+        assertEq(address(dc.makers()), address(elig));
     }
 
     // --- fill accounting ---------------------------------------------------------------------------
@@ -711,7 +725,7 @@ contract DepthCertTest is Test {
 
     function _hungryWorld(uint256 burn) internal returns (DepthCert d, HungryUSDG h, uint256 id) {
         h = new HungryUSDG(burn);
-        d = new DepthCert(IERC20(address(h)));
+        d = new DepthCert(IERC20(address(h)), IEligibility(address(0)));
         h.mint(maker, 1_000e6);
         vm.prank(maker);
         h.approve(address(d), type(uint256).max);
@@ -750,6 +764,80 @@ contract DepthCertTest is Test {
         assertTrue(ok);
         (bool filled,) = abi.decode(ret, (bool, uint256));
         assertFalse(filled);
+    }
+
+    // --- maker eligibility (beneficiary-named certs) -----------------------------------------------
+
+    function test_ineligible_maker_cannot_name_a_beneficiary() public {
+        _fundMaker(stranger, 1_000e6);
+        vm.prank(stranger);
+        vm.expectRevert(DepthCert.IneligibleMaker.selector);
+        dc.post(address(wrapper), credit, SIZE, PX, t0 + 1 days, BOND);
+
+        // Delisting takes effect for the next post.
+        elig.set(maker, false);
+        vm.prank(maker);
+        vm.expectRevert(DepthCert.IneligibleMaker.selector);
+        dc.post(address(wrapper), credit, SIZE, PX, t0 + 1 days, BOND);
+        assertEq(dc.nextId(), 1);
+        assertEq(dc.totalBonds(), 0);
+    }
+
+    function test_eligible_maker_can_name_a_beneficiary() public {
+        uint256 id = _post(maker, credit, SIZE, PX, 1 days, BOND);
+        assertEq(dc.certOf(id).beneficiary, credit);
+        (uint256 s,,,) = dc.honouredDepth(address(wrapper), credit, 0);
+        assertEq(s, SIZE);
+    }
+
+    function test_open_certs_stay_permissionless() public {
+        _fundMaker(stranger, 1_000e6);
+        assertFalse(elig.isEligible(stranger));
+        vm.prank(stranger);
+        uint256 id = dc.post(address(wrapper), address(0), SIZE, PX, t0 + 1 days, BOND);
+        (bool filled,) = _take(taker, id, 0.4e18, to);
+        assertTrue(filled);
+    }
+
+    function test_zero_registry_means_ungated() public {
+        DepthCert open = new DepthCert(IERC20(address(usdg)), IEligibility(address(0)));
+        assertEq(address(open.makers()), address(0));
+        _fundMaker(stranger, 1_000e6);
+        vm.prank(stranger);
+        usdg.approve(address(open), type(uint256).max);
+        vm.prank(stranger);
+        uint256 id = open.post(address(wrapper), credit, SIZE, PX, t0 + 1 days, BOND);
+        assertEq(open.certOf(id).beneficiary, credit);
+    }
+
+    /// The griefing the gate exists for: an outsider can neither fill CurbCredit's book with dust certs
+    /// nor post a dust bid that drags minBidPx (and so the lender's LTV) toward zero.
+    function test_outsider_cannot_grief_a_gated_book() public {
+        _post(maker, credit, 1e18, 50e6, 1 days, 5e6);
+        _fundMaker(stranger, 1_000e6);
+        for (uint256 i; i < 8; ++i) {
+            vm.prank(stranger);
+            vm.expectRevert(DepthCert.IneligibleMaker.selector);
+            dc.post(address(wrapper), credit, 1e18, 1, t0 + 30 days, 1); // notional 1 unit, bond 1 unit
+        }
+        (, , uint128 minPx,) = dc.honouredDepth(address(wrapper), credit, 0);
+        assertEq(minPx, 50e6, "minBidPx untouched");
+        assertEq(dc.bookOf(address(wrapper), credit).length, 1);
+        // ...while the same dust in the open book is allowed, and does not touch the gated book.
+        vm.prank(stranger);
+        dc.post(address(wrapper), address(0), 1e18, 1, t0 + 30 days, 1);
+        (, , minPx,) = dc.honouredDepth(address(wrapper), credit, 0);
+        assertEq(minPx, 50e6);
+    }
+
+    /// Eligibility is checked at post: a delisted maker's standing cert stays a real, bonded, takeable bid.
+    function test_delisting_does_not_void_standing_certs() public {
+        uint256 id = _post(maker, credit, SIZE, PX, 1 days, BOND);
+        elig.set(maker, false);
+        (uint256 s,,,) = dc.honouredDepth(address(wrapper), credit, 0);
+        assertEq(s, SIZE);
+        (bool filled,) = _take(credit, id, 0.4e18, to);
+        assertTrue(filled);
     }
 
     // --- beneficiary gating ------------------------------------------------------------------------
@@ -874,6 +962,7 @@ contract DepthCertTest is Test {
         _take(credit, full, 1e18, to);
         // excluded: faded (a third maker revokes, gets faded)
         address m3 = makeAddr("m3");
+        elig.set(m3, true);
         _fundMaker(m3, 1_000e6);
         uint256 faded = _post(m3, credit, 1e18, 20e6, 2 days, 2e6);
         vm.prank(m3);
@@ -971,6 +1060,7 @@ contract DepthCertTest is Test {
         _take(credit, ids[2], 1e18, to);
         vm.warp(t0 + 1 hours); // ids[0] expires
         address m3 = makeAddr("m3");
+        elig.set(m3, true);
         _fundMaker(m3, 100e6);
 
         // A stranger prunes (permissionless).
@@ -1031,7 +1121,7 @@ contract DepthCertTest is Test {
     /// twin, must return the same bytes, emit the same DepthCert events and leave the same state.
     function test_builder_code_suffix_gives_identical_results_on_every_entry_point() public {
         DepthCert plain = dc;
-        DepthCert tagged = new DepthCert(IERC20(address(usdg)));
+        DepthCert tagged = new DepthCert(IERC20(address(usdg)), IEligibility(address(elig)));
         vm.prank(maker);
         usdg.approve(address(tagged), type(uint256).max);
         vm.prank(maker2);

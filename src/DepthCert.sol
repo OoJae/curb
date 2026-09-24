@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {IDepthCert} from "./interfaces/IDepthCert.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
+import {IEligibility} from "./interfaces/IEligibility.sol";
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
 import {MulDiv} from "./lib/MulDiv.sol";
 
@@ -28,6 +29,14 @@ import {MulDiv} from "./lib/MulDiv.sol";
 ///           caller who simply sent too little gas; the allowance and balance checks are views that
 ///           either answer truthfully or revert the call.
 ///
+///      Who may post. Open certs (beneficiary 0) are permissionless. A cert that names a beneficiary is
+///      depth reserved for that one taker -- in practice CurbCredit, which prices loans off its book -- so
+///      when `makers` is set only an eligible maker may post one. Otherwise anyone could fill that book with
+///      dust certs (BookFull for the real maker) or post a dust bid at 1 unit a share that drags
+///      `honouredDepth`'s minBidPx, and with it the lender's LTV, to zero. `makers == 0` means ungated.
+///      Eligibility is checked when a cert is posted; a maker delisted later keeps its standing certs until
+///      they expire (at most MAX_LIFE), since they remain real, bonded bids.
+///
 ///      Units: shares are wrapper wei (18 dp); `bidPx` is USDG units (6 dp) per whole share (1e18 wei);
 ///      `notional(S, px) = mulDiv(S, px, 1e18)`.
 contract DepthCert is IDepthCert {
@@ -37,6 +46,7 @@ contract DepthCert is IDepthCert {
     // --- errors -----------------------------------------------------------------------------
 
     error ZeroAddress();
+    error IneligibleMaker();
     error BadWrapper(address wrapper);
     error BadRecipient(address to);
     error ZeroNotional();
@@ -102,6 +112,8 @@ contract DepthCert is IDepthCert {
     // --- state ------------------------------------------------------------------------------
 
     IERC20 public immutable usdg;
+    /// @notice Who may post a cert that names a beneficiary; address(0) = anyone.
+    IEligibility public immutable makers;
 
     /// @notice The id the next `post` will get. Ids start at 1.
     uint256 public nextId = 1;
@@ -125,15 +137,18 @@ contract DepthCert is IDepthCert {
         _lock = 1;
     }
 
-    constructor(IERC20 usdg_) {
+    /// @param makers_ Eligibility registry for makers of beneficiary-named certs, or address(0) for ungated.
+    constructor(IERC20 usdg_, IEligibility makers_) {
         if (address(usdg_) == address(0)) revert ZeroAddress();
         usdg = usdg_;
+        makers = makers_;
     }
 
     // --- maker ------------------------------------------------------------------------------
 
     /// @notice Post a firm bid for `sizeShares` of `wrapper` at `bidPx`, bonded by `bond` USDG pulled now.
-    /// @param beneficiary The only address allowed to take it, or 0 for anyone.
+    /// @param beneficiary The only address allowed to take it, or 0 for anyone. Naming one requires the
+    ///        caller to be an eligible maker when `makers` is set.
     function post(address wrapper, address beneficiary, uint128 sizeShares, uint128 bidPx, uint64 expiry, uint128 bond)
         external
         nonReentrant
@@ -141,6 +156,9 @@ contract DepthCert is IDepthCert {
     {
         // A USDG-for-USDG bid is meaningless and would mix claimable shares into the bond balance.
         if (wrapper == address(0) || wrapper == address(usdg)) revert BadWrapper(wrapper);
+        if (beneficiary != address(0) && address(makers) != address(0) && !makers.isEligible(msg.sender)) {
+            revert IneligibleMaker();
+        }
         uint256 n = _notional(sizeShares, bidPx);
         if (n == 0) revert ZeroNotional();
         // n <= 2^256 / 1e18, so n * 1000 cannot overflow.
