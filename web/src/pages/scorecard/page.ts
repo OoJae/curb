@@ -20,18 +20,23 @@ const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = main
 
 // ── formatting ─────────────────────────────────────────────────────────────────────────────────
 
-const hkDate = new Intl.DateTimeFormat('en-GB', {
+const hkParts = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Hong_Kong',
   weekday: 'short',
   day: 'numeric',
-  month: 'short',
+  month: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
   hourCycle: 'h23',
 });
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** "Thu 24 Sep 13:00 HKT" */
 function whenHKT(ms: number): string {
-  return `${hkDate.format(new Date(ms)).replace(',', '')} HKT`;
+  const parts = hkParts.formatToParts(new Date(ms));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  const hh = String(Number(get('hour')) % 24).padStart(2, '0');
+  return `${get('weekday')} ${get('day')} ${MONTHS[Number(get('month')) - 1] ?? ''} ${hh}:${get('minute')} HKT`;
 }
 
 const KIND_WORD: Record<ClosureKind, string> = {

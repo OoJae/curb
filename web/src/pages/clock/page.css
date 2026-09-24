@@ -105,7 +105,11 @@
 
 .clk-row > * {
   padding-block: var(--s-2);
-  min-height: calc(var(--s-8) + var(--s-1));
+}
+
+/* Row headers rule like the cells beside them, not like column headers. */
+.clk-table tbody th {
+  border-bottom: var(--rule) solid var(--hairline);
 }
 
 /* Row hover scales in the left rule (the ledger micro-interaction). */
@@ -267,7 +271,8 @@
     border: 0;
   }
 
-  .clk-table .clk-row > td {
+  .clk-table .clk-row > td,
+  .clk-table .clk-row > th {
     border: 0;
     padding: 0;
   }
