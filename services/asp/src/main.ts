@@ -22,6 +22,9 @@
  *               and with it /healthz and a first deploy's healthcheck.
  *   index       the RegimeChanged scan (index/closures.ts): ~40-70 min of backfill on a fresh volume, then
  *               one chunk every 30s. Its own loop, so neither the tick nor a request ever waits on it.
+ *   corporate   corporateActions.ts: a full sweep of the issuer's corporate-actions history every 30 min, every
+ *               version kept write-once; a chain read of the cohort's multiplier nonces every 5 min; and the
+ *               lineage that links the two, served free. Its own loop, detached like the index.
  *   reconcile   every 15s, each payment the Broker could not confirm is checked against USD₮0's
  *               authorizationState until it is paid (receipted, its bytes kept for the buyer) or dead
  *               (past validBefore, nobody charged). Records a previous process left mid-settle are loaded
@@ -61,6 +64,8 @@ import { AuthorizationLedger } from "./pay/ledger.ts";
 import { rpcAuthorizationChain } from "./pay/authorization.ts";
 import { DEFAULT_RPCS, rpcAny } from "./sources/chain.ts";
 import { XStocksClient } from "./sources/xstocks.ts";
+import { CorporateActionsFeed } from "./corporateActions.ts";
+import { CorporateActionsClient, readMultipliers } from "./sources/corporateActions.ts";
 
 export const DEFAULT_CLOCK = "0x160Dc415902971a7a9B5ade7f43005b36FE5B09b";
 export const DEFAULT_SCORECARD = "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f";
@@ -125,6 +130,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     regimeIndexFromBlock: num("REGIME_INDEX_FROM_BLOCK", get("REGIME_INDEX_FROM_BLOCK", String(MARKETCLOCK_FIRST_BLOCK)), 0, 2 ** 48),
     /** eth_getLogs in flight during the backfill. rpc.xlayer.tech refused past ~6 concurrent on 24 Sep 2026. */
     regimeIndexConcurrency: num("REGIME_INDEX_CONCURRENCY", get("REGIME_INDEX_CONCURRENCY", "4"), 1, 8),
+    /** Full sweeps of the issuer's corporate-actions history. Each is ~8 requests. */
+    corporateActionsSweepMs: num("CORPORATE_ACTIONS_SWEEP_MS", get("CORPORATE_ACTIONS_SWEEP_MS", "1800000"), 300_000, 86_400_000),
   };
   if (cfg.rpcs.length === 0) errors.push("RPCS is empty");
   if (get("CLOCK", DEFAULT_CLOCK) === "") errors.push("CLOCK is required");
@@ -242,6 +249,7 @@ async function main() {
   mkdirSync(join(cfg.dataDir, "issuer"), { recursive: true });
   mkdirSync(join(cfg.dataDir, "index"), { recursive: true });
   mkdirSync(join(cfg.dataDir, "ledger"), { recursive: true });
+  mkdirSync(join(cfg.dataDir, "corporate-actions"), { recursive: true });
 
   const now = Date.now;
   const state: AppState = { bootMs: now(), ticks: 0, lastTickOkMs: 0, cohort: [], cohortAsOfMs: 0, cohortError: null };
@@ -257,6 +265,12 @@ async function main() {
     startBlock: cfg.regimeIndexFromBlock, concurrency: cfg.regimeIndexConcurrency, now, log,
   });
   closures.load();
+  const corporateActions = new CorporateActionsFeed({
+    dir: join(cfg.dataDir, "corporate-actions"), client: new CorporateActionsClient(),
+    readChain: (raws) => readMultipliers(cfg.rpcs, raws), cohort: () => state.cohort,
+    sweepMs: cfg.corporateActionsSweepMs, now, log,
+  });
+  corporateActions.load();
   const handlers = new Map<string, PricedHandler>([
     ["GET /v1/closure-calendar", calendarHandler({ cohort: () => state.cohort, venues, timelines })],
   ]);
@@ -280,7 +294,7 @@ async function main() {
   const server = startHttp(createApp({
     state, venues, payments, handlers, dataDir: cfg.dataDir, publicUrl: cfg.publicUrl, tickMs: cfg.tickMs,
     contracts: { chainId: cfg.chainId, clock: cfg.clock, scorecard: cfg.scorecard }, now, log,
-    scorecard, closures, ledger, authChain,
+    scorecard, closures, corporateActions, ledger, authChain,
   }), cfg.port, log);
   log("boot", {
     clock: cfg.clock, scorecard: cfg.scorecard, network: cfg.network, publicUrl: cfg.publicUrl,
@@ -289,6 +303,7 @@ async function main() {
   });
   // Detached on purpose: the backfill takes the better part of an hour on a fresh volume, and nothing may wait on it.
   void closures.run();
+  void corporateActions.run();
   if (authChain) void ledger.run(authChain);
   drainOnSignal(server, ledger, log);
 
