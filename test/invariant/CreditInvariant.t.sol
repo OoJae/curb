@@ -20,10 +20,14 @@ import {CreditHandler, ISettableEligibility} from "./handlers/CreditHandler.sol"
 
 /// @notice CreditInvariant (P4, W3W4 spec): under random positions, regime flips, price and depth moves, breach
 ///         flags, cure ticks, liquidations and realisation --
-///           1. ltvFor * valueUsdg(totalCollateral, P) <= realisable * 1e4 (+ one USDG wei of rounding), every asset;
+///           1. ltvFor <= regimeCap (6000 open, 3000 otherwise), and every position's limit is payable by the
+///              honoured bid for its own collateral: limitOf <= notional(collateral, minBid) (+1 wei);
 ///           2. at every successful borrow, totalPrincipal <= realisable;
 ///           3. a seizure never exceeds the stale cap sharesFor(debt * 1.05, P_breach), and none happens while shut
-///              (or before 1800 witnessed open seconds);
+///              (or before 1800 witnessed open seconds); bad debt is only ever booked when every share was seized,
+///              and a partial liquidation takes exactly `cleared` off the debt;
+///           7. no action on one position (deposit, withdraw, borrow, repay, liquidate) changes another
+///              position's isBreached -- idle collateral cannot push anyone into breach;
 ///           4. the cure clock does not move across a tick with a shut/UNKNOWN end, and never over-counts;
 ///           5. conservation: wrapper balance = totalCollateral + seized; USDG balance = reserve;
 ///              sum of positions = totals;
@@ -69,8 +73,8 @@ contract CreditInvariantTest is StdInvariant, Test {
 
         clock.set(address(wA), IMarketClock.Regime.MARKET, 20_000_000);
         clock.set(address(wB), IMarketClock.Regime.MARKET, 20_000_000);
-        dc.setDepth(address(wA), address(credit), 150e18, 50e6, uint64(block.timestamp + 3 days));
-        dc.setDepth(address(wB), address(credit), 40e18, 200e6, uint64(block.timestamp + 3 days));
+        dc.setDepth(address(wA), address(credit), 150e18, 50e6, uint64(block.timestamp + 10 days));
+        dc.setDepth(address(wB), address(credit), 40e18, 200e6, uint64(block.timestamp + 10 days));
 
         actors.push(makeAddr("alice"));
         actors.push(makeAddr("bob"));
@@ -114,21 +118,18 @@ contract CreditInvariantTest is StdInvariant, Test {
         targetContract(address(handler));
     }
 
-    // 1. the published bound
-    function invariant_ltv_times_value_within_realisable() public view {
+    // 1. the published per-position ratio: within the regime cap, and payable by the bid for each position
+    function invariant_ltv_within_cap_and_bid() public view {
         for (uint256 i; i < assetList.length; ++i) {
             address a = assetList[i];
-            uint256 p;
-            try sc.priceNow(a) returns (uint128 px) {
-                p = px;
-            } catch {
-                continue; // ltvFor is 0 when the price is unreadable
-            }
             uint256 ltv = credit.ltvFor(a);
             assertLe(ltv, credit.LTV_OPEN_BPS());
-            if (!credit.isOpen(a)) assertLe(ltv, credit.LTV_SHUT_BPS());
-            uint256 value = MulDiv.mulDiv(credit.totalCollateral(a), p, 1e30);
-            assertLe(ltv * value, credit.realisable(a) * 1e4 + 1e4, "ltvFor * collValue > realisable * 1e4");
+            if (!credit.isOpen(a)) assertLe(ltv, credit.LTV_SHUT_BPS(), "shut/UNKNOWN: at most 30%");
+            (,, uint128 minBid,) = dc.honouredDepth(a, address(credit), credit.minCertExpiry(a));
+            for (uint256 k; k < actors.length; ++k) {
+                uint256 coll = credit.positionOf(actors[k], a).collateral;
+                assertLe(credit.limitOf(actors[k], a), MulDiv.mulDiv(coll, minBid, 1e18) + 1, "limit > bid notional");
+            }
         }
     }
 
@@ -142,6 +143,13 @@ contract CreditInvariantTest is StdInvariant, Test {
         assertEq(handler.seizeOverStaleCap(), 0, "seized beyond sharesFor(debt*1.05, P_breach)");
         assertEq(handler.liquidatedWhileShut(), 0, "liquidated while shut/UNKNOWN");
         assertEq(handler.liquidatedEarly(), 0, "liquidated before 1800 witnessed open seconds");
+        assertEq(handler.badDebtWithCollateralLeft(), 0, "bad debt booked while the borrower kept shares");
+        assertEq(handler.debtForgiven(), 0, "a partial liquidation forgave debt");
+    }
+
+    // 7. positions are independent
+    function invariant_no_cross_position_breach() public view {
+        assertEq(handler.crossPositionBreachChange(), 0, "one position's action moved another's isBreached");
     }
 
     // 4. the cure clock only counts witnessed open time
@@ -198,7 +206,7 @@ contract CreditInvariantTest is StdInvariant, Test {
     }
 
     function coverageHeader() public pure returns (string memory) {
-        return "borrowsOk,refusals,breaches,ticks,shutTicks,liquidations,fills,fades,"
+        return "borrowsOk,refusals,breaches,ticks,shutTicks,liquidations,partialLiquidations,fills,fades,"
             "Ineligible,UnsupportedAsset,MarketUnknown,PriceUnavailable,NoDepth,ExceedsLtv,ExceedsDepth,"
             "ReserveShort,InCure,WouldBreach";
     }
@@ -208,7 +216,8 @@ contract CreditInvariantTest is StdInvariant, Test {
             vm.toString(handler.borrowsOk()), ",", vm.toString(handler.refusals()), ",",
             vm.toString(handler.breaches()), ",", vm.toString(handler.ticks()), ",",
             vm.toString(handler.shutTicks()), ",", vm.toString(handler.liquidations()), ",",
-            vm.toString(handler.realisedFills()), ",", vm.toString(handler.realisedFades())
+            vm.toString(handler.partialLiquidations()), ",", vm.toString(handler.realisedFills()), ",",
+            vm.toString(handler.realisedFades())
         );
         bytes4[10] memory r = [
             CurbCredit.Ineligible.selector,
@@ -268,7 +277,11 @@ contract CreditHandlerCoverageTest is Test {
         assertEq(h.cureMovedAcrossShut(), 0);
         assertEq(h.seizeOverStaleCap(), 0);
         assertEq(h.liquidatedWhileShut(), 0);
+        assertEq(h.partialLiquidations(), 1, "the stale cap bound with shares left over");
+        assertEq(h.badDebtWithCollateralLeft(), 0);
+        assertEq(h.debtForgiven(), 0);
         inv.invariant_conservation();
-        inv.invariant_ltv_times_value_within_realisable();
+        inv.invariant_ltv_within_cap_and_bid();
+        inv.invariant_no_cross_position_breach();
     }
 }

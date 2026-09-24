@@ -16,9 +16,14 @@
 #   withdraw ASSET SHARES
 #   borrow   ASSET AMOUNT                    returns false + Refusal(...) rather than reverting on a refusal
 #   repay    BORROWER ASSET AMOUNT
-#   post     WRAPPER SIZE BIDPX EXPIRY BOND  DepthCert.post naming CREDIT (override with BENEFICIARY=0x..);
-#                                            EXPIRY is unix seconds or +SECONDS from now; BIDPX in USDG units/share
-#   take     CERT_ID SHARES TO               DepthCert.take (the fade demo)
+#   post     WRAPPER SIZE BIDPX EXPIRY BOND  DepthCert.post naming CREDIT (override with BENEFICIARY=0x..), sent
+#                                            by the MAKER (see below). EXPIRY: unix seconds, +SECONDS from now, or
+#                                            `demo` (= Tue 29 Sep 2026 06:00Z). BIDPX in USDG units per share.
+#   maker-approve AMOUNT                     the MAKER approves USDG to DEPTH_CERT (bond now + notional on a fill)
+#   revoke                                   the MAKER revokes its USDG allowance to DEPTH_CERT (fade demo): every
+#                                            cert of that maker stops counting at once, so never K (refused
+#                                            unless ALLOW_K_REVOKE=1)
+#   take     CERT_ID SHARES TO               DepthCert.take
 #   flagBreach BORROWER ASSET
 #   tick     BORROWER ASSET
 #   liquidate BORROWER ASSET
@@ -26,11 +31,30 @@
 #
 # Amounts are integers in token units; scientific notation is fine (1.4e6 = 1.4 USDG, 0.05e18 = 0.05 shares).
 #
+# Which certs count (CurbCredit.minCertExpiry): a cert supports lending only if it outlives
+#     now + (market open ? 1 h : max(73 h, the clock's next transition + 1 h)) + 30 min (a full cure).
+# While shut that is >= 73 h 30 min from NOW, so a cert meant to carry a loan through a weekend must be posted
+# with expiry >= (the last moment it must count) + 73 h 30 min. `post` warns when a cert would not count shut.
+#
+# W4 demo (HK, wTCENTx). NB per the attestor's calendar HKEX closes from 12:00 HKT (04:00Z) on Fri 25 Sep
+# (Mid-Autumn half day) and reopens Mon 28 Sep 01:30Z.
+#   K: ACCOUNT=curb-desk      fund 3e6; maker-approve; post $W 0.028e18 52e6 demo 1e6  (cert to Tue 29 Sep 06:00Z;
+#                             counts while shut only until Sat 26 Sep 04:30Z = expiry - 73h30m; to count through
+#                             the whole closure to Mon 28 Sep 01:30Z it needs expiry >= Thu 1 Oct 03:00Z)
+#   A: (Agentic Wallet)       approve $W $CREDIT; deposit $W 0.05e18; borrow $W 1.4e6 before the cert -> Refusal
+#                             (NoDepth); after it -> ok (per-position 60% open / 30% shut; the book pays 1.456 total)
+#   at the cut:               flagBreach A $W  (1.4 > 30% of ~2.8)    -- cure frozen while shut
+#   fade (separate maker D):  MAKER_ACCOUNT=curb-deployer ... maker-approve; post ...; revoke; then `take` or the
+#                             admin's `realise` hits D's cert -> Faded, bond to the taker. K's depth is untouched.
+#
 # Env:
 #   CREDIT      CurbCredit address (required)
 #   DEPTH_CERT  DepthCert address (required for post/take)
 #   ACCOUNT     Foundry keystore name (required to send; e.g. curb-desk)
 #   PWFILE      path to that keystore's password file (required to send)
+#   MAKER_ACCOUNT, MAKER_PWFILE, MAKER_FROM
+#               the cert maker for post / maker-approve / revoke (default: ACCOUNT, PWFILE, FROM). The fade demo's
+#               maker must not be K (curb-desk); the lead uses the deployer D.
 #   RPC_URL     default https://rpc.xlayer.tech
 #   FROM        sender used for --dry-run simulation when no keystore is given (default: derived from ACCOUNT)
 #
@@ -39,6 +63,10 @@
 set -euo pipefail
 
 SUFFIX="6464377535306e636b74356537323966100080218021802180218021802180218021" # ERC-8021, Builder Code dd7u50nckt5e729f
+USDG="0x4ae46a509F6b1D9056937BA4500cb143933D2dc8"
+DESK_K="0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E" # curb-desk: the demo's depth maker; never the fade maker
+DEMO_EXPIRY=1790661600                                 # Tue 29 Sep 2026 06:00:00Z
+SHUT_HORIZON=$(( 73 * 3600 + 30 * 60 ))                # SHUT_CERT_LIFE + CURE_OPEN_SECONDS
 RPC_URL="${RPC_URL:-https://rpc.xlayer.tech}"
 CHAIN_ID=196
 DRY_RUN=0
@@ -112,7 +140,7 @@ cmd_status() {
     assets=$(call "$c" 'assets()(address[])' | tr -d '[] ' | tr ',' ' ')
     for x in $assets; do
         if [[ -n "$a" ]] && [[ "$(lower "$x")" != "$(lower "$a")" ]]; then continue; fi
-        log "  $x  open=$(call "$c" 'isOpen(address)(bool)' "$x")  ltvFor=$(call "$c" 'ltvFor(address)(uint256)' "$x")bps  realisable=$(call "$c" 'realisable(address)(uint256)' "$x")  totalColl=$(call "$c" 'totalCollateral(address)(uint256)' "$x")  totalPrincipal=$(call "$c" 'totalPrincipal(address)(uint256)' "$x")  seized=$(call "$c" 'seized(address)(uint256)' "$x")"
+        log "  $x  open=$(call "$c" 'isOpen(address)(bool)' "$x")  ltvFor=$(call "$c" 'ltvFor(address)(uint256)' "$x")bps  realisable=$(call "$c" 'realisable(address)(uint256)' "$x")  totalColl=$(call "$c" 'totalCollateral(address)(uint256)' "$x")  totalPrincipal=$(call "$c" 'totalPrincipal(address)(uint256)' "$x")  seized=$(call "$c" 'seized(address)(uint256)' "$x")  certs-count-if-expiry>=$(call "$c" 'minCertExpiry(address)(uint64)' "$x")"
         if [[ -n "$b" ]]; then
             log "    $b  debt=$(call "$c" 'debtOf(address,address)(uint256)' "$b" "$x")  limit=$(call "$c" 'limitOf(address,address)(uint256)' "$b" "$x")  breached(known,breached)=$(call "$c" 'isBreached(address,address)(bool,bool)' "$b" "$x" | tr '\n' ' ')"
             log "    cure(active,lastOpen,openedAt,lastTickAt,used,priceAtBreach)=$(call "$c" 'cureOf(address,address)((bool,bool,uint64,uint64,uint64,uint128))' "$b" "$x")"
@@ -122,17 +150,27 @@ cmd_status() {
 
 expiry_of() {
     local e="$1"
-    if [[ "$e" == +* ]]; then
+    if [[ "$e" == demo ]]; then
+        echo "$DEMO_EXPIRY"
+    elif [[ "$e" == +* ]]; then
         echo $(( $(date +%s) + ${e#+} ))
     else
         echo "$e"
     fi
 }
 
+# Run the rest of the command as the cert maker (MAKER_* if set, else the default ACCOUNT/PWFILE/FROM).
+as_maker() {
+    if [[ -n "${MAKER_ACCOUNT:-}" ]]; then ACCOUNT="$MAKER_ACCOUNT"; PWFILE="${MAKER_PWFILE:-}"; fi
+    if [[ -n "${MAKER_FROM:-}" ]]; then FROM="$MAKER_FROM"; fi
+    MAKER_ADDR=$(sender)
+    log "maker $MAKER_ADDR"
+}
+
 main() {
     if [[ "${1:-}" == "--dry-run" ]]; then DRY_RUN=1; shift; fi
     local cmd="${1:-}"
-    [[ -n "$cmd" ]] || { sed -n '2,40p' "$0"; exit 1; }
+    [[ -n "$cmd" ]] || { sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 1; }
     shift
     check_chain
     case "$cmd" in
@@ -170,11 +208,30 @@ main() {
         post)
             [[ $# == 5 ]] || die "post WRAPPER SIZE BIDPX EXPIRY BOND"
             need_addr WRAPPER "$1"
-            local ben="${BENEFICIARY:-$(credit)}" exp
+            as_maker
+            local ben="${BENEFICIARY:-$(credit)}" exp now counts_until
             need_addr BENEFICIARY "$ben"
             exp=$(expiry_of "$4")
+            now=$(date +%s)
+            counts_until=$(( exp - SHUT_HORIZON ))
+            if (( counts_until <= now )); then
+                log "WARNING: expiry $exp is < now + 73h30m: this cert will NOT count while the market is shut"
+            else
+                log "cert counts while shut until $(date -u -r "$counts_until" +%Y-%m-%dT%H:%MZ 2>/dev/null || date -u -d "@$counts_until" +%Y-%m-%dT%H:%MZ) (expiry - 73h30m; longer closures need more)"
+            fi
             send_tx "$(depth)" "$(cast calldata 'post(address,address,uint128,uint128,uint64,uint128)' "$1" "$ben" "$2" "$3" "$exp" "$5")" \
                 "post cert: $2 of $1 at $3/share for $ben, expiry $exp, bond $5" ;;
+        maker-approve)
+            [[ $# == 1 ]] || die "maker-approve AMOUNT"
+            as_maker
+            send_tx "$USDG" "$(cast calldata 'approve(address,uint256)' "$(depth)" "$1")" "maker approves $1 USDG to DepthCert" ;;
+        revoke)
+            [[ $# == 0 ]] || die "revoke (takes no arguments; uses MAKER_ACCOUNT)"
+            as_maker
+            if [[ "$(lower "$MAKER_ADDR")" == "$(lower "$DESK_K")" && "${ALLOW_K_REVOKE:-0}" != 1 ]]; then
+                die "refusing to revoke K's allowance: it would wipe all of K's depth. Use a separate fade maker (MAKER_ACCOUNT)."
+            fi
+            send_tx "$USDG" "$(cast calldata 'approve(address,uint256)' "$(depth)" 0)" "maker REVOKES its USDG allowance to DepthCert (all its certs stop counting)" ;;
         take)
             [[ $# == 3 ]] || die "take CERT_ID SHARES TO"
             need_addr TO "$3"

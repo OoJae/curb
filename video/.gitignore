@@ -1,0 +1,12 @@
+# captures, recordings, renders and the voiceover: large, regenerable, never committed
+media/
+renders/
+snapshots/
+.hyperframes/
+.hf-snap/
+node_modules/
+*.mp4
+*.webm
+*.wav
+*.m4a
+# review/ holds small PNG frames for the lead and IS committed

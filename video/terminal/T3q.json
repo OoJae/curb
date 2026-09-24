@@ -1,0 +1,21 @@
+{
+  "schema": "curb.video.terminal/1",
+  "id": "T3q",
+  "title": "onchainos",
+  "show": "onchainos payment quote \"https://api.curb.markets/v1/closure-calendar?symbol=wTCENTx\"",
+  "command": "onchainos payment quote 'https://api.curb.markets/v1/closure-calendar?symbol=wTCENTx'",
+  "cwd": ".",
+  "startedAt": "2026-09-24T13:55:33.935Z",
+  "endedAt": "2026-09-24T13:55:39.236Z",
+  "durationMs": 5301,
+  "exitCode": 0,
+  "signal": null,
+  "output": "{\"ok\":true,\"data\":{\"accepts\":[{\"amount\":\"10000\",\"asset\":\"0x779ded0c9e1022225f8e0630b35a9b54be713736\",\"index\":0,\"network\":\"eip155:196\",\"scheme\":\"exact\"}],\"alternatives\":[],\"candidates\":[{\"acceptsIndex\":0,\"amount\":\"10000\",\"amountHuman\":\"0.01\",\"availableAmount\":\"1.051866\",\"balanceStatus\":\"sufficient\",\"chainId\":\"196\",\"chainName\":\"X Layer\",\"decimals\":6,\"depositAddress\":\"0x055ba8acd60a2287b2d01cb3bf237e4424357105\",\"hasBalance\":true,\"isMainnet\":true,\"recommended\":true,\"requiredAmount\":\"0.01\",\"scheme\":\"exact\",\"shortfall\":\"0\",\"tokenSymbol\":\"USDT\"}],\"decodedChallenge\":{\"amount\":\"10000\",\"amountHuman\":\"0.01\",\"decimals\":6,\"expires\":0,\"recipient\":\"0x277cA91276A3801667B76C97Da3872Ccb6E96068\",\"supported\":true,\"unsupported_reason\":null},\"knownParams\":{},\"merchantBody\":\"{\\\"schema\\\":\\\"curb.asp.calendar.preview/1\\\",\\\"symbol\\\":\\\"wTCENTx\\\",\\\"mic\\\":\\\"XHKG\\\",\\\"marketOpen\\\":false,\\\"nowPeriod\\\":\\\"closed\\\",\\\"nextClosure\\\":{\\\"startMs\\\":1790308500000,\\\"endMs\\\":1790312400000,\\\"durationS\\\":3900,\\\"startIso\\\":\\\"2026-09-25T03:55:00.000Z\\\",\\\"endIso\\\":\\\"2026-09-25T05:00:00.000Z\\\",\\\"kind\\\":\\\"recess\\\"}}\",\"missingParams\":[],\"needsConfirm\":true,\"nextStep\":\"onchainos payment pay --payment-id pay_648de30316555c1fa23efc6a --selected-index <n> --yes\",\"paramPlan\":[],\"paymentId\":\"pay_648de30316555c1fa23efc6a\",\"summary\":\"Will pay 0.01 USDT (exact, X Layer)\"}}\n",
+  "chunks": [
+    {
+      "t": 5298,
+      "s": "{\"ok\":true,\"data\":{\"accepts\":[{\"amount\":\"10000\",\"asset\":\"0x779ded0c9e1022225f8e0630b35a9b54be713736\",\"index\":0,\"network\":\"eip155:196\",\"scheme\":\"exact\"}],\"alternatives\":[],\"candidates\":[{\"acceptsIndex\":0,\"amount\":\"10000\",\"amountHuman\":\"0.01\",\"availableAmount\":\"1.051866\",\"balanceStatus\":\"sufficient\",\"chainId\":\"196\",\"chainName\":\"X Layer\",\"decimals\":6,\"depositAddress\":\"0x055ba8acd60a2287b2d01cb3bf237e4424357105\",\"hasBalance\":true,\"isMainnet\":true,\"recommended\":true,\"requiredAmount\":\"0.01\",\"scheme\":\"exact\",\"shortfall\":\"0\",\"tokenSymbol\":\"USDT\"}],\"decodedChallenge\":{\"amount\":\"10000\",\"amountHuman\":\"0.01\",\"decimals\":6,\"expires\":0,\"recipient\":\"0x277cA91276A3801667B76C97Da3872Ccb6E96068\",\"supported\":true,\"unsupported_reason\":null},\"knownParams\":{},\"merchantBody\":\"{\\\"schema\\\":\\\"curb.asp.calendar.preview/1\\\",\\\"symbol\\\":\\\"wTCENTx\\\",\\\"mic\\\":\\\"XHKG\\\",\\\"marketOpen\\\":false,\\\"nowPeriod\\\":\\\"closed\\\",\\\"nextClosure\\\":{\\\"startMs\\\":1790308500000,\\\"endMs\\\":1790312400000,\\\"durationS\\\":3900,\\\"startIso\\\":\\\"2026-09-25T03:55:00.000Z\\\",\\\"endIso\\\":\\\"2026-09-25T05:00:00.000Z\\\",\\\"kind\\\":\\\"recess\\\"}}\",\"missingParams\":[],\"needsConfirm\":true,\"nextStep\":\"onchainos payment pay --payment-id pay_648de30316555c1fa23efc6a --selected-index <n> --yes\",\"paramPlan\":[],\"paymentId\":\"pay_648de30316555c1fa23efc6a\",\"summary\":\"Will pay 0.01 USDT (exact, X Layer)\"}}\n",
+      "stream": "stdout"
+    }
+  ]
+}

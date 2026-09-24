@@ -57,3 +57,10 @@ and repeat the whole sentence (or cut the fluff in Clipchamp so no line appears 
 **8 · Close (2:58–3:12)** — *Picture: the live hero; end card.*
 > The exchange keeps its hours. The market doesn't. ⏸ Curb: the market that trades when the exchange is
 > shut. Live on X Layer, at curb dot markets.
+
+---
+
+*Timing notes (video lane, 24 Sep): the picture is cut to the scripted grid `SCRIPTED=[0,14,40,52,84,116,152,178,192]`,
+i.e. beats of 14 · 26 · 12 · 32 · 32 · 36 · 26 · 14 s, and is retimed to the recorded read by `capture/align/`
+using the first words of each beat above as anchors (beat 5: "Before a reopen"). The whole read should land between 3:00 and 3:20.
+The film defaults to 7B; 7A is one flag away if the instruments are live by picture lock.*

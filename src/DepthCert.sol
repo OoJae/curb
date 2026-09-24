@@ -37,6 +37,17 @@ import {MulDiv} from "./lib/MulDiv.sol";
 ///      Eligibility is checked when a cert is posted; a maker delisted later keeps its standing certs until
 ///      they expire (at most MAX_LIFE), since they remain real, bonded bids.
 ///
+///      What a maker owes. `committed(maker)` sums notional(remaining) over the maker's certs that can still
+///      be taken: LIVE, unexpired, shares left. An expired cert commits nothing whether or not its bond has
+///      been withdrawn, so it can never make the maker look unable to pay for depth that is still live. Once
+///      a cert has expired anyone may `withdraw` it (the bond always goes to the maker). Each maker holds at
+///      most MAX_LIVE_PER_MAKER takeable certs, which bounds that sum.
+///
+///      Books and size. Only a book that names a beneficiary is capped (MAX_LIVE_PER_BOOK) and read on-chain;
+///      open books (beneficiary 0) are uncapped and meant for off-chain reads, so dust cannot lock them.
+///      Every cert has a notional of at least MIN_NOTIONAL, and no take may leave a remainder whose cost
+///      rounds to zero, so every cert can always be filled to the last share.
+///
 ///      Units: shares are wrapper wei (18 dp); `bidPx` is USDG units (6 dp) per whole share (1e18 wei);
 ///      `notional(S, px) = mulDiv(S, px, 1e18)`.
 contract DepthCert is IDepthCert {
@@ -49,7 +60,9 @@ contract DepthCert is IDepthCert {
     error IneligibleMaker();
     error BadWrapper(address wrapper);
     error BadRecipient(address to);
-    error ZeroNotional();
+    error BelowMinNotional();
+    error TooManyLiveCerts(address maker);
+    error DustRemainder(uint128 left);
     error BondTooSmall(uint256 bond, uint256 minBond);
     error BadExpiry(uint64 expiry, uint64 earliest, uint64 latest);
     error BookFull(address wrapper, address beneficiary);
@@ -95,8 +108,13 @@ contract DepthCert is IDepthCert {
     uint256 public constant MIN_BOND_BPS = 1000;
     uint64 public constant MIN_LIFE = 10 minutes;
     uint64 public constant MAX_LIFE = 30 days;
-    /// @dev Per (wrapper, beneficiary) book, so `honouredDepth` stays a bounded loop.
+    /// @dev Per (wrapper, beneficiary) book with a beneficiary, so `honouredDepth` there stays a bounded loop.
+    ///      Open books (beneficiary 0) are not capped: nothing on-chain reads them.
     uint256 public constant MAX_LIVE_PER_BOOK = 8;
+    /// @dev Takeable certs per maker, which bounds the loop behind `committed` and `isHonourable`.
+    uint256 public constant MAX_LIVE_PER_MAKER = 16;
+    /// @dev Smallest notional a cert may have: 1 USDG.
+    uint256 public constant MIN_NOTIONAL = 1e6;
     /// @dev The stipend for the maker's USDG `transferFrom`. The fork test measures the real USDG cost and
     ///      requires it to sit below half of this.
     uint256 public constant TRANSFER_GAS = 150_000;
@@ -119,13 +137,13 @@ contract DepthCert is IDepthCert {
     uint256 public nextId = 1;
     /// @notice USDG held as bonds by LIVE certs. This contract's USDG balance equals it between calls.
     uint256 public totalBonds;
-    /// @notice Σ notional(remaining, bidPx) over the maker's LIVE certs: the USDG the maker must be able to pay.
-    mapping(address => uint256) public committed;
     /// @notice Wrapper shares bought for a maker by fills, waiting for `claimShares` (pull pattern).
     mapping(address => mapping(address => uint256)) public claimableShares;
 
     mapping(uint256 => Cert) internal _certs;
     mapping(address => mapping(address => uint256[])) internal _book;
+    /// @dev Each maker's certs; compacted to takeable ones when full.
+    mapping(address => uint256[]) internal _makerCerts;
 
     /// @dev Storage-slot reentrancy lock: 1 = free, 2 = entered.
     uint256 private _lock = 1;
@@ -154,25 +172,8 @@ contract DepthCert is IDepthCert {
         nonReentrant
         returns (uint256 id)
     {
-        // A USDG-for-USDG bid is meaningless and would mix claimable shares into the bond balance.
-        if (wrapper == address(0) || wrapper == address(usdg)) revert BadWrapper(wrapper);
-        if (beneficiary != address(0) && address(makers) != address(0) && !makers.isEligible(msg.sender)) {
-            revert IneligibleMaker();
-        }
-        uint256 n = _notional(sizeShares, bidPx);
-        if (n == 0) revert ZeroNotional();
-        // n <= 2^256 / 1e18, so n * 1000 cannot overflow.
-        uint256 minBond = (n * MIN_BOND_BPS + BPS - 1) / BPS;
-        if (bond < minBond) revert BondTooSmall(bond, minBond);
-        uint64 earliest = uint64(block.timestamp) + MIN_LIFE;
-        uint64 latest = uint64(block.timestamp) + MAX_LIFE;
-        if (expiry < earliest || expiry > latest) revert BadExpiry(expiry, earliest, latest);
-
-        uint256[] storage book = _book[wrapper][beneficiary];
-        if (book.length >= MAX_LIVE_PER_BOOK) {
-            _compact(book);
-            if (book.length >= MAX_LIVE_PER_BOOK) revert BookFull(wrapper, beneficiary);
-        }
+        _checkPost(wrapper, beneficiary, sizeShares, bidPx, expiry, bond);
+        _admit(wrapper, beneficiary);
 
         id = nextId++;
         _certs[id] = Cert({
@@ -187,25 +188,26 @@ contract DepthCert is IDepthCert {
             expiry: expiry,
             status: Status.LIVE
         });
-        book.push(id);
-        committed[msg.sender] += n;
+        _book[wrapper][beneficiary].push(id);
+        _makerCerts[msg.sender].push(id);
         totalBonds += bond;
 
         emit Posted(id, msg.sender, wrapper, beneficiary, sizeShares, bidPx, bond, expiry);
         usdg.safeTransferFrom(msg.sender, address(this), bond);
     }
 
-    /// @notice Take the bond back once the cert has expired or been filled in full.
+    /// @notice Return a cert's bond to its maker and close it. Before expiry only the maker may, and only once the
+    ///         cert is filled in full; from expiry on, anyone may (the bond still goes to the maker).
     function withdraw(uint256 id) external nonReentrant {
         Cert storage c = _certs[id];
         if (c.status != Status.LIVE) revert NotLive(id);
         address maker = c.maker;
-        if (msg.sender != maker) revert NotMaker(msg.sender, maker);
-        uint128 rem = c.remainingShares;
-        if (block.timestamp < c.expiry && rem != 0) revert NotWithdrawable(id);
+        if (block.timestamp < c.expiry) {
+            if (msg.sender != maker) revert NotMaker(msg.sender, maker);
+            if (c.remainingShares != 0) revert NotWithdrawable(id);
+        }
 
         c.status = Status.CLOSED;
-        if (rem != 0) committed[maker] -= _notional(rem, c.bidPx);
         uint128 bond = c.bond;
         totalBonds -= bond;
 
@@ -239,12 +241,9 @@ contract DepthCert is IDepthCert {
         if (block.timestamp >= c.expiry) revert CertExpired(id, c.expiry);
         address ben = c.beneficiary;
         if (ben != address(0) && msg.sender != ben) revert NotBeneficiary(msg.sender, ben);
-        uint128 rem = c.remainingShares;
-        if (shares == 0 || shares > rem) revert BadShares(shares, rem);
         // Paying this contract would strand the USDG: nothing could ever move it out again.
         if (to == address(0) || to == address(this)) revert BadRecipient(to);
-        uint256 cost = _notional(shares, c.bidPx);
-        if (cost == 0) revert ZeroCost();
+        uint256 cost = _checkSize(c, shares);
 
         // 1. The taker delivers first; any failure here reverts everything.
         c.wrapper.safeTransferFrom(msg.sender, address(this), shares);
@@ -274,15 +273,33 @@ contract DepthCert is IDepthCert {
         return _book[wrapper][beneficiary];
     }
 
+    /// @notice Each maker's cert ids, takeable or not (compacted when the list fills up).
+    function certsOf(address maker) external view returns (uint256[] memory) {
+        return _makerCerts[maker];
+    }
+
+    /// @notice The USDG the maker must still be able to pay: Σ notional(remaining, bidPx) over the maker's
+    ///         takeable certs (LIVE, unexpired, shares left). Expired certs commit nothing, withdrawn or not.
+    function committed(address maker) public view returns (uint256 sum) {
+        uint256[] storage mine = _makerCerts[maker];
+        uint256 n = mine.length;
+        for (uint256 i; i < n; ++i) {
+            Cert storage c = _certs[mine[i]];
+            if (_takeable(c)) sum += _notional(c.remainingShares, c.bidPx);
+        }
+    }
+
     /// @notice True when the maker's USDG balance and allowance both cover everything they have committed.
     function isHonourable(address maker) public view returns (bool) {
-        uint256 need = committed[maker];
+        uint256 need = committed(maker);
         if (need == 0) return true;
         return usdg.balanceOf(maker) >= need && usdg.allowance(maker, address(this)) >= need;
     }
 
     /// @notice Depth a taker could actually hit in one book: LIVE, unexpired certs with `expiry >= minExpiry`
     ///         and shares left, from honourable makers. Revoking an allowance removes a maker's depth at once.
+    /// @dev Bounded for a book that names a beneficiary (MAX_LIVE_PER_BOOK). An open book is uncapped: read it
+    ///      off-chain, not from a contract.
     /// @return shares Σ remaining shares.
     /// @return notional Σ notional(remaining, bidPx).
     /// @return minBidPx The lowest bid counted (0 if none).
@@ -309,6 +326,41 @@ contract DepthCert is IDepthCert {
 
     // --- internals --------------------------------------------------------------------------
 
+    function _checkPost(address wrapper, address beneficiary, uint128 sizeShares, uint128 bidPx, uint64 expiry, uint128 bond)
+        internal
+        view
+    {
+        // A USDG-for-USDG bid is meaningless and would mix claimable shares into the bond balance.
+        if (wrapper == address(0) || wrapper == address(usdg)) revert BadWrapper(wrapper);
+        if (beneficiary != address(0) && address(makers) != address(0) && !makers.isEligible(msg.sender)) {
+            revert IneligibleMaker();
+        }
+        uint256 n = _notional(sizeShares, bidPx);
+        // With n >= 1, a take of every remaining share always costs something, so a cert can always be filled.
+        if (n < MIN_NOTIONAL) revert BelowMinNotional();
+        // n <= 2^256 / 1e18, so n * 1000 cannot overflow.
+        uint256 minBond = (n * MIN_BOND_BPS + BPS - 1) / BPS;
+        if (bond < minBond) revert BondTooSmall(bond, minBond);
+        uint64 earliest = uint64(block.timestamp) + MIN_LIFE;
+        uint64 latest = uint64(block.timestamp) + MAX_LIFE;
+        if (expiry < earliest || expiry > latest) revert BadExpiry(expiry, earliest, latest);
+    }
+
+    /// @dev Room for one more cert in the book (only a book naming a beneficiary is capped) and in the
+    ///      maker's list; a full one is compacted first.
+    function _admit(address wrapper, address beneficiary) internal {
+        uint256[] storage book = _book[wrapper][beneficiary];
+        if (beneficiary != address(0) && book.length >= MAX_LIVE_PER_BOOK) {
+            _compact(book);
+            if (book.length >= MAX_LIVE_PER_BOOK) revert BookFull(wrapper, beneficiary);
+        }
+        uint256[] storage mine = _makerCerts[msg.sender];
+        if (mine.length >= MAX_LIVE_PER_MAKER) {
+            _compact(mine);
+            if (mine.length >= MAX_LIVE_PER_MAKER) revert TooManyLiveCerts(msg.sender);
+        }
+    }
+
     /// @dev Returns 0 when the maker paid `cost` into this contract, else the fade reason. Reverts when too
     ///      little gas is left for the stipend to arrive whole.
     function _makerLeg(address maker, uint256 cost) internal returns (bytes4) {
@@ -332,15 +384,22 @@ contract DepthCert is IDepthCert {
         return bytes4(0);
     }
 
-    function _fill(uint256 id, Cert storage c, uint128 shares, uint256 cost, address to) internal returns (uint256) {
-        address maker = c.maker;
-        uint128 px = c.bidPx;
+    /// @dev The cost of `shares`, which must be positive, and what they leave behind must be zero or cost
+    ///      something too -- so the rest of the cert can always be taken.
+    function _checkSize(Cert storage c, uint128 shares) internal view returns (uint256 cost) {
         uint128 rem = c.remainingShares;
+        if (shares == 0 || shares > rem) revert BadShares(shares, rem);
+        uint128 px = c.bidPx;
+        cost = _notional(shares, px);
+        if (cost == 0) revert ZeroCost();
         uint128 left = rem - shares;
+        if (left != 0 && _notional(left, px) == 0) revert DustRemainder(left);
+    }
+
+    function _fill(uint256 id, Cert storage c, uint128 shares, uint256 cost, address to) internal returns (uint256) {
+        uint128 left = c.remainingShares - shares;
         c.remainingShares = left;
-        // Recomputed rather than `-= cost`, so committed stays exactly Σ notional(remaining) despite rounding.
-        committed[maker] = committed[maker] - _notional(rem, px) + _notional(left, px);
-        claimableShares[maker][c.wrapper] += shares;
+        claimableShares[c.maker][c.wrapper] += shares;
 
         emit Filled(id, msg.sender, shares, cost, left);
         usdg.safeTransfer(to, cost);
@@ -353,7 +412,6 @@ contract DepthCert is IDepthCert {
     {
         address maker = c.maker;
         c.status = Status.FADED;
-        committed[maker] -= _notional(c.remainingShares, c.bidPx);
         uint128 bond = c.bond;
         totalBonds -= bond;
 
@@ -364,7 +422,8 @@ contract DepthCert is IDepthCert {
         return bond;
     }
 
-    /// @dev In-place compaction keeping order; drops every cert that can never be taken again.
+    /// @dev In-place compaction keeping order; drops every cert that can never be taken again. Used for books
+    ///      and for makers' lists.
     function _compact(uint256[] storage book) internal {
         uint256 n = book.length;
         uint256 w;
