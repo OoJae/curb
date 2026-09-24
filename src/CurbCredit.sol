@@ -229,14 +229,14 @@ contract CurbCredit {
     // =========================================================================================================
 
     /// @notice Start handing admin rights to `to`. Takes effect only when `to` accepts.
-    function transferAdmin(address to) external onlyAdmin {
+    function transferAdmin(address to) external onlyAdmin nonReentrant {
         if (to == address(0)) revert ZeroAddress();
         pendingAdmin = to;
         emit AdminTransferStarted(admin, to);
     }
 
     /// @notice Complete a handover started by the current admin.
-    function acceptAdmin() external {
+    function acceptAdmin() external nonReentrant {
         if (msg.sender != pendingAdmin) revert NotPendingAdmin();
         emit AdminTransferred(admin, msg.sender);
         admin = msg.sender;
