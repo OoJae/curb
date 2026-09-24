@@ -348,6 +348,41 @@ verified with a PoC, then fixed and regression-tested.
 Tests on main at deploy: **301/301**, plus fork suites against live mainnet state and the invariant runs
 recorded in `artifacts/w5/`.
 
+## Live demo on mainnet — team wallets only, 24–25 Sept 2026
+
+Every counterparty below is a Curb team wallet (K = curb-desk `0xe1df…9A3E`, a Foundry keystore; A = the team's
+OKX Agentic Wallet `0x055b…7105`; D = the deployer). Funding and every transfer between them is in
+[`WALLETS.md`](WALLETS.md). This is a demonstration of the mechanism, not usage.
+
+**Attribution on A's transactions.** The Agentic Wallet is an ERC-4337 account: OKX's bundler sends
+`handleOps` to the EntryPoint, and the Builder Code suffix sits inside A's inner call (for example byte 780 of
+1,061 in the bid), not at the end of the outer transaction. An explorer that reads only the outer calldata will
+not show the attribution for A's rows. K's and D's transactions end in the suffix.
+
+### W3 cycle 1 — overnight 24→25 Sept (HK shut 08:00Z → 01:30Z)
+
+| step | who | tx | block |
+|---|---|---|---|
+| approve 0.1 wTCENTx to ReopenNote | K | `0xa41ec8e3cf54901dfce11e8ebec645b268c8e3442cd6b9b8f9ef59626398c4e9` | 71,508,611 |
+| mint note 1 (0.1 wTCENTx escrowed) | K | `0xcf3dfa55bc02bf0cec35422cc3561a98e7bb79bb779d13c27f51f3df277a1c40` | 71,508,619 |
+| setApprovalForAll(ClosedAuction) | K | `0x56b91d1fe476aae48c7a0c755d8de6fd49be2774863d8870c87e037d30d9d072` | 71,508,670 |
+| list lot 1: 5.60 → 5.43 USDG, ends 01:00Z (09:00 HKT) | K | `0xaa7f91690bbba12d9291461545dc8a5a3f7c7a169076ec4ff5e7f1212f3af660` | 71,508,704 |
+| approve 5.60 USDG to ClosedAuction | A | `0xad701253198a9f9a6796a7c1d0a02d4bb692def4d37f57c9a98ce6d6ae068e44` | 71,508,743 |
+| bid: lot 1 sold to A at **5.595137 USDG** (03:24:03 HKT), 35 bp under the reference | A | `0xf23e727c1a37c111e339f480caf15bf67cf2671139f355d11853ec1188cfd3d3` | 71,508,807 |
+
+Still to come: `observe` at the 01:30Z reopen (`script/w3/poke.sh`), A's `redeem` (`script/w3/redeem-after-reopen.sh`),
+`recordPrint` at +300 s, then `realisedDiscountBps(1)`.
+
+### W4 — before the reopen, 24 Sept ~21:30Z (HK shut)
+
+| step | who | tx | block |
+|---|---|---|---|
+| maker-approve USDG to DepthCert (unlimited, a maker's allowance must cover all its live certs) | K | `0x0594a5e45ec693ae3c9c98978d34627a95c7b71f862936c6687d901d022dd306` | 71,516,056 |
+| fund the reserve: 3 USDG | K | `0x5e2a8be6bcf09bc1ea8b5f1f948402a2769c8621faae632de9b074edd76a25fa` | 71,516,155 |
+| approve exactly 0.05 wTCENTx to CurbCredit | A | `0xd75527290def9c5ac8878b77b54630960c70de5af2edca0c5825890154b04619` | |
+| deposit 0.05 wTCENTx | A | `0xeb927854b5580c55350ebda8206cec05a5925cdcb73fdc01e548f4524df65b8b` | |
+| borrow 1.4 USDG → **`Refusal(NoDepth)`, requested 1,400,000, allowed 0, in a successful transaction** (nothing moved) | A | `0x8bd873d77176dab81ad860c1496937d2e7535c8a6b91f0be5902936b408b5c7a` | 71,516,369 |
+
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 
 `DATA_SUFFIX` set on host A (Railway variable, then a code upload: one restart), host B and the keeper
