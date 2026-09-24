@@ -1,0 +1,96 @@
+{
+  "ok": true,
+  "bootMs": 1790242853637,
+  "ticks": 464,
+  "lastTickOkMs": 1790256746949,
+  "payments": {
+    "configured": true,
+    "ready": true,
+    "missing": [],
+    "lastInitError": null,
+    "inFlight": 0,
+    "unconfirmed": 0
+  },
+  "cohort": {
+    "size": 6,
+    "asOfMs": 1790256717098,
+    "error": null
+  },
+  "scorecard": {
+    "asOfBlock": 71487710,
+    "readAtMs": 1790256746949,
+    "ageS": 28,
+    "rows": 15,
+    "settled": 15,
+    "stale": false,
+    "outage": false,
+    "lastError": null
+  },
+  "regimeIndex": {
+    "startBlock": 70617365,
+    "lastScannedBlock": 71487720,
+    "headBlock": 71487725,
+    "caughtUp": true,
+    "blocksRemaining": 0,
+    "progressPct": 100,
+    "transitions": 326,
+    "lastError": null,
+    "lastStepAtMs": 1790256761144
+  },
+  "venues": [
+    {
+      "symbol": "wTCENTx",
+      "mic": "XHKG",
+      "asOfMs": 1790256717533,
+      "ageS": 57,
+      "stale": false,
+      "outage": false,
+      "lastError": null
+    },
+    {
+      "symbol": "wSHEINx",
+      "mic": "XHKG",
+      "asOfMs": 1790256717668,
+      "ageS": 57,
+      "stale": false,
+      "outage": false,
+      "lastError": null
+    },
+    {
+      "symbol": "wXIAOx",
+      "mic": "XHKG",
+      "asOfMs": 1790256717582,
+      "ageS": 57,
+      "stale": false,
+      "outage": false,
+      "lastError": null
+    },
+    {
+      "symbol": "wMEITx",
+      "mic": "XHKG",
+      "asOfMs": 1790256717507,
+      "ageS": 57,
+      "stale": false,
+      "outage": false,
+      "lastError": null
+    },
+    {
+      "symbol": "wNVDAx",
+      "mic": "XNAS",
+      "asOfMs": 1790256717627,
+      "ageS": 57,
+      "stale": false,
+      "outage": false,
+      "lastError": null
+    },
+    {
+      "symbol": "wAAPLx",
+      "mic": "XNAS",
+      "asOfMs": 1790256717605,
+      "ageS": 57,
+      "stale": false,
+      "outage": false,
+      "lastError": null
+    }
+  ]
+}

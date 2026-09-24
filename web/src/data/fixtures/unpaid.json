@@ -1,0 +1,145 @@
+{
+  "/v1/closure-calendar": {
+    "url": "https://api.curb.markets/v1/closure-calendar",
+    "status": 402,
+    "paymentRequired": {
+      "x402Version": 2,
+      "error": "Payment required",
+      "resource": {
+        "url": "https://api.curb.markets/v1/closure-calendar",
+        "description": "Closure calendar for one tokenized equity on X Layer (default wTCENTx): every window in the next 1-14 days (default 7) in which the issuer's primary order cap is zero, and the instant it returns, computed from the issuer's published schedule and limits plus its observed cut to zero 5 minutes before each period ends. Includes the current period and cap, and the hashes of the exact issuer responses used.",
+        "mimeType": "application/json"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:196",
+          "amount": "10000",
+          "asset": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+          "payTo": "0x277cA91276A3801667B76C97Da3872Ccb6E96068",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD₮0",
+            "version": "1"
+          }
+        }
+      ]
+    },
+    "preview": {
+      "schema": "curb.asp.calendar.preview/1",
+      "symbol": "wTCENTx",
+      "mic": "XHKG",
+      "marketOpen": false,
+      "nowPeriod": "closed",
+      "nextClosure": {
+        "startMs": 1790308500000,
+        "endMs": 1790312400000,
+        "durationS": 3900,
+        "startIso": "2026-09-25T03:55:00.000Z",
+        "endIso": "2026-09-25T05:00:00.000Z",
+        "kind": "recess"
+      }
+    },
+    "readAtMs": 1790256776237,
+    "source": "fixture"
+  },
+  "/v1/accuracy-record": {
+    "url": "https://api.curb.markets/v1/accuracy-record",
+    "status": 402,
+    "paymentRequired": {
+      "x402Version": 2,
+      "error": "Payment required",
+      "resource": {
+        "url": "https://api.curb.markets/v1/accuracy-record",
+        "description": "Curb's accuracy record, read from the Scorecard contract on X Layer at one pinned block: the contract's own skill() tally across every asset (settled rows, and strict wins against the last print and against the closing VWAP; a tie is not a win), per-asset counts, ties and median errors, and the rows newest first, up to limit, each with its mark, both baselines, the reopen price the contract read from the pool, and the three errors in basis points.",
+        "mimeType": "application/json"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:196",
+          "amount": "50000",
+          "asset": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+          "payTo": "0x277cA91276A3801667B76C97Da3872Ccb6E96068",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD₮0",
+            "version": "1"
+          }
+        }
+      ]
+    },
+    "preview": {
+      "schema": "curb.asp.record.preview/1",
+      "skill": {
+        "settled": 15,
+        "beatLastPrint": 0,
+        "beatClosingVwap": 0
+      },
+      "rowCount": 15
+    },
+    "readAtMs": 1790256776568,
+    "source": "fixture"
+  },
+  "/v1/discount-curve": {
+    "url": "https://api.curb.markets/v1/discount-curve",
+    "status": 402,
+    "paymentRequired": {
+      "x402Version": 2,
+      "error": "Payment required",
+      "resource": {
+        "url": "https://api.curb.markets/v1/discount-curve",
+        "description": "Closure-discount observations for tokenized equities on X Layer, one per closure Curb marked on chain before the reopen and Scorecard then settled: how long the primary market was shut (from MarketClock's RegimeChanged into CLOSED to the scheduled reopen), the discount from the pre-close price (the 15-minute closing VWAP, or the last pool price when nothing traded in that window) to the reopen price, and the discount Curb's mark implied, in basis points. Grouped into five duration buckets with counts, and order statistics only once a bucket holds enough closures. No fitted curve: fit is always null.",
+        "mimeType": "application/json"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:196",
+          "amount": "100000",
+          "asset": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+          "payTo": "0x277cA91276A3801667B76C97Da3872Ccb6E96068",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD₮0",
+            "version": "1"
+          }
+        }
+      ]
+    },
+    "preview": {
+      "schema": "curb.asp.discount.preview/1",
+      "n": 15,
+      "nUsable": 15,
+      "buckets": [
+        {
+          "label": "30m-2h",
+          "n": 9,
+          "status": "indicative"
+        },
+        {
+          "label": "2h-8h",
+          "n": 0,
+          "status": "insufficient"
+        },
+        {
+          "label": "8h-24h",
+          "n": 6,
+          "status": "indicative"
+        },
+        {
+          "label": "24h-72h",
+          "n": 0,
+          "status": "insufficient"
+        },
+        {
+          "label": ">72h",
+          "n": 0,
+          "status": "insufficient"
+        }
+      ]
+    },
+    "readAtMs": 1790256777175,
+    "source": "fixture"
+  }
+}

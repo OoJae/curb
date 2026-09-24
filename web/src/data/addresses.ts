@@ -40,6 +40,18 @@ export const CLOSED_AUCTION: Address | null = null;
 export const DEPTH_CERT: Address | null = null;
 export const CURB_CREDIT: Address | null = null;
 
+/**
+ * Ids the demo created (the browser never scans history, so it cannot discover them). LEAD: paste the
+ * note / lot / cert ids and the borrower from the live demo here; ids a visitor creates on the site are
+ * remembered in their own localStorage and merged in.
+ */
+export const DEMO_IDS: { notes: number[]; lots: number[]; certs: number[]; borrowers: Address[] } = {
+  notes: [],
+  lots: [],
+  certs: [],
+  borrowers: [],
+};
+
 // --- people / services -----------------------------------------------------------------------
 
 /** Receive-only `curb-revenue`: x402 payTo. */
@@ -47,7 +59,9 @@ export const REVENUE_WALLET: Address = "0x277cA91276A3801667B76C97Da3872Ccb6E960
 export const DEPLOYER: Address = "0x78a5955b433988198bccA2E8bdC671444798f809";
 export const ATTESTOR_A: Address = "0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4";
 export const KEEPER: Address = "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6";
+/** Team wallets used in the live demos (disclosed in docs/WALLETS.md; never presented as third-party usage). */
 export const AGENTIC_WALLET: Address = "0x055ba8acd60a2287b2d01cb3bf237e4424357105";
+export const CURB_DESK: Address = "0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E";
 export const BUILDER_CODE_REGISTRY: Address = "0xd6c426f9c077358735622ae5a83468dc0510823b";
 export const MARKETPLACE_AGENT_ID = 13869;
 

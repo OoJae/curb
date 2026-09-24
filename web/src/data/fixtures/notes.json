@@ -1,0 +1,27 @@
+[
+  {
+    "id": "1",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "symbol": "wTCENTx",
+    "issuer": "0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E",
+    "wrapperSharesRaw": "100000000000000000",
+    "shares": 0.1,
+    "underlyingAtMintRaw": "100000000000000000",
+    "multiplierNonce": 0,
+    "epochAtMint": 0,
+    "mintedAtMs": 1790238000000,
+    "mintedBlock": 71468948,
+    "outstandingRaw": "100000000000000000",
+    "balanceRaw": null,
+    "redeemable": false,
+    "epochNow": 0,
+    "reopened": false,
+    "fallbackAtMs": 1791102000000,
+    "expectedReopenMs": 1790299800000,
+    "print": null,
+    "valueNowUsd": 5.587261259906549,
+    "specimen": true,
+    "block": 71487725,
+    "source": "fixture"
+  }
+]
