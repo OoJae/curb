@@ -1,0 +1,86 @@
+/* Grid: 12 cols ≥1024, 8 at 768, 4 at 375. Max 1440. Margin clamp(20px, 5.2vw, 80px);
+   gutter clamp(12px, 1.8vw, 28px); 8 px baseline. Layout concept: ledger left, instrument right. */
+
+.wrap {
+  width: 100%;
+  max-width: var(--max);
+  margin-inline: auto;
+  padding-inline: var(--margin);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  column-gap: var(--gutter);
+}
+
+.grid > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Ledger left (cols 1–7), instrument right (cols 8–12) at ≥1024; stacked below. */
+@media (min-width: 1024px) {
+  .grid > .col-ledger {
+    grid-column: 1 / span 7;
+  }
+
+  .grid > .col-instrument {
+    grid-column: 8 / -1;
+  }
+
+  .grid > .col-half-left {
+    grid-column: 1 / span 6;
+  }
+
+  .grid > .col-half-right {
+    grid-column: 7 / -1;
+  }
+
+  .grid > .col-main {
+    grid-column: 1 / span 8;
+  }
+
+  .grid > .col-aside {
+    grid-column: 10 / -1;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .grid > .col-half-left {
+    grid-column: 1 / span 4;
+  }
+
+  .grid > .col-half-right {
+    grid-column: 5 / -1;
+  }
+}
+
+/* Only the Week Ring (and hanging Bodoni numerals) break the grid: bleed to the viewport edge. */
+.bleed-right {
+  margin-inline-end: calc(-1 * (var(--margin) + max(0px, (100vw - var(--max)) / 2)));
+}
+
+.bleed-x {
+  margin-inline: calc(-1 * var(--margin));
+}
+
+/* Vertical rhythm */
+.section {
+  padding-block: var(--section);
+}
+
+.section + .section {
+  border-top: var(--rule) solid var(--hairline);
+}
+
+.stack > * + * {
+  margin-block-start: var(--stack, var(--s-2));
+}
+
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cluster, var(--s-2));
+}
