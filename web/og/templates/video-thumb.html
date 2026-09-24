@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Social · video thumbnail</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  /* 1920×1080: the home card at video scale; the ring bleeds off the right edge, now at three o'clock. */
+  body { --w: 1920px; --h: 1080px; --pad-x: 112px; --pad-y: 92px; }
+  .og-frame { grid-template-rows: auto 1fr auto auto; grid-template-columns: 1000px; row-gap: 40px; }
+  .og-copy { align-self: center; display: grid; gap: 40px; }
+  .og-h { --hs: 122px; }
+  .og-sub { --ss: 36px; --sub-w: 30ch; }
+  .og-mast img { --lockup: 58px; height: 58px; }
+  .og-foot { --data: 26px; gap: 44px; }
+  .og-guilloche { width: 1300px; height: 1300px; left: 1010px; top: -110px; }
+  #ring { position: absolute; left: 1130px; top: 60px; }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <canvas id="ring" aria-hidden="true"></canvas>
+  <div class="og-frame">
+    <header class="og-mast"><img src="/brand/lockup-horizontal.svg" alt="Curb"></header>
+    <div class="og-copy">
+      <h1 class="og-h">The market that trades when the exchange is <em>shut</em>.</h1>
+      <p class="og-sub">Tokenized Tencent keeps trading on X&nbsp;Layer for 141&nbsp;h&nbsp;20&nbsp;m of every 168.</p>
+    </div>
+    <hr class="og-rule">
+    <footer class="og-foot"><b>curb.markets</b><span>X Layer</span><span>OKX AI agent #13869</span></footer>
+  </div>
+  <script type="module">
+    import { guillocheInto, weekRing, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'video-thumb');
+    weekRing(document.getElementById('ring'), { size: 960 });
+    await ready();
+  </script>
+</body>
+</html>

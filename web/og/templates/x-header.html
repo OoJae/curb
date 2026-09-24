@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Social · X header</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  /* 1500×500. X overlays the profile picture bottom-left and crops top/bottom on narrow screens: keep copy in the
+     middle band, clear of the lower-left 420×170. */
+  body { --w: 1500px; --h: 500px; }
+  .og-guilloche { width: 900px; height: 900px; left: 820px; top: -200px; opacity: .07; }
+  #ring { position: absolute; left: 1010px; top: -40px; }
+  .copy { position: absolute; left: 120px; top: 118px; width: 820px; display: grid; gap: 22px; }
+  .og-h { --hs: 64px; }
+  .og-sub { --ss: 21px; --sub-w: 60ch; }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <canvas id="ring" aria-hidden="true"></canvas>
+  <div class="copy">
+    <h1 class="og-h">The market that trades when the exchange is <em>shut</em>.</h1>
+    <p class="og-sub">curb.markets · MarketClock, Scorecard and an x402 API on X&nbsp;Layer</p>
+  </div>
+  <script type="module">
+    import { guillocheInto, weekRing, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'x-header');
+    weekRing(document.getElementById('ring'), { size: 580 });
+    await ready();
+  </script>
+</body>
+</html>

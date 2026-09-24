@@ -5,14 +5,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Brand · Curb</title>
     <meta name="description" content="Colours, type and the mark: the single source of the Curb identity.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Curb">
+    <meta property="og:url" content="https://curb.markets/brand">
+    <meta property="og:title" content="Street ink, certificate ivory, one streetlamp · Curb">
+    <meta property="og:description" content="Colours, type and the mark: the single source of the Curb identity.">
+    <meta property="og:image" content="https://curb.markets/og/brand.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Curb brand: six colours on Street ink and the line “Street ink, certificate ivory, one streetlamp.”">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://curb.markets/og/brand.png">
   </head>
   <body data-page="brand">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
     <main id="main" class="page page--brand" tabindex="-1">
-      <section class="wrap section stub">
-        <h1 class="t-h1 vt-title-brand" data-reveal>Brand</h1>
-        <p class="t-lede muted measure stub__note">This page is in build. The shell around it is live.</p>
-      </section>
+      <article class="br-page">
+        <header class="section br-hero">
+          <div class="wrap">
+            <p class="t-label muted br-kicker">Brand</p>
+            <h1 class="t-h1 vt-title-brand br-h1" data-reveal>Street ink, certificate ivory, one <em>streetlamp</em>.</h1>
+            <p class="t-lede muted br-lede">The Curb identity in one place: six colours, three typefaces, one mark and the rules
+              that keep them honest. Every value on this page is read from the site’s own tokens.</p>
+            <nav class="cluster br-toc" aria-label="On this page">
+              <a class="link-arrow" href="#colour">Colour</a>
+              <a class="link-arrow" href="#type">Type</a>
+              <a class="link-arrow" href="#mark">Mark</a>
+              <a class="link-arrow" href="#glyphs">Glyphs</a>
+              <a class="link-arrow" href="#motion">Motion</a>
+              <a class="link-arrow" href="#guilloche">Guilloche</a>
+              <a class="link-arrow" href="#downloads">Downloads</a>
+            </nav>
+          </div>
+        </header>
+        <!-- The sections below the hero are rendered by src/pages/brand/page.ts from the live tokens and shell/mark.ts. -->
+      </article>
     </main>
     <script type="module" src="/src/pages/brand/page.ts"></script>
   </body>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OG · depth</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  body { --w: 1200px; --h: 630px; --pad-x: 64px; --pad-y: 52px; }
+  .og-frame { grid-template-rows: auto 1fr auto auto; row-gap: 26px; }
+  .og-copy { align-self: center; display: grid; gap: 24px; max-width: 560px; }
+  .og-h { --hs: 72px; }
+  .og-sub { --ss: 22px; --sub-w: 32ch; }
+  .og-guilloche { width: 700px; height: 700px; left: 640px; top: -80px; }
+  .plot { position: absolute; left: 680px; top: 150px; }
+  .plot text { font-family: var(--og-data); font-size: 13px; font-stretch: 87%; fill: var(--og-slate); }
+  .plot .iv { fill: var(--og-ivory); }
+  .plot .am { fill: var(--og-amber); }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <!-- LTV as a function of honoured depth: rises with the bonded depth, capped by the regime (60 % open, 30 % shut). -->
+  <svg class="plot" width="456" height="330" viewBox="0 0 456 330" aria-hidden="true">
+    <g transform="translate(46 10)">
+      <line x1="0" y1="0" x2="0" y2="270" stroke="var(--og-hair)"/>
+      <line x1="0" y1="270" x2="390" y2="270" stroke="var(--og-hair)"/>
+      <!-- caps -->
+      <line x1="0" y1="54" x2="390" y2="54" stroke="var(--og-slate)" stroke-dasharray="2 5"/>
+      <line x1="0" y1="162" x2="390" y2="162" stroke="var(--og-amber)" stroke-dasharray="2 5"/>
+      <text x="-10" y="58" text-anchor="end">60%</text>
+      <text x="-10" y="166" text-anchor="end" class="am">30%</text>
+      <text x="-10" y="274" text-anchor="end">0</text>
+      <text x="392" y="46" text-anchor="end" class="iv">cap while open</text>
+      <text x="392" y="154" text-anchor="end" class="am">cap while shut</text>
+      <!-- the published function while shut: linear in covered depth until the cap -->
+      <path d="M0 270 L150 162 L390 162" fill="none" stroke="var(--og-ivory)" stroke-width="2"/>
+      <circle cx="96" cy="200.9" r="6" fill="var(--og-ink)" stroke="var(--og-ivory)" stroke-width="2"/>
+      <text x="108" y="222" class="iv">you are here</text>
+      <text x="390" y="296" text-anchor="end">honoured depth →</text>
+      <text x="-10" y="4" text-anchor="end">LTV</text>
+    </g>
+  </svg>
+  <div class="og-frame">
+    <header class="og-mast"><img src="/brand/lockup-horizontal.svg" alt="Curb"><span class="og-addr">curb.markets/depth</span></header>
+    <div class="og-copy">
+      <h1 class="og-h">Depth you can <em>borrow</em> against.</h1>
+      <p class="og-sub">Makers bond firm bids in USDG. What you can borrow follows the depth that is honoured, and a fade is slashed.</p>
+    </div>
+    <hr class="og-rule">
+    <footer class="og-foot"><b>curb.markets/depth</b><span>X Layer</span></footer>
+  </div>
+  <script type="module">
+    import { guillocheInto, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'depth');
+    await ready();
+  </script>
+</body>
+</html>

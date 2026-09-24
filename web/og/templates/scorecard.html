@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OG · scorecard</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  body { --w: 1200px; --h: 630px; --pad-x: 64px; --pad-y: 52px; }
+  .og-frame { grid-template-rows: auto 1fr auto auto; row-gap: 26px; }
+  .og-copy { align-self: center; display: grid; gap: 24px; max-width: 560px; }
+  .og-h { --hs: 76px; }
+  .og-sub { --ss: 22px; --sub-w: 33ch; }
+  .og-guilloche { width: 720px; height: 720px; left: 620px; top: -40px; }
+  /* Grading strips: Curb's mark and the three baselines a sceptic would reach for, one bar each. Equal bars = a tie. */
+  .grade { position: absolute; left: 700px; top: 178px; width: 436px; display: grid; gap: 0; }
+  .grade .row { display: grid; grid-template-columns: 150px 1fr; align-items: center; height: 54px; border-top: 1px solid var(--og-hair); }
+  .grade .row:last-of-type { border-bottom: 1px solid var(--og-hair); }
+  .grade .k { font-family: var(--og-data); font-size: 14px; font-stretch: 87%; color: var(--og-slate); }
+  .grade .k b { font-weight: 400; color: var(--og-ivory); }
+  .grade .bar { height: 10px; background: var(--og-ivory); width: 62%; }
+  .grade .cap { margin-top: 18px; font-family: var(--og-data); font-size: 14px; font-stretch: 87%; color: var(--og-slate); }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <div class="grade" aria-hidden="true">
+    <div class="row"><span class="k"><b>Curb’s mark</b></span><span class="bar"></span></div>
+    <div class="row"><span class="k">Last print</span><span class="bar"></span></div>
+    <div class="row"><span class="k">Closing VWAP</span><span class="bar"></span></div>
+    <div class="row"><span class="k">Stale oracle</span><span class="bar"></span></div>
+    <p class="cap">specimen · four equal errors are a tie</p>
+  </div>
+  <div class="og-frame">
+    <header class="og-mast"><img src="/brand/lockup-horizontal.svg" alt="Curb"><span class="og-addr">curb.markets/scorecard</span></header>
+    <div class="og-copy">
+      <h1 class="og-h">Every reopen, <em>graded</em>.</h1>
+      <p class="og-sub">Curb commits its mark on chain before the bell. The contract grades it at the reopen, beside three naive baselines. A&nbsp;tie is not a win.</p>
+    </div>
+    <hr class="og-rule">
+    <footer class="og-foot"><b>Scorecard</b><span>0x3b40…Ef1f</span><span>X Layer</span></footer>
+  </div>
+  <script type="module">
+    import { guillocheInto, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'scorecard');
+    await ready();
+  </script>
+</body>
+</html>

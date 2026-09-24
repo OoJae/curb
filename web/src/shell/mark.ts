@@ -47,6 +47,8 @@ const C_IN = MARK.R * (1 - MARK.cStroke / 2);
 const C_OUT = MARK.R * (1 + MARK.cStroke / 2);
 
 /** Upper and lower halves of the C (split due west), for the tx "confirmed" close. */
+/** A closed ring at the C's radii: the "open" glyph, and what a confirmed transaction resolves to. */
+export const RING_PATH = sectorPath(C_IN, C_OUT, 0, 180) + ' ' + sectorPath(C_IN, C_OUT, 180, 360);
 export const C_TOP_PATH = sectorPath(C_IN, C_OUT, MARK.cHalfGapDeg, 180);
 export const C_BOTTOM_PATH = sectorPath(C_IN, C_OUT, 180, 360 - MARK.cHalfGapDeg);
 

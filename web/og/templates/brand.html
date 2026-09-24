@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OG · brand</title>
+<link rel="stylesheet" href="/og/templates/og.css">
+<style>
+  body { --w: 1200px; --h: 630px; --pad-x: 64px; --pad-y: 52px; }
+  .og-frame { grid-template-rows: auto 1fr auto auto; row-gap: 26px; }
+  .og-copy { align-self: center; display: grid; gap: 24px; max-width: 560px; }
+  .og-h { --hs: 68px; }
+  .og-sub { --ss: 22px; --sub-w: 30ch; }
+  .og-guilloche { width: 660px; height: 660px; left: 660px; top: -40px; }
+  /* Six colours. Streetlamp and Window slate sit on ink; Bell brass and Graphite on ivory; ink between every chip. */
+  .sw { position: absolute; left: 688px; top: 134px; display: grid; grid-template-columns: repeat(3, 144px); gap: 12px; }
+  .chip { height: 176px; padding: 14px; display: grid; align-content: space-between; border: 1px solid var(--og-hair); }
+  .chip b { font-family: var(--og-text); font-weight: 500; font-size: 15px; }
+  .chip span { font-family: var(--og-data); font-size: 13px; font-stretch: 87%; }
+  .paper { background: var(--og-ivory); color: var(--og-ink); border-color: var(--og-ivory); }
+  .paper .dot { width: 40px; height: 40px; border-radius: 50%; }
+  .dot { width: 40px; height: 40px; border-radius: 50%; }
+  .k-ink { background: var(--og-ink); color: var(--og-ivory); }
+  .k-ivory { background: var(--og-ivory); color: var(--og-ink); border-color: var(--og-ivory); }
+  .k-amber { background: var(--og-ink); color: var(--og-ivory); }
+  .k-amber .dot { background: var(--og-amber); }
+  .k-slate .dot { background: var(--og-slate); }
+  .k-slate { color: var(--og-slate); }
+  .brass .dot { background: var(--og-brass); }
+  .brass { color: var(--og-brass); }
+  .graphite .dot { background: var(--og-graphite); }
+  .graphite { color: var(--og-graphite); }
+</style>
+</head>
+<body>
+  <div class="og-guilloche" id="g"></div>
+  <div class="sw" aria-hidden="true">
+    <div class="chip k-ink"><b>Street ink</b><span>#0F1720</span></div>
+    <div class="chip k-ivory"><b>Certificate ivory</b><span>#F4EFE6</span></div>
+    <div class="chip k-amber"><div class="dot"></div><div><b>Streetlamp</b><br><span>#F5A524</span></div></div>
+    <div class="chip k-ink k-slate"><div class="dot"></div><div><b>Window slate</b><br><span>#8A96A3</span></div></div>
+    <div class="chip paper brass"><div class="dot"></div><div><b>Bell brass</b><br><span>#8A5A00</span></div></div>
+    <div class="chip paper graphite"><div class="dot"></div><div><b>Graphite</b><br><span>#5B6470</span></div></div>
+  </div>
+  <div class="og-frame">
+    <header class="og-mast"><img src="/brand/lockup-horizontal.svg" alt="Curb"><span class="og-addr">curb.markets/brand</span></header>
+    <div class="og-copy">
+      <h1 class="og-h">Street ink, certificate ivory, one <em>streetlamp</em>.</h1>
+      <p class="og-sub">Bodoni Moda, Libre Franklin, Martian Mono. The mark, its rules and every file.</p>
+    </div>
+    <hr class="og-rule">
+    <footer class="og-foot"><b>curb.markets/brand</b><span>colours · type · mark · downloads</span></footer>
+  </div>
+  <script type="module">
+    import { guillocheInto, ready } from '/og/templates/og.js';
+    await guillocheInto(document.getElementById('g'), 'brand');
+    await ready();
+  </script>
+</body>
+</html>
