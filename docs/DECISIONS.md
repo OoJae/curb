@@ -550,3 +550,104 @@ every existing row keeping the method that produced it. No row is ever re-marked
 
 The public record says so already: `https://api.curb.markets/v1/accuracy-record` previews
 `{"settled": 15, "beatLastPrint": 0, "beatClosingVwap": 0}`. That is the honest number.
+
+---
+
+## Erratum to D-4 (24 Sept 2026): the finale is 7 October, not 6 October
+
+D-4 names **6 October** as finale day three times. The OKX Dev Day finale in Singapore is **Wednesday 7 October
+2026**. The conclusion does not change, and the same evidence covers the corrected date. The issuer's XHKG
+holiday list, re-read on 24 Sept at about 13:05Z, still holds exactly two entries near the finale: 1 Oct and 19 Oct.
+So 7 Oct is a Hong Kong trading day, and the 11:55 HKT cut would fall inside a late-morning slot (SGT = HKT). D-4 stays
+as written. Read "6 Oct" there as "7 Oct". `docs/WALLETS.md` says "top-up to clear 6 Oct", and the funding it
+describes should be re-checked against 7 Oct.
+
+---
+
+## D-12 — W3/W4 cut to six contracts; what was cut and why (24 Sept 2026)
+
+**Decided 24 Sept 2026.** The design was frozen for a one-day parallel build in `docs/specs/W3W4-contracts.md`,
+which stays the source of truth for every interface and constant. This entry records the shape of the reduction
+and the cuts.
+
+**What is built, deploying 25 Sept:**
+
+| wave | contract | job | admin |
+|---|---|---|---|
+| W3 | `EligibilityRegistry` | thin allowlist for bidders and borrowers; every entry carries an evidence hash | yes, two-step handover copied from MarketClock |
+| W3 | `ReopenPointer` | monotonic record of shut → open transitions observed on MarketClock, plus one write-once reopen print per asset and epoch, from `Scorecard.priceNow` | **none** |
+| W3 | `ReopenNote` | ERC-1155 claim that escrows wrapper shares while the market is shut and delivers exactly those shares after the verified reopen (10-day fallback) | **none** |
+| W3 | `ClosedAuction` | descending-price clock that clears with a single bidder, only while the market is still shut and the epoch unchanged | **none** |
+| W4 | `DepthCert` | bonded firm bid (bond ≥ 10% of notional); a fade is proved in the same transaction and the whole bond goes to the taker | **none** |
+| W4 | `CurbCredit` | fixed-rate reserve (5% simple APR) with a published `ltvFor`, refusals that emit an event and change nothing, and a cure clock that counts only witnessed open time | reserve management and realising seized collateral only |
+
+**The rules that shaped the reduction:**
+
+- **No new oracle.** Open versus shut comes from MarketClock, and price comes from Scorecard v2's `priceNow`: the
+  same guarded pool price that grades Scorecard rows. Every instrument settles on numbers that are already public
+  and already verified.
+- **Physical delivery in wrapper shares.** A note delivers the shares it escrowed. The ERC-4626 share absorbs
+  every corporate action, so delivery never has to interpret one. The raw multiplier and nonce at mint are kept
+  as provenance only.
+- **Caps come from measured depth, not headline liquidity** (D-3's under-50 bp rule). The caps are 175 wTCENTx,
+  220 wNVDAx and 14 wAAPLx shares: about $9.8k, $49k and $4.7k at the spec's 24 Sept prices of 55.78, 223.35 and
+  337.89.
+- **Four of the six contracts have no admin.** This follows the principle behind Scorecard's write-once price
+  sources (D-10): an admin who could change the inputs after the fact could choose the outcome.
+- **A refusal is a record, not a revert.** `borrow` and `withdraw` that CurbCredit refuses emit `Refusal(who,
+  asset, reason, requested, allowed)` and return false. The refusal leaves an on-chain trace in a transaction
+  that succeeds.
+- **Nobody is liquidated while shut.** Liquidation needs 30 minutes of witnessed open-market cure time. Seizure is
+  bounded by a 5% bonus at the breach-time price.
+
+**Cut or deferred.** The reason column quotes the spec where the spec gives one. Where it does not, the reason is
+stated as scope, not invented.
+
+| item | reason |
+|---|---|
+| RefutationBond | It needs a judge, and rows are already falsifiable off chain: `curb-verify` re-derives every mark, and Scorecard settles at a price nobody supplies (D-10). |
+| CurbMark AggregatorV3 feed | Nothing consumes it. |
+| Cash settlement / `caType`-aware delivery | Physical wrapper-share delivery is multiplier-independent, so there is nothing to convert. |
+| Chainlink Data Streams adapter | Equity coverage on chain 196 is still unconfirmed without request-gated credentials (D-2), and nothing in the Hong Kong path depends on it. |
+| DepthCert extras: EIP-712 off-chain quotes, two-sided depth, bands, ERC-6909, fee share | Scope, deferred. The spec keeps DepthCert to a one-sided bid at one price per cert. That is enough for a fade to be proved inside the same `take` call, and several certs already form a curve. |
+| Standalone BreachClock | Folded into CurbCredit's cure clock. |
+| ConsentRegistry, utilisation curve, auto-liquidation into certs | Scope. The fixed 5% APR and an admin-called `realise` on seized shares only are enough to show the mechanism. |
+| Keeper patch to poke `observe` / `recordPrint` | Operator script `script/w3/poke.sh` for now. Accepted risk: without a poke at the reopen, the epoch opens and the print is taken only when someone next calls `observe` (`recordPrint` accepts 5 to 35 minutes after that). Delivery is unaffected, and `bid` and `redeem` call `observe` themselves. |
+| wXIAOx / wMEITx notes | No measured depth (D-3 measured neither), so no cap can be sized under the 50 bp rule. wSHEINx is excluded for a different reason: it has no Scorecard price source. |
+
+**Risks accepted, from the spec:**
+
+- `recordPrint` refuses on a TWAP deviation of more than 50 ticks. The fix is to retry inside the window.
+- A stale MarketClock makes every path refuse, and the cure clock freezes. This is by design.
+- The Agentic Wallet's policy may block calls to new contracts. The fallback is a second disclosed keystore
+  wallet.
+- USDG `transferFrom` gas has to sit well under DepthCert's 150,000 stipend. A fork test measures it before
+  deploy.
+- Every contract is immutable. The mitigation is parameterised scripts and fork dry runs.
+
+**The demo is between team wallets, and says so.** `curb-desk` (disclosed in `docs/WALLETS.md` before its
+first transaction) is the note seller, cert maker and reserve funder. The team's Agentic Wallet is the bidder,
+taker and borrower. The demo budget is about $38. None of it is third-party usage, and none of it is presented
+as such.
+
+---
+
+## D-13 — `curb.scorecard.mark/2` (stub)
+
+**Status: TODO(lead): fill from the mark/2 lane.**
+
+Context: the D-11 update met the contingency D-11 fixed in advance. 15 of 15 settled rows tied under
+`curb.scorecard.mark/1`, because the wrapper pools carry no information while the primary market is shut, while
+the reopens moved 30 to 105 bp.
+
+To record here once decided:
+
+- the method: its inputs, formula and damping, and the external signal(s) that trade while HKEX is shut (and
+  which were rejected);
+- where each signal comes from, and how its exact bytes are committed as evidence (leaf kinds, schema);
+- the method digest, and how `curb-verify`, the keeper and curb-asp name it;
+- what the keeper does when the external signal is unavailable (fall back to mark/1, or commit no row);
+- the first row committed under mark/2 (block, tx, closure id), and its grade once settled;
+- tests, including byte-identical re-derivation of existing mark/1 rows.
+
+Unchanged rule: every existing row keeps the method that produced it. **No row is ever re-marked.**
