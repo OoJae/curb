@@ -225,8 +225,8 @@ function drawBook(d: DepthView): void {
   if (h) {
     h.textContent =
       d.honouredShares > 0
-        ? `honouredDepth(${d.symbol}, CurbCredit, now + 1 h): ${fmtShares(d.honouredShares)} shares, ${fmtUsdg(d.honouredNotional, 4)} of bids, lowest bid ${fmtUsdg(d.minBidPx)}, soonest expiry ${d.soonestExpiryMs ? hktShort(d.soonestExpiryMs) : '—'}. ${d.specimen ? 'Specimen.' : `As of ${asOf(d)}.`}`
-        : `honouredDepth(${d.symbol}, CurbCredit, now + 1 h) is zero: nothing CurbCredit can count yet.`;
+        ? `honouredDepth(${d.symbol}, CurbCredit, minCertExpiry):${fmtShares(d.honouredShares)} shares, ${fmtUsdg(d.honouredNotional, 4)} of bids, lowest bid ${fmtUsdg(d.minBidPx)}, soonest expiry ${d.soonestExpiryMs ? hktShort(d.soonestExpiryMs) : '—'}. ${d.specimen ? 'Specimen.' : `As of ${asOf(d)}.`}`
+        : `honouredDepth(${d.symbol}, CurbCredit, minCertExpiry) is zero: nothing CurbCredit can count yet.`;
   }
   const slot = $('[data-dp-cert]');
   if (slot) {

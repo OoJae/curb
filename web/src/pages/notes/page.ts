@@ -227,6 +227,8 @@ function tickClock(l: LotView): void {
   const over = l.status !== 'LIVE' || now > l.endAtMs;
   const tNow = sold && l.clearedAtMs ? l.clearedAtMs : Math.min(now, l.endAtMs);
   const p = lotPriceAt(lotBig(l), Math.floor(tNow / 1000));
+  const labelEl = $('[data-nt-price-label]');
+  if (labelEl) labelEl.textContent = sold ? 'Cleared at, whole lot' : over ? 'Price at the end, whole lot' : 'Price now, whole lot';
   const priceEl = $('[data-nt-price]');
   if (priceEl) priceEl.textContent = sold && l.clearedPrice !== null ? `${usdgFixed(BigInt(Math.round(l.clearedPrice * 1e6)), 4)} USDG` : `${usdgFixed(p, 4)} USDG`;
   const ref = BigInt(l.refPriceRaw);
