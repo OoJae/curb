@@ -5,13 +5,13 @@
  * Slot model: one slot per five-minute attestation of the current Hong Kong week, starting Mon 00:00 HKT.
  *   slots: Uint8Array(2016), 0 = primary market open, 1 = shut (the pools keep trading).
  *   nowIndex: the slot that contains "now" (0..2015).
+ * The slots come from data/schedule.ts `weekSlots(nowMs).open` via `slotsFromOpen()`.
  */
+import { MARK as MARK_SPEC } from '../shell/mark';
+import { cssHex } from '../ui/tokens';
 
 export const SLOTS = 2016;
 export const SLOT_MS = 5 * 60_000;
-export const WEEK_MS = SLOTS * SLOT_MS;
-const HKT_MS = 8 * 3_600_000; // Hong Kong has no DST
-const DAY_MS = 86_400_000;
 
 export type Regime = 'open' | 'shut' | 'unknown';
 
@@ -21,15 +21,26 @@ export interface WeekInput {
   regime: Regime;
 }
 
-/** Construction, in units of the C's centreline radius (spec §1 "Mark" and §4 "Week Ring"). */
+/** schedule.ts speaks `open: boolean[]` (true = open); the ring speaks 0 = open, 1 = shut. */
+export function slotsFromOpen(open: readonly boolean[]): Uint8Array {
+  const slots = new Uint8Array(SLOTS);
+  for (let i = 0; i < SLOTS; i++) slots[i] = open[i] ? 0 : 1;
+  return slots;
+}
+
+/**
+ * Construction in units of the C's centreline radius. The C and the amber arc come from the published mark
+ * (shell/mark.ts, measured from the avatar): C 236° with its gap centred east, stroke 0.434 R; amber at
+ * 1.00 R, 0.191 R thick, ±46°. The blades, needle and flattening are the ring's own.
+ */
 export const MARK = {
   bandRadius: 1,
-  bandTube: 0.21, // stroke 0.42 × R
-  bandArcDeg: 250, // gap 110°, centred due east
+  bandTube: MARK_SPEC.cStroke / 2,
+  bandArcDeg: 360 - 2 * MARK_SPEC.cHalfGapDeg,
   bandFlatten: 0.35, // z scale: a flattened enamel badge
-  arcRadius: 1.09,
-  arcTube: 0.1, // thickness 0.20
-  arcSpanDeg: 96, // centred east
+  arcRadius: MARK_SPEC.arcRadius,
+  arcTube: MARK_SPEC.arcThickness / 2,
+  arcSpanDeg: 2 * MARK_SPEC.arcHalfSpanDeg,
   bladeRadius: 1,
   blade: [0.0026, 0.16, 0.02] as const, // tangential width, radial length, depth
   needle: { inner: 0.8, outer: 1.3, width: 0.0055, depth: 0.03 },
@@ -69,40 +80,6 @@ export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(
 /** Angle (radians, CCW from +X) of slot i: clockwise is forward in time, now sits at +X (three o'clock). */
 export function slotAngle(i: number, nowIndex: number): number {
   return (-(i - nowIndex) * 2 * Math.PI) / SLOTS;
-}
-
-// ── Hong Kong week ────────────────────────────────────────────────────────────────────────────────
-
-/** UTC ms of Monday 00:00 HKT of the week containing t. */
-export function weekStartHKT(t: number): number {
-  const local = t + HKT_MS;
-  const dayStart = Math.floor(local / DAY_MS) * DAY_MS;
-  const dow = new Date(dayStart).getUTCDay(); // 0 = Sun
-  return dayStart - ((dow + 6) % 7) * DAY_MS - HKT_MS;
-}
-
-export function nowSlotIndex(t: number): number {
-  return Math.min(SLOTS - 1, Math.max(0, Math.floor((t - weekStartHKT(t)) / SLOT_MS)));
-}
-
-/**
- * LOCAL STUB — swapped for lane B's `data/schedule.ts` at merge.
- * Published HKEX sessions 09:30–12:00 and 13:00–16:00 HKT, Mon–Fri, minus the measured 300 s early cut
- * (the cap goes to zero at 11:55 and 15:55). No holidays. 64 open slots a day, 320 a week; 1,696 shut (84%).
- */
-export function stubWeek(t: number = Date.now()): WeekInput & { weekStart: number } {
-  const slots = new Uint8Array(SLOTS).fill(1);
-  const sessions: Array<[number, number]> = [
-    [9 * 60 + 30, 11 * 60 + 55],
-    [13 * 60, 15 * 60 + 55],
-  ];
-  for (let d = 0; d < 5; d++) {
-    for (const [a, b] of sessions) {
-      for (let m = a; m < b; m += 5) slots[d * 288 + m / 5] = 0;
-    }
-  }
-  const nowIndex = nowSlotIndex(t);
-  return { slots, nowIndex, regime: slots[nowIndex] ? 'shut' : 'open', weekStart: weekStartHKT(t) };
 }
 
 // ── Runs and captions (derived from the slots, so a holiday week tells the truth) ────────────────────
@@ -183,50 +160,17 @@ export function weekCaptions(slots: Uint8Array): Caption[] {
 
 // ── Palette ─────────────────────────────────────────────────────────────────────────────────────────
 
-/*
- * ═══ ADAPTER (lane A tokens) ═══ The ring reads its colours from CSS custom properties at runtime.
- * Each role tries these names in order; the lead trims this list to lane A's real token names at merge.
- * The hex fallbacks are the frozen brand values (spec §1) and only apply if no token resolves.
- */
-export const RING_TOKENS = {
-  ink: ['--ink', '--street-ink', '--color-ink', '--c-ink'],
-  ivory: ['--ivory', '--certificate-ivory', '--color-ivory', '--c-ivory'],
-  amber: ['--streetlamp', '--amber', '--color-streetlamp', '--c-streetlamp'],
-  slate: ['--slate', '--window-slate', '--color-slate', '--c-slate'],
-} as const;
-const RING_FALLBACK = { ink: '#0F1720', ivory: '#F4EFE6', amber: '#F5A524', slate: '#8A96A3' };
+/** The ring's four colours, read from tokens.css at runtime (ui/tokens.ts); the values never repeat here. */
+export const RING_TOKENS = { ink: '--ink', ivory: '--ivory', amber: '--streetlamp', slate: '--slate' } as const;
 
 export type Rgb = [number, number, number]; // sRGB 0..1
 export type Palette = Record<keyof typeof RING_TOKENS, Rgb>;
 
-let probe: CanvasRenderingContext2D | null = null;
-/** Any CSS colour (hex, rgb(), oklch(), color-mix()) → sRGB 0..1, via a 1×1 canvas. */
-export function cssToRgb(value: string): Rgb | null {
-  if (!value) return null;
-  probe ??= (() => {
-    const c = document.createElement('canvas');
-    c.width = c.height = 1;
-    return c.getContext('2d', { willReadFrequently: true });
-  })();
-  if (!probe) return null;
-  probe.clearRect(0, 0, 1, 1);
-  probe.fillStyle = '#000';
-  probe.fillStyle = value;
-  probe.fillRect(0, 0, 1, 1);
-  const d = probe.getImageData(0, 0, 1, 1).data;
-  return d[3] ? [d[0] / 255, d[1] / 255, d[2] / 255] : null;
-}
-
 export function readPalette(el: Element = document.documentElement): Palette {
-  const cs = getComputedStyle(el);
   const out = {} as Palette;
   for (const role of Object.keys(RING_TOKENS) as Array<keyof Palette>) {
-    let rgb: Rgb | null = null;
-    for (const name of RING_TOKENS[role]) {
-      rgb = cssToRgb(cs.getPropertyValue(name).trim());
-      if (rgb) break;
-    }
-    out[role] = rgb ?? (cssToRgb(RING_FALLBACK[role]) as Rgb);
+    const n = cssHex(RING_TOKENS[role], el);
+    out[role] = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
   }
   return out;
 }

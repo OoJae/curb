@@ -36,7 +36,7 @@ await page.goto(`${LAB}/?p=0`);
 await waitReady(page);
 const ivory = hexToRgb('#F4EFE6');
 const amber = hexToRgb('#F5A524');
-// Face-on at rest: 1 world unit = (h/2)/(6.2·tan 14°) px. The centreline is R = 1; the arc's is R = 1.09.
+// Face-on at rest: 1 world unit = (h/2)/(6.2·tan 14°) px. The centreline is R = 1; the arc's is R = 1.00 (shell/mark.ts).
 const unit = 0.5 / (6.2 * Math.tan((14 * Math.PI) / 180));
 const rows = [];
 for (const deg of [90, 120, 150, 180, 210, 240, 270]) {
@@ -46,8 +46,8 @@ for (const deg of [90, 120, 150, 180, 210, 240, 270]) {
   rows.push(['band', deg, px.slice(0, 3).map(Math.round), de2000(lab(ivory), lab(px))]);
 }
 for (const deg of [-30, 0, 30]) {
-  const u = 0.5 + Math.cos((deg * Math.PI) / 180) * unit * 1.09;
-  const v = 0.5 + Math.sin((deg * Math.PI) / 180) * unit * 1.09;
+  const u = 0.5 + Math.cos((deg * Math.PI) / 180) * unit;
+  const v = 0.5 + Math.sin((deg * Math.PI) / 180) * unit * 1.0;
   const px = await page.evaluate(([u, v]) => window.__lab.probe(u, v), [u, v]);
   rows.push(['arc', deg, px.slice(0, 3).map(Math.round), de2000(lab(amber), lab(px))]);
 }
@@ -62,12 +62,13 @@ const res = await page.evaluate(() => {
   const L = window.__lab;
   const { slots, nowIndex } = L.week;
   const pick = (past, shut) => {
-    for (let i = past ? 20 : nowIndex + 120; i < (past ? nowIndex - 20 : 2000); i += 3) {
+    for (let i = past ? 20 : nowIndex + 200; i < (past ? nowIndex - 20 : 2000); i += 3) {
       if ([...Array(9)].every((_, j) => slots[i - 4 + j] === (shut ? 1 : 0))) return i;
     }
     return -1;
   };
   const out = {};
+  L.probeWorld(1, 0, 0.02, 1); // warm-up: the first read after load can precede the first composited frame
   for (const [name, past, shut] of [['future shut', 0, 1], ['future open', 0, 0], ['past shut', 1, 1], ['past open', 1, 0]]) {
     const i = pick(past, shut);
     const a = (-(i - nowIndex) * 2 * Math.PI) / 2016;
