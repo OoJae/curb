@@ -32,8 +32,10 @@ import type { Call, MulticallSnapshot } from "./sources/chain.ts";
 import { readPools, scanSwaps, swapsInRange, vwap } from "./sources/pools.ts";
 import type { PoolSpec, SwapRow } from "./sources/pools.ts";
 import { XStocksClient } from "./sources/xstocks.ts";
-import { MARK_METHODS, MARK_METHOD_VERSION } from "./mark.ts";
+import { MARK_METHODS, MARK_METHOD_VERSION, hasSignal } from "./mark.ts";
 import { buildMarkRound } from "./markRound.ts";
+import { gatherSignal, DEFAULT_RELAY_BASE } from "./sources/signalFetch.ts";
+import type { GatheredSignal } from "./sources/signalFetch.ts";
 import type { VenueEvidence } from "./markRound.ts";
 import { nextCapReturnMs } from "./reopen.ts";
 import type { PeriodLimits } from "./reopen.ts";
@@ -78,6 +80,19 @@ export function loadConfig() {
   };
   const suffix = (name: string, v: string) => {
     try { return normalizeDataSuffix(v.trim()); } catch (e) { errors.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); return ""; }
+  };
+  const onOff = (name: string, v: string) => {
+    const x = v.trim().toLowerCase();
+    if (["on", "1", "true"].includes(x)) return true;
+    if (["off", "0", "false"].includes(x)) return false;
+    errors.push(`${name} must be on|off, got ${JSON.stringify(v)}`);
+    return false;
+  };
+  const baseUrl = (name: string, v: string) => {
+    const x = v.trim().replace(/\/+$/, "");
+    if (x === "") return "";
+    if (!/^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(x)) { errors.push(`${name} is not a base URL: ${JSON.stringify(v)}`); return ""; }
+    return x;
   };
   const rawMode = (env("MODE") ?? "shadow").trim();
   if (!MODES.includes(rawMode)) errors.push(`MODE must be one of ${MODES.join("|")}, got ${JSON.stringify(rawMode)}`);
@@ -126,6 +141,17 @@ export function loadConfig() {
      * turn a retry into a second row. Checked here too, so a typo is fatal at boot, not on the first send.
      */
     dataSuffix: suffix("DATA_SUFFIX", env("DATA_SUFFIX", "")!),
+    /**
+     * mark/2's cross-market signal (mark.ts). SIGNAL=off fetches nothing, so every row takes the no-signal
+     * path -- still mark/2, numerically mark/1 -- which is the kill switch that needs no code change.
+     */
+    signal: onOff("SIGNAL", env("SIGNAL", "on")!),
+    /** curb-asp's byte-exact Binance relay. Binance refuses US hosts, and this keeper runs on one. Empty skips it. */
+    signalRelayBase: baseUrl("SIGNAL_RELAY_BASE", env("SIGNAL_RELAY_BASE", DEFAULT_RELAY_BASE)!),
+    /** Fall back to fapi.binance.com directly when the relay fails. Useless from the US, right anywhere else. */
+    signalBinanceDirect: onOff("SIGNAL_BINANCE_DIRECT", env("SIGNAL_BINANCE_DIRECT", "on")!),
+    /** Per request. A leg costs at most two (relay, then direct), all legs run in parallel. */
+    signalFetchMs: num("SIGNAL_FETCH_MS", env("SIGNAL_FETCH_MS", "4000")!, 500, 20_000),
   };
   // Unset is legitimate exactly once: the first boot on a new host, whose only job is to generate
   // the key that the Scorecard is then deployed with. Live mode always needs it.
@@ -779,6 +805,22 @@ async function buildPlan(
       predictedReopenMs: settleAfterS * 1000,
     };
 
+    // mark/2's cross-market evidence, fetched now (the commit time) with a per-request timeout. It can
+    // never block the commit: a failed or slow fetch leaves its leg absent, the row falls back to the
+    // no-signal path with a flag, and every attempt is committed in the bundle's FETCH_LOG.
+    let signal: GatheredSignal | null = null;
+    if (hasSignal(MARK_METHOD_VERSION)) {
+      try {
+        signal = await gatherSignal(
+          { symbol: c.symbol, cutAtMs: c.cutAtMs, commitAtMs: nowMs, settleAfterS },
+          method.minSignalClosureS!,
+          { enabled: CFG.signal, relayBase: CFG.signalRelayBase, binanceDirect: CFG.signalBinanceDirect, perFetchMs: CFG.signalFetchMs },
+        );
+      } catch (e) {
+        log("signal-error", { symbol: c.symbol, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+
     const round = buildMarkRound({
       chainId: CFG.chainId, clock: CFG.clock, scorecard: CFG.scorecard,
       evaluatedAtMs: nowMs, codeDigest: digest, specs: assets, chain: poolSnap,
@@ -793,6 +835,7 @@ async function buildPlan(
           swapsDuringClosure: closureSwaps.length,
         },
         closingSwaps, closureSwaps, venue: venueEvidence,
+        ...(signal ? { signal: { exchanges: signal.exchanges, attempts: signal.attempts } } : {}),
       }],
     });
 
@@ -806,6 +849,15 @@ async function buildPlan(
       symbol: c.symbol, root: round.root, mark: built.mark.markE18, band: built.mark.bandBps,
       drift: built.mark.driftBps, swaps: closureSwaps.length, flags: built.mark.flags,
       shutForS: Math.round((nowMs - c.cutAtMs) / 1000),
+      method: MARK_METHOD_VERSION,
+      ...(built.mark.signal ? {
+        signal: {
+          applied: built.mark.signal.applied, appliedBps: built.mark.signal.appliedBps, rBps: built.mark.signal.rBps,
+          perpBps: built.mark.signal.perpBps, adrBps: built.mark.signal.adrBps, missing: built.mark.signal.missing,
+          fetched: signal?.exchanges.map((x) => x.key) ?? [],
+          failed: signal?.attempts.filter((x) => !x.ok).map((x) => `${x.key} ${x.via ? new URL(x.via).host : ""} ${x.error}`) ?? [],
+        },
+      } : {}),
     });
 
     return {

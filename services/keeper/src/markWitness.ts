@@ -18,12 +18,23 @@ import type { CommittedRow } from "./sources/scorecard.ts";
 import type { TxInfo } from "./sources/chain.ts";
 
 /**
+ * The X Layer block from which the keeper commits under curb.scorecard.mark/2, and before which every row
+ * is mark/1. SET AT DEPLOY: it must lie after the last mark/1 commit and at or before the first mark/2
+ * commit, so the lead sets it to the chain head at the moment the mark/2 keeper starts. Default:
+ * 71,486,953 (24 Sep 2026 13:19:49Z), 30,549 blocks after the last mark/1 row (#14, block 71,456,404) --
+ * correct for any deploy before the next commit, the overnight row at ~01:20Z on 25 Sep. Deploying after
+ * that commit means setting this to the head at deploy time first.
+ */
+export const MARK2_CUTOVER_BLOCK = 71_486_953;
+
+/**
  * A method is only valid for rows committed while it was the live method.
  * Scorecard v2 was deployed at block 71,231,806; a row claiming to predate its own contract is not
  * a row. Mirrors the attestor's METHOD_BLOCKS, which exists so a replay of retired rules cannot pass.
  */
 export const MARK_METHOD_BLOCKS: Record<string, { fromBlock: number; toBlock: number }> = {
-  "curb.scorecard.mark/1": { fromBlock: 71_231_806, toBlock: Number.MAX_SAFE_INTEGER },
+  "curb.scorecard.mark/1": { fromBlock: 71_231_806, toBlock: MARK2_CUTOVER_BLOCK - 1 },
+  "curb.scorecard.mark/2": { fromBlock: MARK2_CUTOVER_BLOCK, toBlock: Number.MAX_SAFE_INTEGER },
 };
 
 /** Looser than the attestor's: the keeper ticks at 30s and commits on a 600s lead with a retry ladder. */
