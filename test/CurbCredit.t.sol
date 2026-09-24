@@ -295,6 +295,12 @@ contract CurbCreditTest is CreditBase {
         vm.expectRevert(CurbCredit.ZeroAddress.selector);
         new CurbCredit(clock, sc, IDepthCert(address(0)), elig, IERC20(address(usdg)), admin, list);
 
+        address nothing = makeAddr("no code");
+        vm.expectRevert(abi.encodeWithSelector(CurbCredit.NoCode.selector, nothing));
+        new CurbCredit(clock, sc, IDepthCert(nothing), elig, IERC20(address(usdg)), admin, list);
+        vm.expectRevert(abi.encodeWithSelector(CurbCredit.NoCode.selector, nothing));
+        new CurbCredit(clock, sc, dc, IEligibility(nothing), IERC20(address(usdg)), admin, list);
+
         MockERC20 usd18 = new MockERC20("x", "x", 18);
         vm.expectRevert(abi.encodeWithSelector(CurbCredit.BadDecimals.selector, address(usd18), uint8(18)));
         new CurbCredit(clock, sc, dc, elig, IERC20(address(usd18)), admin, list);

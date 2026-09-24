@@ -74,6 +74,7 @@ contract CurbCredit {
     error ExceedsSeized(uint256 seized, uint256 requested);
     error NotOurCert(uint256 certId);
     error ApproveFailed();
+    error NoCode(address target);
 
     // --- constants --------------------------------------------------------------------------------------------
     uint256 public constant LTV_OPEN_BPS = 6000;
@@ -193,6 +194,13 @@ contract CurbCredit {
             address(clock_) == address(0) || address(scorecard_) == address(0) || address(depthCert_) == address(0)
                 || address(eligibility_) == address(0) || address(usdg_) == address(0) || admin_ == address(0)
         ) revert ZeroAddress();
+        // A wrong address with no code would make every try/catch read below revert on decoding instead of
+        // failing closed, so refuse it here.
+        _requireCode(address(clock_));
+        _requireCode(address(scorecard_));
+        _requireCode(address(depthCert_));
+        _requireCode(address(eligibility_));
+        _requireCode(address(usdg_));
         uint8 d = usdg_.decimals();
         if (d != 6) revert BadDecimals(address(usdg_), d);
 
@@ -679,6 +687,10 @@ contract CurbCredit {
     function _approve(IERC20 token, address spender, uint256 amount) internal {
         (bool ok, bytes memory ret) = address(token).call(abi.encodeCall(IERC20.approve, (spender, amount)));
         if (!ok || (ret.length != 0 && (ret.length < 32 || abi.decode(ret, (uint256)) != 1))) revert ApproveFailed();
+    }
+
+    function _requireCode(address target) internal view {
+        if (target.code.length == 0) revert NoCode(target);
     }
 
     function _min(uint256 a, uint256 b) internal pure returns (uint256) {
