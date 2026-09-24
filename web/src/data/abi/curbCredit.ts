@@ -108,6 +108,18 @@ export const curbCreditAbi = [
   },
   {
     "type": "function",
+    "name": "SHUT_CERT_LIFE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "STALE_BONUS_BPS",
     "inputs": [],
     "outputs": [
@@ -460,6 +472,23 @@ export const curbCreditAbi = [
       {
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "minCertExpiry",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view"

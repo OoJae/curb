@@ -76,6 +76,18 @@ export const depthCertAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_LIVE_PER_MAKER",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MIN_BOND_BPS",
     "inputs": [],
     "outputs": [
@@ -106,6 +118,18 @@ export const depthCertAbi = [
       {
         "name": "",
         "type": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MIN_NOTIONAL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -216,6 +240,23 @@ export const depthCertAbi = [
   },
   {
     "type": "function",
+    "name": "certsOf",
+    "inputs": [
+      {
+        "name": "maker",
+        "type": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "claimShares",
     "inputs": [
       {
@@ -261,13 +302,13 @@ export const depthCertAbi = [
     "name": "committed",
     "inputs": [
       {
-        "name": "",
+        "name": "maker",
         "type": "address"
       }
     ],
     "outputs": [
       {
-        "name": "",
+        "name": "sum",
         "type": "uint256"
       }
     ],
@@ -688,6 +729,11 @@ export const depthCertAbi = [
   },
   {
     "type": "error",
+    "name": "BelowMinNotional",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BondTooSmall",
     "inputs": [
       {
@@ -725,6 +771,16 @@ export const depthCertAbi = [
       {
         "name": "expiry",
         "type": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "DustRemainder",
+    "inputs": [
+      {
+        "name": "left",
+        "type": "uint128"
       }
     ]
   },
@@ -798,6 +854,16 @@ export const depthCertAbi = [
   },
   {
     "type": "error",
+    "name": "TooManyLiveCerts",
+    "inputs": [
+      {
+        "name": "maker",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "TransferFailed",
     "inputs": [
       {
@@ -819,11 +885,6 @@ export const depthCertAbi = [
   {
     "type": "error",
     "name": "ZeroDenominator",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ZeroNotional",
     "inputs": []
   }
 ] as const;

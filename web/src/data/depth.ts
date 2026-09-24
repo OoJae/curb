@@ -31,8 +31,12 @@ export const APR_BPS = 500;
 export const MIN_BOND_BPS = 1000;
 export const MIN_LIFE_S = 10 * 60;
 export const MAX_LIFE_S = 30 * 86_400;
-export const MIN_CERT_LIFE_S = 3600; // CurbCredit counts only certs expiring ≥ 1 h out
+export const MIN_CERT_LIFE_S = 3600; // CurbCredit.MIN_CERT_LIFE (open market)
+/** CurbCredit.SHUT_CERT_LIFE: while shut a cert must outlive max(73 h, next transition + 1 h), plus a cure. */
+export const SHUT_CERT_LIFE_S = 73 * 3600;
 export const CURE_OPEN_SECONDS = 1800;
+/** DepthCert.MIN_NOTIONAL: every cert promises at least 1 USDG. */
+export const MIN_NOTIONAL_USDG = 1_000_000n;
 export const CERT_STATUS: CertStatus[] = ["NONE", "LIVE", "FADED", "CLOSED"];
 
 export const depthLive = () => DEPTH_CERT !== null && !isMock();
@@ -58,9 +62,20 @@ export function regimeCapBps(regime: RegimeName, cap: number): number {
 }
 
 /**
- * The published LTV function, in display units (shares, USDG/share, USD/share):
+ * CurbCredit.ltvFor (24 Sep review): a PER-POSITION ratio, the same for every borrower:
+ *   ltvFor = 0 if UNKNOWN, no honoured depth or no price; else min(regimeCap, minBid / P · 1e4)
+ */
+export function ltvForBps(p: { depthShares: number; minBidPx: number; price: number | null; regimeCapBps: number }): number {
+  if (!p.price || p.depthShares <= 0 || p.minBidPx <= 0 || p.regimeCapBps === 0) return 0;
+  return Math.min(p.regimeCapBps, Math.floor((p.minBidPx / p.price) * 10_000));
+}
+
+/**
+ * What the POOL can borrow against an asset, as a share of its collateral's value, in display units:
+ * min(ltvFor, realisable / value(totalCollateral)), realisable = notional(min(totalCollateral, depth), minBid)
+ * (CurbCredit refuses a borrow past realisable with ExceedsDepth). Equivalently:
  *   basis = totalCollateral > 0 ? totalCollateral : depth;  covered = min(basis, depth)
- *   ltv   = 0 if depth == 0 or no price; else min(regimeCap, covered · minBid / (basis · P) · 1e4)
+ *   = 0 if depth == 0 or no price; else min(regimeCap, covered · minBid / (basis · P) · 1e4)
  */
 export function ltvBpsAt(p: { depthShares: number; totalCollateral: number; minBidPx: number; price: number | null; regimeCapBps: number }): number {
   if (!p.price || p.depthShares <= 0 || p.regimeCapBps === 0) return 0;
@@ -194,7 +209,11 @@ export async function getDepth(wrapper: Address, certIds: (number | bigint)[] = 
   }
   const pc = publicClient();
   const block = await pc.getBlock({ blockTag: "latest" });
-  const minExpiry = block.timestamp + BigInt(MIN_CERT_LIFE_S);
+  // Count certs exactly as CurbCredit does: expiry >= minCertExpiry(asset) (an open-market hour, or while shut
+  // the next transition / 73 h, plus a full cure). Falls back to the open-market horizon if unreadable.
+  const minExpiry = await pc
+    .readContract({ address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "minCertExpiry", args: [wrapper], blockNumber: block.number })
+    .catch(() => block.timestamp + BigInt(MIN_CERT_LIFE_S + CURE_OPEN_SECONDS));
   const res = await pc.multicall({
     blockNumber: block.number,
     allowFailure: true,
