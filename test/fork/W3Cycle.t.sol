@@ -4,6 +4,8 @@ pragma solidity ^0.8.28;
 import {Test, console2} from "forge-std/Test.sol";
 import {ClosedAuction} from "../../src/ClosedAuction.sol";
 import {EligibilityRegistry} from "../../src/EligibilityRegistry.sol";
+import {ReopenPointer} from "../../src/ReopenPointer.sol";
+import {ReopenNote} from "../../src/ReopenNote.sol";
 import {MarketClock} from "../../src/MarketClock.sol";
 import {IMarketClock} from "../../src/interfaces/IMarketClock.sol";
 import {IReopenNote} from "../../src/interfaces/IReopenNote.sol";
@@ -12,10 +14,6 @@ import {IScorecardPrice} from "../../src/interfaces/IScorecardPrice.sol";
 import {IERC20} from "../../src/interfaces/IERC20.sol";
 import {IEligibility} from "../../src/interfaces/IEligibility.sol";
 import {IERC1155Receiver} from "../../src/lib/ERC1155Min.sol";
-
-interface I1155Approve {
-    function setApprovalForAll(address operator, bool approved) external;
-}
 
 interface IERC165 {
     function supportsInterface(bytes4) external view returns (bool);
@@ -29,8 +27,8 @@ interface IERC165 {
 /// buyer is the team's Agentic Wallet, a real EIP-7702 account, so the note's ERC-1155 receiver check runs
 /// against the code that will actually receive it in the live demo.
 ///
-/// ReopenPointer and ReopenNote (package P1) are deployed from their build artifacts with the frozen spec's
-/// constructor arguments, so this file compiles before P1 lands and exercises the real contracts after.
+/// Everything is deployed exactly as script/DeployW3.s.sol deploys it: the real ReopenPointer and ReopenNote
+/// (package P1) with the frozen caps and URI, and the auction gated by the registry.
 contract W3CycleForkTest is Test {
     address constant CLOCK = 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b;
     address constant SCORECARD = 0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f;
@@ -57,8 +55,8 @@ contract W3CycleForkTest is Test {
     IERC20 tcent = IERC20(W_TCENT);
 
     EligibilityRegistry registry;
-    IReopenPointer pointer;
-    IReopenNote note;
+    ReopenPointer pointer;
+    ReopenNote note;
     ClosedAuction auction;
 
     function setUp() public {
@@ -72,11 +70,9 @@ contract W3CycleForkTest is Test {
         registry.setEligible(DESK, true, keccak256("team:curb-desk"));
         registry.setEligible(AGENTIC, true, keccak256("team:agentic"));
 
-        pointer = IReopenPointer(deployCode("ReopenPointer.sol:ReopenPointer", abi.encode(CLOCK, SCORECARD)));
+        pointer = new ReopenPointer(IMarketClock(CLOCK), scorecard);
         (address[] memory ws, uint256[] memory caps) = _cohort();
-        note = IReopenNote(
-            deployCode("ReopenNote.sol:ReopenNote", abi.encode(CLOCK, address(pointer), SCORECARD, ws, caps, URI))
-        );
+        note = new ReopenNote(IMarketClock(CLOCK), pointer, scorecard, ws, caps, URI);
         auction = new ClosedAuction(
             note, pointer, IMarketClock(CLOCK), scorecard, usdg, IEligibility(address(registry))
         );
@@ -115,7 +111,7 @@ contract W3CycleForkTest is Test {
         vm.startPrank(DESK);
         tcent.approve(address(note), AMOUNT);
         id = note.mint(W_TCENT, AMOUNT, DESK);
-        I1155Approve(address(note)).setApprovalForAll(address(auction), true);
+        note.setApprovalForAll(address(auction), true);
         vm.stopPrank();
     }
 
@@ -308,24 +304,19 @@ contract W3CycleForkTest is Test {
         vm.prank(HOST_A);
         clock.attest(W_SHEIN, IMarketClock.Regime.CLOSED, 0, uint64(vm.getBlockTimestamp() + 3600), false, bytes32(0));
         vm.prank(DESK);
-        vm.expectRevert(bytes4(keccak256("UnsupportedAsset()")));
+        vm.expectRevert(ReopenNote.UnsupportedAsset.selector);
         note.mint(W_SHEIN, 1e18, DESK);
+        assertEq(note.capShares(W_SHEIN), 0);
 
         address[] memory ws = new address[](1);
         uint256[] memory caps = new uint256[](1);
         (ws[0], caps[0]) = (W_SHEIN, 1e18);
-        bytes memory init = abi.encodePacked(
-            vm.getCode("ReopenNote.sol:ReopenNote"), abi.encode(CLOCK, address(pointer), SCORECARD, ws, caps, URI)
-        );
-        address made;
-        assembly ("memory-safe") {
-            made := create(0, add(init, 0x20), mload(init))
-        }
-        assertEq(made, address(0), "a note with a wSHEINx cap must not deploy");
+        vm.expectRevert(abi.encodeWithSelector(ReopenNote.NoPriceSource.selector, W_SHEIN));
+        new ReopenNote(IMarketClock(CLOCK), pointer, scorecard, ws, caps, URI);
 
         // and the auction refuses to list a note id that was never minted
         vm.prank(DESK);
-        vm.expectRevert();
+        vm.expectRevert(ClosedAuction.BadParams.selector);
         auction.list(999, AMOUNT, START, FLOOR, DECAY, uint64(vm.getBlockTimestamp() + 2400));
     }
 }

@@ -5,8 +5,7 @@ import {IReopenPointer} from "../../src/interfaces/IReopenPointer.sol";
 
 /// @notice Settable IReopenPointer for ClosedAuction unit tests. No clock: the test sets the epoch, the
 ///         open flag and the prints directly, and `observe` just reports them (and counts the calls).
-/// @dev `epochInfo` of an epoch above the head reverts `UnknownEpoch`, like the real pointer is free to.
-///      `reopen(w)` models a witnessed shut→open (epoch+1, open); `shut(w)` models the next witnessed shut.
+/// @dev `reopen(w)` models a witnessed shut→open (epoch+1, open); `shut(w)` models the next witnessed shut.
 contract MockPointer is IReopenPointer {
     error UnknownEpoch();
 
@@ -47,8 +46,8 @@ contract MockPointer is IReopenPointer {
         return _epochs[w][e].print;
     }
 
+    /// @dev Like the real pointer: all zeroes for epoch 0 or an epoch not yet reached (no revert).
     function epochInfo(address w, uint32 e) external view returns (Epoch memory) {
-        if (e > epochOf[w]) revert UnknownEpoch();
         return _epochs[w][e];
     }
 }

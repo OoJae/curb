@@ -4,9 +4,9 @@ pragma solidity ^0.8.28;
 import {Script, console2} from "forge-std/Script.sol";
 import {EligibilityRegistry} from "../src/EligibilityRegistry.sol";
 import {ClosedAuction} from "../src/ClosedAuction.sol";
+import {ReopenPointer} from "../src/ReopenPointer.sol";
+import {ReopenNote} from "../src/ReopenNote.sol";
 import {IMarketClock} from "../src/interfaces/IMarketClock.sol";
-import {IReopenNote} from "../src/interfaces/IReopenNote.sol";
-import {IReopenPointer} from "../src/interfaces/IReopenPointer.sol";
 import {IScorecardPrice} from "../src/interfaces/IScorecardPrice.sol";
 import {IERC20} from "../src/interfaces/IERC20.sol";
 import {IEligibility} from "../src/interfaces/IEligibility.sol";
@@ -43,8 +43,8 @@ contract DeployW3 is Script {
     bytes32 constant EV_AGENTIC = keccak256("team:agentic");
 
     EligibilityRegistry public registry;
-    IReopenPointer public pointer;
-    IReopenNote public note;
+    ReopenPointer public pointer;
+    ReopenNote public note;
     ClosedAuction public auction;
 
     function run() external {
@@ -62,16 +62,14 @@ contract DeployW3 is Script {
         registry.setEligible(desk, true, EV_DESK);
         registry.setEligible(agentic, true, EV_AGENTIC);
 
-        pointer = IReopenPointer(_create("ReopenPointer.sol:ReopenPointer", abi.encode(CLOCK, SCORECARD)));
+        pointer = new ReopenPointer(IMarketClock(CLOCK), IScorecardPrice(SCORECARD));
 
         address[] memory ws = new address[](3);
         uint256[] memory caps = new uint256[](3);
         (ws[0], caps[0]) = (W_TCENT, CAP_TCENT);
         (ws[1], caps[1]) = (W_NVDA, CAP_NVDA);
         (ws[2], caps[2]) = (W_AAPL, CAP_AAPL);
-        note = IReopenNote(
-            _create("ReopenNote.sol:ReopenNote", abi.encode(CLOCK, address(pointer), SCORECARD, ws, caps, URI))
-        );
+        note = new ReopenNote(IMarketClock(CLOCK), pointer, IScorecardPrice(SCORECARD), ws, caps, URI);
 
         auction = new ClosedAuction(
             note,
@@ -106,15 +104,6 @@ contract DeployW3 is Script {
         }
     }
 
-    /// Deploy a contract from its build artifact (ReopenPointer/ReopenNote are package P1).
-    function _create(string memory artifact, bytes memory args) internal returns (address a) {
-        bytes memory init = abi.encodePacked(vm.getCode(artifact), args);
-        assembly ("memory-safe") {
-            a := create(0, add(init, 0x20), mload(init))
-        }
-        require(a != address(0), artifact);
-    }
-
     function _readBack(address deployer, address desk, address agentic) internal view {
         // code
         require(address(registry).code.length > 0, "registry: no code");
@@ -138,33 +127,37 @@ contract DeployW3 is Script {
         require(address(auction.eligibility()) == address(registry), "auction.eligibility");
         require(auction.lotCount() == 0, "auction.lotCount");
 
-        // note: caps, uri, and it refuses anything outside the cohort
-        require(_capOf(W_TCENT) == CAP_TCENT, "cap wTCENTx");
-        require(_capOf(W_NVDA) == CAP_NVDA, "cap wNVDAx");
-        require(_capOf(W_AAPL) == CAP_AAPL, "cap wAAPLx");
-        require(_capOf(0xff637d2d435D6745Df3faf61272B1216e7e8b727) == 0, "wSHEINx must have no cap");
-        require(keccak256(bytes(_uri())) == keccak256(bytes(URI)), "note uri");
+        // note: wiring, caps, cohort, metadata
+        require(address(note.clock()) == CLOCK, "note.clock");
+        require(address(note.pointer()) == address(pointer), "note.pointer");
+        require(address(note.scorecard()) == SCORECARD, "note.scorecard");
+        require(note.capShares(W_TCENT) == CAP_TCENT, "cap wTCENTx");
+        require(note.capShares(W_NVDA) == CAP_NVDA, "cap wNVDAx");
+        require(note.capShares(W_AAPL) == CAP_AAPL, "cap wAAPLx");
+        require(note.capShares(0xff637d2d435D6745Df3faf61272B1216e7e8b727) == 0, "wSHEINx must have no cap");
+        address[] memory assets = note.supportedAssets();
+        require(assets.length == 3 && assets[0] == W_TCENT && assets[1] == W_NVDA && assets[2] == W_AAPL, "cohort");
+        require(note.noteCount() == 0 && note.openInterest(W_TCENT) == 0, "note starts empty");
+        require(keccak256(bytes(note.uri(1))) == keccak256(bytes(URI)), "note uri");
+        require(keccak256(bytes(note.name())) == keccak256("Curb Reopen Note"), "note name");
+        require(keccak256(bytes(note.symbol())) == keccak256("CURB-RN"), "note symbol");
+        require(note.supportsInterface(0xd9b67a26), "note is ERC-1155");
 
-        // pointer head after the first observe
+        // pointer: wiring and the head after the first observe
+        require(address(pointer.clock()) == CLOCK, "pointer.clock");
+        require(address(pointer.scorecard()) == SCORECARD, "pointer.scorecard");
         IMarketClock.Regime r = IMarketClock(CLOCK).regime(W_TCENT);
         uint128 cap = IMarketClock(CLOCK).primaryCapNow(W_TCENT);
-        bool open = pointer.isOpen(W_TCENT);
-        require(pointer.epochOf(W_TCENT) == 0, "pointer starts at epoch 0");
-        if (r != IMarketClock.Regime.UNKNOWN) require(open == (cap > 0), "pointer head disagrees with the clock");
+        ReopenPointer.Head memory h = pointer.headOf(W_TCENT);
+        require(h.epoch == 0, "pointer starts at epoch 0");
+        if (r != IMarketClock.Regime.UNKNOWN) {
+            require(h.open == (cap > 0), "pointer head disagrees with the clock");
+            require(h.lastObservedAt == block.timestamp, "pointer observed at deploy");
+            if (cap == 0) require(h.lastShutAt == block.timestamp, "pointer witnessed the shut");
+        }
 
-        console2.log("wTCENTx regime / cap :", uint8(r), cap);
-        console2.log("pointer epoch / open :", pointer.epochOf(W_TCENT), open);
-    }
-
-    function _capOf(address w) internal view returns (uint256) {
-        (bool ok, bytes memory ret) = address(note).staticcall(abi.encodeWithSignature("capShares(address)", w));
-        require(ok && ret.length == 32, "note.capShares(address) unreadable");
-        return abi.decode(ret, (uint256));
-    }
-
-    function _uri() internal view returns (string memory) {
-        (bool ok, bytes memory ret) = address(note).staticcall(abi.encodeWithSignature("uri(uint256)", uint256(1)));
-        require(ok, "note.uri unreadable");
-        return abi.decode(ret, (string));
+        console2.log("wTCENTx regime / cap        :", uint8(r), cap);
+        console2.log("pointer epoch / open        :", h.epoch, h.open);
+        console2.log("pointer lastShutAt / observed:", h.lastShutAt, h.lastObservedAt);
     }
 }
