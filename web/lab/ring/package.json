@@ -1,0 +1,24 @@
+{
+  "name": "curb-ring-lab",
+  "private": true,
+  "type": "module",
+  "description": "Standalone dev harness for the Week Ring (lane C). Not shipped. Run: npx vite web/lab/ring",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "shots": "node scripts/shots.mjs",
+    "poster": "node scripts/poster.mjs",
+    "perf": "node scripts/perf.mjs"
+  },
+  "devDependencies": {
+    "@types/three": "0.186.0",
+    "gsap": "3.15.0",
+    "lenis": "1.3.26",
+    "playwright": "1.63.0",
+    "sharp": "0.35.4",
+    "three": "0.186.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.1"
+  }
+}
