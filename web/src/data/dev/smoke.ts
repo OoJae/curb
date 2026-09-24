@@ -10,6 +10,7 @@ import { getRegime, pollDelayMs, nextTransitionMs } from "../regime.ts";
 import { getBoard } from "../clock.ts";
 import { getScorecard } from "../scorecard.ts";
 import { askWithoutPaying } from "../api.ts";
+import { getRecord } from "../record.ts";
 import { countdown, formatDuration, nextReopenMs, closureAt, venueClock, weekSlots } from "../schedule.ts";
 
 setMock(false);
@@ -60,6 +61,9 @@ for (const row of s.rows.slice(0, 3)) {
 }
 console.log(`  tx hashes resolved: ${s.rows.filter((x) => x.commitTx).length}/${s.rows.length} commits, ${s.rows.filter((x) => x.settleTx).length}/${s.rows.filter((x) => x.status === "settled").length} settles`);
 console.log(`  priceNow: ${s.prices.map((p) => `${p.symbol} ${p.price?.toFixed(2) ?? p.error}`).join(" · ")}`);
+
+const rec = await getRecord();
+console.log(`  home record line (rpc-lite, no viem): settled ${rec.settled}, beatLast ${rec.beatLastPrint}, beatVwap ${rec.beatClosingVwap}, rows ${rec.closureCount} @ block ${rec.block} [${rec.source}]`);
 
 // 4. the API, unpaid
 const u = await askWithoutPaying("/v1/closure-calendar");

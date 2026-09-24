@@ -214,6 +214,18 @@ export interface SkillTally {
   readAtMs: number;
 }
 
+/** The home page's record line: Scorecard.skill() + closureCount(), without viem. */
+export interface RecordLine {
+  settled: number;
+  beatLastPrint: number;
+  beatClosingVwap: number;
+  /** null when served from the API fallback's preview (it carries rowCount, used here). */
+  closureCount: number | null;
+  block: number | null;
+  readAtMs: number;
+  source: DataSource;
+}
+
 export interface PriceNow {
   symbol: string;
   wrapper: Address;

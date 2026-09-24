@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { decodeFunctionResult, encodeAbiParameters, encodeFunctionData, keccak256, stringToBytes } from "viem";
 import { marketClockAbi } from "./abi/marketClock.ts";
+import { scorecardAbi } from "./abi/scorecard.ts";
 import { HERO_WRAPPER } from "./addresses.ts";
 import { decodePaymentRequired, formatUsd6 } from "./api.ts";
 import { ltvBpsAt, minBond, notional, refusalName, regimeCapBps } from "./depth.ts";
@@ -14,7 +15,7 @@ import { fixture, setMock } from "./mock.ts";
 import { discountBps, lotPriceAt, valueUsdg } from "./notes.ts";
 import { rpcSlot, RPC_PER_SECOND } from "./ratelimit.ts";
 import { getRegime, pollDelayMs, toRegimeState } from "./regime.ts";
-import { decodeStateOf, stateOfCalldata, STATE_OF_SELECTOR } from "./rpc-lite.ts";
+import { CLOSURE_COUNT_SELECTOR, decodeStateOf, SKILL_SELECTOR, stateOfCalldata, STATE_OF_SELECTOR } from "./rpc-lite.ts";
 import { methodName, outcome } from "./scorecard.ts";
 import { DATA_SUFFIX } from "./suffix.ts";
 
@@ -31,6 +32,11 @@ test("rpc-lite: selector and calldata equal viem's encoding against the forge AB
   const viem = encodeFunctionData({ abi: marketClockAbi, functionName: "stateOf", args: [HERO_WRAPPER] });
   assert.equal(viem.slice(0, 10), STATE_OF_SELECTOR);
   assert.equal(stateOfCalldata(HERO_WRAPPER), viem.toLowerCase());
+});
+
+test("rpc-lite: Scorecard selectors equal the forge ABI", () => {
+  assert.equal(encodeFunctionData({ abi: scorecardAbi, functionName: "skill" }), SKILL_SELECTOR);
+  assert.equal(encodeFunctionData({ abi: scorecardAbi, functionName: "closureCount" }), CLOSURE_COUNT_SELECTOR);
 });
 
 test("rpc-lite: hand decode equals viem's decode (live bytes and a synthetic MARKET state)", () => {
