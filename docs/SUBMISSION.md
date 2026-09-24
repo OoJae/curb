@@ -64,7 +64,7 @@ https://github.com/OoJae/curb
 ### Service / listing URL
 
 - API: https://api.curb.markets (discovery: https://api.curb.markets/.well-known/x402)
-- OKX AI marketplace: agent **#13869** "Curb" ⟨marketplace URL⟩, three A2MCP services: Closure Calendar
+- OKX AI marketplace: agent **#13869** "Curb", https://www.okx.ai/agents/13869 (listing review pending as of 25 Sep: until OKX approves it the page reads "This ASP is under review"), three A2MCP services: Closure Calendar
   $0.01, Reopen Price Accuracy Record $0.05, Closure Discount by Duration $0.10.
 
 ### Technical links
