@@ -13,9 +13,9 @@
   --muted: var(--slate);
   --hairline: color-mix(in oklab, var(--figure) 14%, var(--ground));
 
-  --f-display: 'Bodoni Moda', 'Didot', 'Bodoni 72', serif;
-  --f-text: 'Libre Franklin', 'Franklin Gothic Book', system-ui, sans-serif;
-  --f-data: 'Martian Mono', ui-monospace, Menlo, monospace;
+  --f-display: 'Bodoni Moda Variable', 'Bodoni Moda', 'Didot', 'Bodoni 72', serif;
+  --f-text: 'Libre Franklin Variable', 'Libre Franklin', 'Franklin Gothic Book', system-ui, sans-serif;
+  --f-data: 'Martian Mono Variable', 'Martian Mono', ui-monospace, Menlo, monospace;
 
   --t-hero: clamp(2.75rem, 1.429rem + 5.634vw, 6.5rem);
   --t-h1: clamp(2.25rem, 1.458rem + 3.38vw, 4.5rem);

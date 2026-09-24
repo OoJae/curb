@@ -200,8 +200,8 @@ export type Rgb = [number, number, number]; // sRGB 0..1
 export type Palette = Record<keyof typeof RING_TOKENS, Rgb>;
 
 let probe: CanvasRenderingContext2D | null = null;
-/** Any CSS colour (hex, rgb(), oklch(), color-mix()) → sRGB bytes, via a 1×1 canvas. */
-function cssToRgb(value: string): Rgb | null {
+/** Any CSS colour (hex, rgb(), oklch(), color-mix()) → sRGB 0..1, via a 1×1 canvas. */
+export function cssToRgb(value: string): Rgb | null {
   if (!value) return null;
   probe ??= (() => {
     const c = document.createElement('canvas');

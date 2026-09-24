@@ -103,9 +103,36 @@ export function createFallback2d(canvas: HTMLCanvasElement, opts: Fallback2dOpti
       const out = k === 3 ? 1 - span(p, [UNROLL.needle[0], UNROLL.needle[0] + 0.1]) : Math.min(1, (1 - t) / 0.18);
       amt = Math.max(0, Math.min(Math.min(1, t / 0.22), out));
     }
-    const paths = new Map<string, Path2D>();
+    // Anti-moiré, as in the WebGL blades: while a blade pitch is under ~4 device px the 0.0005 hairline between
+    // blades can only alias, so fully risen runs of one colour are filled as a single annular sector and rising
+    // blades are stroked a full pitch wide. From 4 px up, every blade is its own 0.0026-wide stroke.
     const [bw, bl] = MARK.blade;
-    for (let i = 0; i < SLOTS; i++) {
+    const pitch = TAU / SLOTS;
+    const fine = pitch * unit < 4;
+    const fills = new Map<string, Path2D>();
+    const strokes = new Map<string, Path2D>();
+    const pathFor = (m: Map<string, Path2D>, key: string) => {
+      let path = m.get(key);
+      if (!path) m.set(key, (path = new Path2D()));
+      return path;
+    };
+    const rIn = (MARK.bladeRadius - bl / 2) * unit;
+    const rOut = (MARK.bladeRadius + bl / 2) * unit;
+    let runStart = -1;
+    let runKey = '';
+    const flush = (end: number) => {
+      if (runStart < 0) return;
+      const a0 = toCanvas(slotAngle(runStart, nowIndex)) - pitch / 2;
+      const a1 = toCanvas(slotAngle(end - 1, nowIndex)) + pitch / 2;
+      const path = pathFor(fills, runKey);
+      path.moveTo(cx + Math.cos(a0) * rOut, cy + Math.sin(a0) * rOut);
+      path.arc(cx, cy, rOut, a0, a1, false);
+      path.arc(cx, cy, rIn, a1, a0, true);
+      path.closePath();
+      runStart = -1;
+    };
+    let i = 0;
+    for (; i < SLOTS; i++) {
       const r = Math.min(1, Math.max(0, (sweep - i) / RISE));
       if (r <= 0) break;
       const rise = 1 - (1 - r) ** 3;
@@ -115,18 +142,32 @@ export function createFallback2d(canvas: HTMLCanvasElement, opts: Fallback2dOpti
       else if (focus) inFocus = (i - focus[0] + SLOTS) % SLOTS < focus[1] ? 1 : 0;
       const dim = (i < nowIndex ? PAST_VALUE : 1) * (1 - 0.72 * amt * (1 - inFocus));
       const key = `${shut ? 'a' : 'i'}${dim.toFixed(3)}`;
-      let path = paths.get(key);
-      if (!path) paths.set(key, (path = new Path2D()));
+      if (fine && r >= 1) {
+        if (key !== runKey || runStart < 0) {
+          flush(i);
+          runStart = i;
+          runKey = key;
+        }
+        continue;
+      }
+      flush(i);
       const th = toCanvas(slotAngle(i, nowIndex));
       const r0 = (MARK.bladeRadius - (bl / 2) * rise) * unit;
       const r1 = (MARK.bladeRadius + (bl / 2) * rise) * unit;
+      const path = pathFor(strokes, key);
       path.moveTo(cx + Math.cos(th) * r0, cy + Math.sin(th) * r0);
       path.lineTo(cx + Math.cos(th) * r1, cy + Math.sin(th) * r1);
     }
-    ctx.lineWidth = Math.max(0.75, bw * unit);
+    flush(i);
+    const colour = (key: string) => css(key[0] === 'a' ? palette.amber : palette.ivory, Number(key.slice(1)));
+    for (const [key, path] of fills) {
+      ctx.fillStyle = colour(key);
+      ctx.fill(path);
+    }
+    ctx.lineWidth = fine ? pitch * unit : Math.max(0.75, bw * unit);
     ctx.lineCap = 'butt';
-    for (const [key, path] of paths) {
-      ctx.strokeStyle = css(key[0] === 'a' ? palette.amber : palette.ivory, Number(key.slice(1)));
+    for (const [key, path] of strokes) {
+      ctx.strokeStyle = colour(key);
       ctx.stroke(path);
     }
 
