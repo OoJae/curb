@@ -304,7 +304,70 @@ function renderVerify(): void {
 select?.addEventListener('change', () => {
   verifyId = select.value;
   renderVerify();
+  queueTx([verifyId]);
 });
+
+// ── tx hashes: resolved as rows come into view (one single-block getLogs each, then cached forever),
+//    so a first visit does not spend the public RPC's budget on rows nobody scrolls to.
+
+const wantTx = new Set<string>();
+let txTimer: ReturnType<typeof setTimeout> | undefined;
+let rowObserver: IntersectionObserver | null = null;
+
+const needsTx = (r: ScorecardRow) => !r.commitTx || (r.status === 'settled' && !r.settleTx);
+
+// At most TX_ROWS_PER_TICK rows (two getLogs each) every TX_TICK_MS: about 3 requests a second, well
+// under the public RPC's per-IP limit even with the shell's regime poll running alongside.
+const TX_ROWS_PER_TICK = 3;
+const TX_TICK_MS = 2000;
+let txBusy = false;
+
+function queueTx(ids: string[]): void {
+  if (isMock()) return;
+  for (const id of ids) wantTx.add(id);
+  if (!txBusy && txTimer === undefined) txTimer = setTimeout(flushTx, 250);
+}
+
+async function flushTx(): Promise<void> {
+  txTimer = undefined;
+  // Newest first, the order they appear in.
+  const rows = (view?.rows ?? []).filter((r) => wantTx.has(r.id));
+  const batch = rows.filter(needsTx).slice(0, TX_ROWS_PER_TICK);
+  for (const r of rows) if (!needsTx(r)) wantTx.delete(r.id);
+  for (const r of batch) wantTx.delete(r.id);
+  if (!batch.length) return;
+  txBusy = true;
+  try {
+    await resolveTxHashes(batch, patchRow);
+    renderVerify();
+  } finally {
+    txBusy = false;
+  }
+  if (wantTx.size) txTimer = setTimeout(flushTx, TX_TICK_MS);
+}
+
+function observeRows(): void {
+  if (isMock()) return;
+  rowObserver?.disconnect();
+  if (typeof IntersectionObserver !== 'function') {
+    queueTx(view?.rows.map((r) => r.id) ?? []);
+    return;
+  }
+  rowObserver = new IntersectionObserver(
+    (entries) => {
+      const ids: string[] = [];
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        const id = (e.target as HTMLElement).dataset.id;
+        if (id) ids.push(id);
+        rowObserver?.unobserve(e.target);
+      }
+      if (ids.length) queueTx(ids);
+    },
+    { rootMargin: '200px 0px' },
+  );
+  tbody.querySelectorAll<HTMLElement>('tr[data-id]').forEach((tr) => rowObserver!.observe(tr));
+}
 const copyVerify = $<HTMLButtonElement>('[data-sc-copy-verify]');
 if (copyVerify) copyButton(copyVerify, verifyCommand);
 enhanceCopyButtons(main);
@@ -323,7 +386,8 @@ async function loadAll(animateNew: boolean): Promise<void> {
   renderFilter(v);
   renderRows(v, animateNew);
   renderVerifyOptions();
-  if (!isMock()) void resolveTxHashes(v.rows, patchRow).then(() => renderVerify());
+  observeRows();
+  if (verifyId) queueTx([verifyId]);
 }
 
 async function tick(): Promise<void> {
