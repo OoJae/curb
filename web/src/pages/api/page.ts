@@ -123,7 +123,7 @@ ${pr
   ${first ? html`<dl class="api-kv">${acceptRows(first).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>` : ''}</div>`
   : html`<div class="api-step" style="--i:2"><span class="api-step__k">PAYMENT-REQUIRED</span><span class="api-step__note">no challenge header on this response</span></div>`}
 <div class="api-step" style="--i:3"><span class="api-step__k">preview</span><span class="api-step__note">the free part of the body${isMock() ? ' (fixture)' : `, read ${fmtHKT(u.readAtMs, true)} HKT`}</span>
-<pre class="api-json" tabindex="0" aria-label="Preview body"><code>${preview}</code></pre></div>`;
+<pre class="api-json" tabindex="0" role="region" aria-label="Preview body"><code>${preview}</code></pre></div>`;
 }
 
 const inFlight = new Set<string>();

@@ -175,6 +175,12 @@ function renderTally(v: ScorecardView): void {
   const note = $('[data-sc-headline-note]');
   if (hl) hl.textContent = h.line;
   if (note) note.textContent = h.note;
+  const prices = $('[data-sc-prices]');
+  if (prices) {
+    const priced = v.prices.filter((p) => p.price !== null).map((p) => `${p.symbol} ${px(p.price)}`);
+    const unpriced = v.prices.filter((p) => p.price === null).map((p) => `${p.symbol} (${p.error ?? 'unreadable'})`);
+    prices.textContent = `Scorecard's pool price now, block ${fmtBlock(v.block)}: ${priced.join(' · ') || 'none readable'}${unpriced.length ? `. No price: ${unpriced.join(', ')}` : ''}.`;
+  }
   const m1 = v.rows.filter((r) => r.methodShort === 'mark/1').length;
   const m2 = v.rows.filter((r) => r.methodShort === 'mark/2').length;
   const m1El = $('[data-sc-m1-count]');

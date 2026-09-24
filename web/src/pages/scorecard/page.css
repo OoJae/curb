@@ -160,7 +160,13 @@
 
 .sc-count {
   min-height: calc(var(--t-small) * var(--lh-small));
-  margin-bottom: var(--s-2);
+}
+
+.sc-prices {
+  min-height: calc(2em * var(--lh-small));
+  max-width: 100ch;
+  margin-bottom: var(--s-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .sc-table {

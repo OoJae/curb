@@ -92,7 +92,7 @@
           <h3 class="t-h3">Check it yourself</h3>
           <p class="t-small muted">Rebuilds the root from the bundle, re-runs the derivation, and compares it with what the transaction wrote. Needs Node 22.18 or newer.</p>
           <div class="clk-cmd surface-ink">
-            <pre class="clk-cmd__code" tabindex="0" aria-label="Verify command"><code data-round-cmd>npx -y curb-verify tx &lt;round transaction&gt;</code></pre>
+            <pre class="clk-cmd__code"><code data-round-cmd>npx -y curb-verify tx &lt;round transaction&gt;</code></pre>
             <button class="copy clk-cmd__copy" type="button" data-copy-cmd><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
           </div>
         </div>
@@ -110,7 +110,7 @@
               <span class="t-data clk-code__name">UsesTheClock.sol</span>
               <button class="copy" type="button" data-copy-sol><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
             </div>
-<pre class="clk-code__pre" tabindex="0" aria-label="Solidity example"><code data-sol><span class="clk-c">// SPDX-License-Identifier: MIT</span>
+<pre class="clk-code__pre" tabindex="0" role="region" aria-label="Solidity example"><code data-sol><span class="clk-c">// SPDX-License-Identifier: MIT</span>
 pragma solidity ^0.8.28;
 
 interface IMarketClock {
@@ -136,7 +136,7 @@ contract UsesTheClock {
 }</code></pre>
           </div>
           <div class="clk-cmd surface-ink">
-            <pre class="clk-cmd__code" tabindex="0" aria-label="Command line example"><code data-cast>cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b "primaryCapNow(address)(uint128)" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech</code></pre>
+            <pre class="clk-cmd__code"><code data-cast>cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b "primaryCapNow(address)(uint128)" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech</code></pre>
             <button class="copy clk-cmd__copy" type="button" data-copy-cast><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
           </div>
           <p class="t-small muted clk-snippet__note">The wrapper above is wTCENTx. The full interface, including <code>isInMultiplierBlackout</code> and <code>rawToShares</code>, is in the <a href="https://www.oklink.com/xlayer/address/0x160Dc415902971a7a9B5ade7f43005b36FE5B09b" target="_blank" rel="noopener">verified source<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a>.</p>
