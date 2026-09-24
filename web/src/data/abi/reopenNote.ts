@@ -173,6 +173,27 @@ export const reopenNoteAbi = [
   },
   {
     "type": "function",
+    "name": "mintedInEpoch",
+    "inputs": [
+      {
+        "name": "wrapper",
+        "type": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "name",
     "inputs": [],
     "outputs": [
@@ -766,6 +787,16 @@ export const reopenNoteAbi = [
     "type": "error",
     "name": "InBlackout",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRecipient",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address"
+      }
+    ]
   },
   {
     "type": "error",

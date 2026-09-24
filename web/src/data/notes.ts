@@ -176,6 +176,32 @@ export async function getLotCount(): Promise<number> {
   return Number(await publicClient().readContract({ address: CLOSED_AUCTION!, abi: closedAuctionAbi, functionName: "lotCount" }));
 }
 
+/**
+ * The cap is per closure: ReopenNote.mintedInEpoch(wrapper, epoch) is what this closure's notes still
+ * have outstanding, bounded by capShares(wrapper). `epoch` is the pointer's current epoch (the one a
+ * note minted now is stamped with). Specimen: the fixture notes of that epoch against the D-3 cap.
+ */
+export async function getClosureCap(wrapper: Address): Promise<{ epoch: number; usedRaw: bigint; capRaw: bigint; specimen: boolean }> {
+  if (!notesLive()) {
+    const epoch = (await getPointer(wrapper)).epoch;
+    const used = (await fixture("notes"))
+      .filter((n) => n.wrapper.toLowerCase() === wrapper.toLowerCase() && n.epochAtMint === epoch)
+      .reduce((s, n) => s + BigInt(n.outstandingRaw), 0n);
+    const cap = BigInt(Math.round((assetByWrapper(wrapper)?.noteCapShares ?? 0) * 1e6)) * 10n ** 12n;
+    return { epoch, usedRaw: used, capRaw: cap, specimen: true };
+  }
+  const pc = publicClient();
+  const epoch = Number(await pc.readContract({ address: REOPEN_POINTER!, abi: reopenPointerAbi, functionName: "epochOf", args: [wrapper] }));
+  const [used, cap] = await pc.multicall({
+    allowFailure: false,
+    contracts: [
+      { address: REOPEN_NOTE!, abi: reopenNoteAbi, functionName: "mintedInEpoch", args: [wrapper, epoch] },
+      { address: REOPEN_NOTE!, abi: reopenNoteAbi, functionName: "capShares", args: [wrapper] },
+    ],
+  });
+  return { epoch, usedRaw: used as bigint, capRaw: cap as bigint, specimen: false };
+}
+
 /** ReopenNote.noteCount(): note ids run 1..noteCount. Specimen: the fixture's highest id. */
 export async function getNoteCount(): Promise<number> {
   if (!notesLive()) return (await fixture("notes")).reduce((m, n) => Math.max(m, Number(n.id)), 0);
