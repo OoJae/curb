@@ -111,13 +111,16 @@
 /* Row hover scales in the left rule (the ledger micro-interaction). */
 .clk-asset {
   position: relative;
+  font-weight: 500;
+  text-align: start;
+}
+
+.clk-asset__in {
   display: grid;
   grid-template-columns: auto 1fr;
   grid-template-rows: auto auto;
   column-gap: var(--s-1-5);
   align-items: center;
-  font-weight: 500;
-  text-align: start;
 }
 
 .clk-asset::before {
@@ -161,10 +164,9 @@
 
 .clk-sym {
   font-family: var(--font-data);
-  font-size: var(--t-data);
+  font-size: var(--t-small);
   font-stretch: var(--wdth-ledger);
   font-weight: 500;
-  font-size: var(--t-small);
 }
 
 .clk-venue {
@@ -269,7 +271,6 @@
   }
 
   .clk-asset {
-    display: grid;
     grid-column: 1 / -1;
   }
 

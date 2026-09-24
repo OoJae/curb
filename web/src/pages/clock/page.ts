@@ -18,12 +18,7 @@ import { html, render, safeUrl } from '../../ui/html';
 import { slotStrip, type SlotState, type SlotStrip } from '../../ui/slotstrip';
 import { blockLinkHTML, txLinkHTML } from '../../ui/txlink';
 
-try {
-  boot({ page: 'clock' });
-} catch (err) {
-  // The shell is lane A's; if it fails, the page still reads the chain.
-  console.warn('clock: shell boot failed', err);
-}
+boot({ page: 'clock' });
 
 const main = document.getElementById('main')!;
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = main) => root.querySelector<T>(sel);
@@ -165,7 +160,7 @@ function renderRows(b: AssetBoard, first: boolean): void {
       els.lastGlyph = row.glyph;
     }
     render(els.regime, regimeHTML(row, nowMs));
-    render(els.cap, html`<span class="clk-line clk-num">${fmtUsd(row.cap)}</span><span class="clk-sub muted">${row.stale ? 'stale, reads as zero' : row.cap > 0 ? 'creates and redeems' : 'no creation or redemption'}</span>`);
+    render(els.cap, html`<span class="clk-line clk-num">${fmtUsd(row.cap)}</span>${row.stale ? html`<span class="clk-sub muted">stale, reads as zero</span>` : ''}`);
     render(els.next, nextHTML(row, nowMs));
     render(els.att, attHTML(row, nowMs));
     const w = weekFor(row.mic, nowMs);
@@ -181,8 +176,6 @@ function renderSummary(b: AssetBoard): void {
   const totalEl = $('[data-clk-total]');
   if (shutEl) shutEl.textContent = String(shut);
   if (totalEl) totalEl.textContent = String(b.rows.length);
-  const sum = $('[data-clk-summary]');
-  sum?.setAttribute('aria-label', `${shut} of ${b.rows.length} assets shut`);
   const asof = $('[data-clk-asof]');
   if (asof) {
     const src = b.source === 'fixture' ? 'Fixture captured at ' : 'Read at ';
