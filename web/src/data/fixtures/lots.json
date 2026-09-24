@@ -1,0 +1,31 @@
+[
+  {
+    "lotId": "1",
+    "seller": "0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "symbol": "wTCENTx",
+    "noteId": "1",
+    "amountRaw": "100000000000000000",
+    "shares": 0.1,
+    "startPrice": 5.6,
+    "startPriceRaw": "5600000",
+    "floorPrice": 5.43,
+    "floorPriceRaw": "5430000",
+    "refPrice": 5.587261,
+    "refPriceRaw": "5587261",
+    "startAtMs": 1790238300000,
+    "endAtMs": 1790299500000,
+    "decaySeconds": 1200,
+    "epochAtMint": 0,
+    "status": "LIVE",
+    "buyer": null,
+    "clearedPrice": null,
+    "clearedAtMs": null,
+    "currentPrice": 5.43,
+    "discountBpsVsRef": 281,
+    "realisedDiscountBps": null,
+    "specimen": true,
+    "block": 71487725,
+    "source": "fixture"
+  }
+]

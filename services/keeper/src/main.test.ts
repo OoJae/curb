@@ -77,6 +77,35 @@ test("an invalid DATA_SUFFIX is a collected configuration error, never a throw a
   }
 });
 
+test("mark/2's signal settings: on by default through curb-asp's relay, with a kill switch and checked values", () => {
+  const unset = { SIGNAL: undefined, SIGNAL_RELAY_BASE: undefined, SIGNAL_BINANCE_DIRECT: undefined, SIGNAL_FETCH_MS: undefined };
+  withEnv(unset, () => {
+    const { cfg, errors } = loadConfig();
+    assert.deepEqual(errors, []);
+    assert.equal(cfg.signal, true);
+    assert.equal(cfg.signalRelayBase, "https://api.curb.markets");
+    assert.equal(cfg.signalBinanceDirect, true);
+    assert.equal(cfg.signalFetchMs, 4_000);
+  });
+  withEnv({ ...unset, SIGNAL: "off", SIGNAL_RELAY_BASE: "", SIGNAL_BINANCE_DIRECT: "0", SIGNAL_FETCH_MS: "2500" }, () => {
+    const { cfg, errors } = loadConfig();
+    assert.deepEqual(errors, []);
+    assert.equal(cfg.signal, false, "the kill switch: every row takes the no-signal path");
+    assert.equal(cfg.signalRelayBase, "", "empty skips the relay");
+    assert.equal(cfg.signalBinanceDirect, false);
+    assert.equal(cfg.signalFetchMs, 2_500);
+  });
+  withEnv({ ...unset, SIGNAL_RELAY_BASE: "https://relay.example/base/" }, () => {
+    assert.equal(loadConfig().cfg.signalRelayBase, "https://relay.example/base");
+  });
+  withEnv({ ...unset, SIGNAL: "maybe", SIGNAL_RELAY_BASE: "not a url", SIGNAL_FETCH_MS: "60000" }, () => {
+    const { errors } = loadConfig();
+    assert.ok(errors.some((e) => e.startsWith("SIGNAL must be on|off")), errors.join("; "));
+    assert.ok(errors.some((e) => e.startsWith("SIGNAL_RELAY_BASE is not a base URL")), errors.join("; "));
+    assert.ok(errors.some((e) => e.startsWith("SIGNAL_FETCH_MS must be in")), errors.join("; "));
+  });
+});
+
 test("boot logs whether attribution is on before anything else, and a bad DATA_SUFFIX is fatal before that", async () => {
   // DATA_DIR is a FILE, so main() dies at its first mkdir (as root too) right after the attribution line:
   // no state, no key, no network.

@@ -43,6 +43,8 @@ const HK_LIMITS = {
 
 function inputs(): MarkInputs {
   return {
+    // These rows sit at block 71,300,000, inside mark/1's range: they are the rows already on chain.
+    method: METHOD,
     chainId: 196, clock: CLOCK, scorecard: SCORECARD,
     evaluatedAtMs: EVAL_MS, codeDigest: "sha256:test",
     specs: [{ wrapper: W, symbol: "wTCENTx", pool: POOL, equityIsToken0: true, equityDecimals: 18, stableDecimals: 6 }],
@@ -190,6 +192,71 @@ test("a settlement that did not follow its own commit is caught", () => {
   const c = check(bundle, row, tx, COMMIT_AT_S, { settledAt: REOPEN_S + 300, settledBlock: COMMIT_BLOCK - 1, reopenPrint: "1", settled: true });
   assert.equal(c.reproduced, false);
   assert.ok(c.failures.some((f) => f.includes("not after the commit block")), c.failures.join("; "));
+});
+
+// --- mark/2: its own block range, opened at the cutover ------------------------------------------
+
+import { readFileSync } from "node:fs";
+import { MARK2_CUTOVER_BLOCK, MARK_METHOD_BLOCKS } from "./markWitness.ts";
+import { hashBytes } from "./tree.ts";
+import { sha256Hex } from "./sources/signalFetch.ts";
+import type { SignalKey } from "./sources/signal.ts";
+
+/** Scorecard row #9's closure (wTCENTx, 23 -> 24 Sep) with the real signal bytes, committed as mark/2. */
+function buildMark2(committedBlock: number, method = "curb.scorecard.mark/2") {
+  const fx = JSON.parse(readFileSync(new URL("./sources/fixtures/mark2-overnight-wTCENTx-20260924.json", import.meta.url), "utf8"));
+  const lp = BigInt(fx.lastPrintE18);
+  const committedAtS = Math.floor(fx.ctx.commitAtMs / 1000) + 10;
+  const round = buildMarkRound({
+    ...inputs(), method, evaluatedAtMs: fx.ctx.commitAtMs,
+    chain: { block: { number: committedBlock - 20, hash: "0x" + "11".repeat(32), timestamp: committedAtS - 20, rpc: "https://rpc.xlayer.tech" }, results: [] },
+    closures: [{
+      wrapper: W, symbol: "wTCENTx", cutAtMs: fx.ctx.cutAtMs, cutBlock: committedBlock - 63_000, settleAfterS: fx.ctx.settleAfterS,
+      input: { wrapper: W, symbol: "wTCENTx", lastPrintE18: lp, midAtCutE18: lp, midNowE18: lp, closingVwapE18: null, swapsDuringClosure: 0 },
+      closingSwaps: [], closureSwaps: [],
+      signal: {
+        attempts: [],
+        exchanges: fx.exchanges.map((e: { key: string; url: string; body: string }) => {
+          const b = new TextEncoder().encode(e.body);
+          return { key: e.key as SignalKey, url: e.url, via: e.url, status: 200, fetchedAtMs: 0, bytes: b.length, bodyHash: hashBytes(b), sha256: sha256Hex(b), reproducible: e.key.startsWith("perp"), body: e.body };
+        }),
+      },
+    }],
+  });
+  const m = round.marks[0];
+  const row: CommittedRow = {
+    id: closureId(W, fx.ctx.settleAfterS, round.root), wrapper: W, settleAfter: fx.ctx.settleAfterS, committedBlock,
+    mark: m.mark.markE18.toString(), bandBps: m.mark.bandBps, inputRoot: round.root, methodDigest: methodDigestOf(method),
+    lastPrint: null, closingVwap: null, staleOracle: null, txHash: "0x" + "ee".repeat(32),
+  };
+  return { bundle: JSON.parse(JSON.stringify(round.bundle)), row, committedAtS, mark: m.mark };
+}
+
+test("mark/1 closes and mark/2 opens at the cutover block, with no gap and no overlap", () => {
+  assert.equal(MARK_METHOD_BLOCKS["curb.scorecard.mark/1"].toBlock + 1, MARK2_CUTOVER_BLOCK);
+  assert.equal(MARK_METHOD_BLOCKS["curb.scorecard.mark/2"].fromBlock, MARK2_CUTOVER_BLOCK);
+  assert.ok(MARK2_CUTOVER_BLOCK > 71_456_404, "after the last mark/1 row on chain (#14)");
+});
+
+test("a mark/2 row committed after the cutover reproduces, signal and all", () => {
+  const { bundle, row, committedAtS, mark } = buildMark2(MARK2_CUTOVER_BLOCK + 43_000);
+  assert.equal(mark.signal!.applied, true);
+  const c = checkMarkRound(bundle, row, null, 196, SCORECARD, committedAtS);
+  assert.deepEqual(c.failures, []);
+  assert.equal(c.reproduced, true);
+  assert.equal(c.method, "curb.scorecard.mark/2");
+});
+
+test("a mark/2 row dated before the cutover, or a mark/1 row after it, is refused", () => {
+  const early = buildMark2(MARK2_CUTOVER_BLOCK - 1);
+  const c1 = checkMarkRound(early.bundle, early.row, null, 196, SCORECARD, early.committedAtS);
+  assert.equal(c1.reproduced, false);
+  assert.ok(c1.failures.some((f) => f.includes("curb.scorecard.mark/2 is not valid at block")), c1.failures.join("; "));
+
+  const late = buildMark2(MARK2_CUTOVER_BLOCK + 43_000, "curb.scorecard.mark/1");
+  const c2 = checkMarkRound(late.bundle, late.row, null, 196, SCORECARD, late.committedAtS);
+  assert.equal(c2.reproduced, false, "a retired method cannot be replayed after its range closed");
+  assert.ok(c2.failures.some((f) => f.includes("curb.scorecard.mark/1 is not valid at block")), c2.failures.join("; "));
 });
 
 test("malformed input is reported, never thrown", () => {

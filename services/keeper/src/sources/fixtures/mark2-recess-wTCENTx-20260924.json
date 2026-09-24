@@ -1,0 +1,24 @@
+{
+ "note": "Real bytes, fetched 24 Sep 2026: Binance HK0700USDT klines at the 24 Sep lunch cut and commit, for Scorecard row #12 (wTCENTx, recess). lastPrint and reopenPrint are the values on chain.",
+ "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+ "ctx": {
+  "symbol": "wTCENTx",
+  "cutAtMs": 1790222109000,
+  "commitAtMs": 1790225416000,
+  "settleAfterS": 1790226000
+ },
+ "lastPrintE18": "55869194009629492562",
+ "reopenPrintE18": "55870038498397709898",
+ "exchanges": [
+  {
+   "key": "perp:commit",
+   "url": "https://fapi.binance.com/fapi/v1/klines?symbol=HK0700USDT&interval=1m&startTime=1790225340000&limit=1",
+   "body": "[[1790225340000,\"435.48000\",\"435.48000\",\"435.22000\",\"435.33000\",\"8.07\",1790225399999,\"3513.2724000\",30,\"1.12\",\"487.5504000\",\"0\"]]"
+  },
+  {
+   "key": "perp:cut",
+   "url": "https://fapi.binance.com/fapi/v1/klines?symbol=HK0700USDT&interval=1m&startTime=1790222040000&limit=1",
+   "body": "[[1790222040000,\"434.20000\",\"434.20000\",\"434.20000\",\"434.20000\",\"4.55\",1790222099999,\"1975.6100000\",133,\"4.55\",\"1975.6100000\",\"0\"]]"
+  }
+ ]
+}
