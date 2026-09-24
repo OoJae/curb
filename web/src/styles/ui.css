@@ -1,0 +1,916 @@
+/* Shell chrome and UI primitives. Tokens only. Transform/opacity animation only.
+   Streetlamp appears only as: the mark's arc, shut slots, the live pulse, hover hairlines, focus. */
+
+/* ── Arrows from type ──────────────────────────────────────────────────────────────────────── */
+.arrow {
+  display: inline-block;
+  margin-inline-start: 0.3em;
+  font-style: normal;
+  transition: transform var(--dur-micro) var(--ease-curb);
+}
+
+.arrow--ext {
+  transform: rotate(-45deg);
+}
+
+a:hover .arrow,
+button:hover .arrow {
+  transform: translateX(2px);
+}
+
+a:hover .arrow--ext,
+button:hover .arrow--ext {
+  transform: rotate(-45deg) translateX(2px);
+}
+
+.link-arrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch);
+  font-size: var(--t-small);
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--figure);
+}
+
+.link-arrow:hover {
+  color: var(--figure);
+}
+
+/* ── Mark tile: the mark always sits on ink (visible as a tile in paper hours) ─────────────── */
+.mark-tile {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--mark-tile);
+  height: var(--mark-tile);
+  border-radius: var(--radius);
+  background: var(--ink);
+}
+
+.mark-tile > svg {
+  grid-area: 1 / 1;
+  width: var(--mark-size);
+  height: var(--mark-size);
+}
+
+/* ── Masthead ──────────────────────────────────────────────────────────────────────────────── */
+.masthead {
+  position: relative;
+  z-index: var(--z-masthead);
+  flex: none;
+  background: var(--ground);
+  border-bottom: var(--rule) solid var(--hairline);
+  view-transition-name: masthead;
+}
+
+.masthead__bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: var(--masthead-row) var(--masthead-nav-row);
+  grid-template-areas:
+    'brand . regime'
+    'nav nav nav';
+  align-items: center;
+  column-gap: var(--s-3);
+}
+
+@media (min-width: 768px) {
+  .masthead__bar {
+    grid-template-rows: var(--masthead-h);
+    grid-template-areas: 'brand nav regime';
+  }
+}
+
+.masthead__brand {
+  grid-area: brand;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: var(--touch);
+  color: var(--figure);
+  text-decoration: none;
+}
+
+.masthead__mark .mark-tile__arc {
+  view-transition-name: mark-arc;
+}
+
+.masthead__word {
+  font-family: var(--font-display);
+  font-size: var(--t-wordmark);
+  font-weight: 500;
+  font-variation-settings: 'opsz' 96;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.masthead__nav {
+  grid-area: nav;
+  min-width: 0;
+}
+
+.masthead__nav ul {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 768px) {
+  .masthead__nav ul {
+    justify-content: flex-start;
+    gap: var(--s-4);
+    padding-inline-start: var(--s-3);
+  }
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch);
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color var(--dur-micro) var(--ease-curb);
+}
+
+.nav-link:hover,
+.nav-link[aria-current='page'] {
+  color: var(--figure);
+}
+
+.nav-link__label {
+  position: relative;
+}
+
+/* Underline in from the left, out to the right. */
+.nav-link__label::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: -6px;
+  height: var(--rule);
+  background: var(--signal);
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform var(--dur-exit) var(--ease-exit);
+}
+
+.nav-link:hover .nav-link__label::after {
+  transform: scaleX(1);
+  transform-origin: left center;
+  transition: transform var(--dur-ui) var(--ease-curb);
+}
+
+.nav-link[aria-current='page'] .nav-link__label::after {
+  background: var(--figure);
+  transform: scaleX(1);
+}
+
+/* ── Regime chip + popover ─────────────────────────────────────────────────────────────────── */
+.masthead__regime {
+  grid-area: regime;
+  justify-self: end;
+}
+
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  height: var(--s-4);
+  padding: 0 var(--s-1) 0 var(--s-1);
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--figure);
+  anchor-name: --regime-chip;
+  transition: border-color var(--dur-micro) var(--ease-curb);
+}
+
+/* 44 px hit area around a 32 px chip */
+.chip::before {
+  content: '';
+  position: absolute;
+  inset: calc((var(--touch) - var(--s-4)) / -2) -2px;
+}
+
+.chip:hover {
+  border-color: var(--figure);
+}
+
+.chip[data-preview] {
+  border-style: dashed;
+}
+
+.chip__glyph {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--glyph-size) + var(--s-half));
+  height: calc(var(--glyph-size) + var(--s-half));
+  border-radius: var(--radius);
+}
+
+.chip__glyph svg {
+  width: var(--glyph-size);
+  height: var(--glyph-size);
+}
+
+.chip[data-live='unknown'] .chip__glyph {
+  color: var(--muted);
+}
+
+/* The shut glyph carries amber: on paper it sits in its ink tile. */
+[data-regime='open'] .chip__glyph:has(.glyph--shut) {
+  background: var(--ink);
+}
+
+.chip__label {
+  display: inline-block;
+  min-width: 5ch;
+}
+
+.chip__sep {
+  color: var(--muted);
+}
+
+.chip__time {
+  color: var(--muted);
+}
+
+.chip-pop {
+  position: fixed;
+  inset: auto;
+  top: calc(var(--masthead-row) - var(--s-half));
+  right: var(--margin);
+  margin: 0;
+  width: min(380px, calc(100vw - 2 * var(--margin)));
+  padding: var(--s-2) var(--s-3) var(--s-2);
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--ground);
+  color: var(--figure);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--dur-micro) var(--ease-curb),
+    transform var(--dur-micro) var(--ease-curb),
+    overlay var(--dur-micro) allow-discrete,
+    display var(--dur-micro) allow-discrete;
+}
+
+@media (min-width: 768px) {
+  .chip-pop {
+    top: calc(var(--masthead-h) - var(--s-1));
+  }
+}
+
+@supports (anchor-name: --a) {
+  .chip-pop {
+    position-anchor: --regime-chip;
+    top: anchor(bottom);
+    right: anchor(right);
+    margin-top: var(--s-1);
+  }
+}
+
+.chip-pop:popover-open {
+  opacity: 1;
+  transform: none;
+}
+
+@starting-style {
+  .chip-pop:popover-open {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.chip-pop__lead {
+  font-size: var(--t-small);
+  text-wrap: pretty;
+}
+
+.chip-pop__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s-half) var(--s-2);
+  margin-top: var(--s-2);
+  padding-top: var(--s-2);
+  border-top: var(--rule) solid var(--hairline);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+}
+
+.chip-pop__facts > div {
+  display: contents;
+}
+
+.chip-pop__facts dt {
+  color: var(--muted);
+}
+
+.chip-pop__facts dd {
+  margin: 0;
+}
+
+.chip-pop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--s-2);
+  margin-top: var(--s-1);
+}
+
+[data-capture] .chip-pop {
+  display: none !important;
+}
+
+/* ── Ledger rows (dl.ledger > div.ledger__row > dt + dd) ──────────────────────────────────── */
+.ledger {
+  display: grid;
+}
+
+.ledger__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--s-half) var(--s-3);
+  padding-block: var(--s-1) var(--s-1);
+  border-top: var(--rule) solid var(--hairline);
+  font-size: var(--t-small);
+}
+
+.ledger__row:last-child {
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+@media (min-width: 768px) {
+  .ledger__row {
+    grid-template-columns: minmax(7rem, 2fr) 7fr;
+    padding-block: var(--s-1-5);
+  }
+}
+
+.ledger__row dt {
+  color: var(--muted);
+}
+
+.ledger__row dd {
+  margin: 0;
+  min-width: 0;
+}
+
+/* Hover scales in the left rule. */
+.ledger__row::before {
+  content: '';
+  position: absolute;
+  inset-block: -1px;
+  inset-inline-start: calc(-1 * var(--s-2));
+  width: var(--rule-strong);
+  background: var(--figure);
+  transform: scaleY(0);
+  transition: transform var(--dur-ui) var(--ease-curb);
+}
+
+.ledger__row:hover::before {
+  transform: scaleY(1);
+}
+
+.ledger__dot {
+  color: var(--muted);
+}
+
+/* ── Tables: real <table> with a caption, ruled not boxed ─────────────────────────────────── */
+.table {
+  width: 100%;
+  font-size: var(--t-small);
+}
+
+.table caption {
+  text-align: start;
+  padding-bottom: var(--s-1);
+  color: var(--muted);
+  font-size: var(--t-small);
+}
+
+.table th {
+  text-align: start;
+  font-weight: 500;
+  color: var(--muted);
+  padding: var(--s-1) var(--s-2) var(--s-1) 0;
+  border-bottom: var(--rule) solid var(--hairline-strong);
+}
+
+.table td {
+  padding: var(--s-1) var(--s-2) var(--s-1) 0;
+  border-bottom: var(--rule) solid var(--hairline);
+  vertical-align: baseline;
+}
+
+.table .num {
+  text-align: end;
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Footer ledger ─────────────────────────────────────────────────────────────────────────── */
+.footer-ledger {
+  flex: none;
+  margin-top: var(--section);
+  padding-block: var(--s-6) var(--s-8);
+  border-top: var(--rule) solid var(--hairline);
+}
+
+.footer-ledger__week {
+  margin: 0 0 var(--s-4);
+}
+
+.footer-ledger__strip {
+  height: calc(var(--strip-h) + var(--s-1));
+}
+
+/* The live "Now" row reserves two lines on narrow screens so the reading cannot push the ledger. */
+@media (max-width: 767.98px) {
+  [data-footer-now] {
+    min-height: calc(2em * var(--lh-data));
+  }
+}
+
+.footer-ledger__caption {
+  margin-top: var(--s-1);
+  max-width: 72ch;
+  color: var(--muted);
+  font-size: var(--t-small);
+}
+
+.footer-ledger__sign {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-5);
+  color: var(--muted);
+  font-size: var(--t-small);
+}
+
+/* ── Slot strip (ui/slotstrip.ts) ──────────────────────────────────────────────────────────── */
+.slotstrip {
+  display: block;
+  padding: var(--s-half);
+  border-radius: var(--radius);
+  background: var(--ink);
+}
+
+.slotstrip__bar {
+  position: relative;
+  height: var(--strip-h);
+}
+
+.slotstrip__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.slotstrip__day {
+  stroke: var(--ink);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.slotstrip__now {
+  position: absolute;
+  top: calc(-1 * var(--s-half));
+  bottom: calc(-1 * var(--s-half));
+  width: var(--rule-strong);
+  margin-inline-start: -1px;
+  background: var(--ivory);
+}
+
+.slotstrip__days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding-top: var(--s-half);
+  color: var(--slate);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────────────────────────── */
+.btn {
+  --btn-accent: var(--signal);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-1);
+  min-height: var(--touch);
+  padding: 0 var(--s-3);
+  border: var(--rule) solid transparent;
+  border-radius: var(--radius);
+  font-family: var(--font-text);
+  font-size: var(--t-small);
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--figure);
+  transition: transform var(--dur-press) var(--ease-curb);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Ivory on ink / ink on paper: the CTA. Its hover hairline is brass on ivory, amber on ink. */
+.btn--primary {
+  --btn-accent: var(--signal-inverse);
+  background: var(--figure);
+  color: var(--ground);
+}
+
+.btn--secondary {
+  border-color: var(--hairline-strong);
+}
+
+.btn--secondary:hover {
+  border-color: var(--figure);
+}
+
+.btn--quiet {
+  padding: 0;
+  min-height: var(--touch);
+}
+
+.btn__label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity var(--dur-micro) var(--ease-curb);
+}
+
+/* Hover draws an amber hairline under the label, scaleX from the left. */
+.btn__label::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: -5px;
+  height: var(--rule);
+  background: var(--btn-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--dur-ui) var(--ease-curb);
+}
+
+.btn:hover:not(:disabled) .btn__label::after,
+.btn:focus-visible .btn__label::after {
+  transform: scaleX(1);
+}
+
+.btn[data-state='pending'] .btn__label::after,
+.btn[data-state='confirmed'] .btn__label::after {
+  transform: scaleX(0);
+}
+
+/* Transaction states (ui/button.ts): idle → pending → confirmed | reverted */
+.btn__spinner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-micro) var(--ease-curb);
+}
+
+.btn__spinner > svg {
+  grid-area: 1 / 1;
+  width: 16px;
+  height: 16px;
+  transition:
+    transform var(--dur-ui) var(--ease-curb),
+    opacity var(--dur-micro) var(--ease-curb);
+}
+
+.btn__spinner .mark__c {
+  fill: currentColor;
+}
+
+.btn__spinner .mark__arc {
+  fill: var(--btn-accent);
+}
+
+.btn[data-state='pending'] .btn__label,
+.btn[data-state='confirmed'] .btn__label {
+  opacity: 0;
+}
+
+.btn[data-state='pending'] .btn__spinner,
+.btn[data-state='confirmed'] .btn__spinner,
+.btn[data-state='reverted'] .btn__spinner {
+  opacity: 1;
+}
+
+.btn[data-state='reverted'] .btn__label {
+  opacity: 0;
+}
+
+/* The only infinite animation: the arc turns once every 1.6 s while pending. */
+@keyframes curb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.btn[data-state='pending'] .spin__arc {
+  animation: curb-spin var(--dur-spin) linear infinite;
+}
+
+.btn[data-state='reverted'] .spin__arc {
+  animation: curb-spin var(--dur-spin) linear infinite;
+  animation-play-state: paused;
+}
+
+/* Confirmed: the two C halves rotate ±55° to meet; the arc gives way. */
+.btn[data-state='confirmed'] .spin__top {
+  transform: rotate(55deg);
+}
+
+.btn[data-state='confirmed'] .spin__bottom {
+  transform: rotate(-55deg);
+}
+
+.btn[data-state='confirmed'] .spin__arc {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn[data-state='pending'] .spin__arc {
+    animation: none;
+  }
+
+  .btn__spinner > svg,
+  .btn__label::after {
+    transition: none;
+  }
+}
+
+.tx-status {
+  margin-top: var(--s-1);
+  min-height: calc(var(--t-small) * var(--lh-small));
+  font-size: var(--t-small);
+  color: var(--muted);
+}
+
+.tx-status a {
+  color: var(--figure);
+}
+
+.tx-status code {
+  color: var(--figure);
+}
+
+/* ── Countdown: fixed-width digit cells (ui/countdown.ts) ──────────────────────────────────── */
+.countdown {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  font-stretch: var(--wdth-code);
+  white-space: nowrap;
+}
+
+.countdown__cell {
+  position: relative;
+  display: inline-block;
+  width: 1ch;
+  height: 1.3em;
+  overflow: hidden;
+  vertical-align: bottom;
+  line-height: 1.3;
+}
+
+.countdown__digit {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  will-change: transform;
+}
+
+.countdown__sep {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+  color: var(--muted);
+}
+
+.countdown__unit {
+  margin-inline: 0.15em 0.4em;
+  color: var(--muted);
+}
+
+.countdown--boxed .countdown__cell {
+  width: 1.4ch;
+  border: var(--rule) solid var(--hairline);
+  border-radius: var(--radius);
+  margin-inline: 1px;
+}
+
+/* ── Stat (ui/stat.ts) ─────────────────────────────────────────────────────────────────────── */
+.stat {
+  display: grid;
+  gap: var(--s-half);
+  align-content: start;
+}
+
+.stat__label {
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.stat__value {
+  font-family: var(--font-display);
+  font-size: var(--t-h2);
+  line-height: 1;
+  letter-spacing: var(--track-numeral);
+  font-variant-numeric: lining-nums;
+}
+
+.stat--numeral .stat__value {
+  font-size: var(--t-numeral);
+  line-height: 0.9;
+}
+
+.stat--data .stat__value {
+  font-family: var(--font-data);
+  font-size: var(--t-lede);
+  letter-spacing: 0;
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat__unit {
+  font-size: 0.5em;
+  margin-inline-start: 0.15em;
+  letter-spacing: 0;
+}
+
+.stat__asof,
+.stat__note {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  color: var(--muted);
+}
+
+.stat__note {
+  font-family: var(--font-text);
+  font-size: var(--t-small);
+}
+
+.stat[data-changed] .stat__value {
+  animation: curb-stat-change var(--dur-ui) var(--ease-curb);
+}
+
+@keyframes curb-stat-change {
+  from {
+    opacity: 0.35;
+  }
+}
+
+/* ── Copy (ui/copy.ts) ─────────────────────────────────────────────────────────────────────── */
+.copy {
+  display: inline-grid;
+  align-items: center;
+  min-height: var(--touch);
+  padding: 0 var(--s-1);
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--muted);
+  transition: color var(--dur-micro) var(--ease-curb);
+}
+
+.copy:hover {
+  color: var(--figure);
+}
+
+.copy__label,
+.copy__done {
+  grid-area: 1 / 1;
+  transition: opacity var(--dur-micro) var(--ease-curb);
+}
+
+.copy__done {
+  opacity: 0;
+  color: var(--figure);
+}
+
+.copy[data-copied] .copy__label {
+  opacity: 0;
+}
+
+.copy[data-copied] .copy__done {
+  opacity: 1;
+}
+
+/* ── Tx / address links (ui/txlink.ts) ─────────────────────────────────────────────────────── */
+.txlink {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Tags: "Specimen", "in build", "live" ──────────────────────────────────────────────────── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-half);
+  height: var(--s-3);
+  padding: 0 var(--s-1);
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tag--specimen {
+  border-style: dashed;
+}
+
+/* The live "now" pulse: Streetlamp on ink only (on paper it falls back to Bell brass via --lamp). */
+.pulse {
+  display: inline-block;
+  width: var(--s-1);
+  height: var(--s-1);
+  border-radius: 50%;
+  background: var(--lamp);
+}
+
+.pulse[data-beat] {
+  animation: curb-pulse var(--dur-reveal) var(--ease-curb);
+}
+
+@keyframes curb-pulse {
+  from {
+    transform: scale(1.8);
+    opacity: 0.4;
+  }
+}
+
+/* ── Stub pages (replaced by page owners) ──────────────────────────────────────────────────── */
+.stub__note {
+  margin-top: var(--s-3);
+}
+
+/* ── Lenis ─────────────────────────────────────────────────────────────────────────────────── */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+/* SplitText line masks */
+.split-line {
+  will-change: transform;
+}
