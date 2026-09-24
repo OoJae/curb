@@ -4,8 +4,8 @@
  *
  * While an address in addresses.ts is null, every reader returns the specimen fixtures with
  * `specimen: true` and every writer throws; the page labels it "Specimen" / "in build".
- * Getters the spec does not name (ClosedAuction.lotOf/lotCount) are marked GUESS in abi/closedAuction.ts;
- * re-check them after `node web/scripts/sync-abi.mjs`.
+ * ABIs are generated from forge out/ by `node web/scripts/sync-abi.mjs` (24 Sep, src/*.sol on main):
+ * ClosedAuction.lotOf/lotCount, ReopenNote.noteCount and ReopenPointer.headOf are the real getters.
  */
 import { decodeEventLog, maxUint256 } from "viem";
 import { CLOSED_AUCTION, CHAIN_ID, DEMO_IDS, REOPEN_NOTE, REOPEN_POINTER, USDG, assetByWrapper, symbolOf } from "./addresses.ts";
@@ -81,20 +81,15 @@ export async function getPointer(wrapper: Address): Promise<PointerEpoch> {
     return all.find((p) => p.wrapper.toLowerCase() === wrapper.toLowerCase()) ?? all[0];
   }
   const pc = publicClient();
-  const [epoch, open] = await pc.multicall({
-    allowFailure: false,
-    contracts: [
-      { address: REOPEN_POINTER!, abi: reopenPointerAbi, functionName: "epochOf", args: [wrapper] },
-      { address: REOPEN_POINTER!, abi: reopenPointerAbi, functionName: "isOpen", args: [wrapper] },
-    ],
-  });
-  const e = Number(epoch);
+  // headOf(w) → Head { uint32 epoch; bool open; uint64 lastShutAt; uint64 lastObservedAt }
+  const head = await pc.readContract({ address: REOPEN_POINTER!, abi: reopenPointerAbi, functionName: "headOf", args: [wrapper] });
+  const e = Number(head.epoch);
   const info = e > 0 ? await pc.readContract({ address: REOPEN_POINTER!, abi: reopenPointerAbi, functionName: "epochInfo", args: [wrapper, e] }) : null;
   return {
     wrapper,
     symbol: symbolOf(wrapper),
     epoch: e,
-    open: open as boolean,
+    open: head.open,
     shutSeenAtMs: info ? Number(info.shutSeenAt) * 1000 : null,
     openedAtMs: info ? Number(info.openedAt) * 1000 : null,
     openedBlock: info ? Number(info.openedBlock) : null,
@@ -164,15 +159,59 @@ export async function getNotes(ids: (number | bigint)[] = knownIds("notes"), hol
   return Promise.all(ids.map((id) => getNote(id, holder)));
 }
 
+/** ClosedAuction.Lot as viem decodes lotOf(lotId): uint32/uint8 → number, wider → bigint. */
 type LotTuple = {
   seller: Address; wrapper: Address; noteId: bigint; amount: bigint; startPrice: bigint; floorPrice: bigint; refPrice: bigint;
-  startAt: bigint; endAt: bigint; decaySeconds: bigint; epochAtMint: number; status: number; buyer: Address; clearedPrice: bigint; clearedAt: bigint;
+  startAt: bigint; endAt: bigint; decaySeconds: number; epochAtMint: number; status: number; buyer: Address; clearedPrice: bigint; clearedAt: bigint;
+  /** MarketClock.stateOf(w).nextTransitionAt read at list time; the lot's endAt is at most this. */
+  cutoff: bigint;
 };
 
-export async function getLot(lotId: number | bigint): Promise<AuctionLot> {
+/** A lot plus its cutoff (unix ms; null in fixtures, which predate the field). */
+export type LotView = AuctionLot & { cutoffMs: number | null };
+
+/** ClosedAuction.lotCount(): lot ids run 1..lotCount. Specimen: the fixture's highest id. */
+export async function getLotCount(): Promise<number> {
+  if (!auctionLive()) return (await fixture("lots")).reduce((m, l) => Math.max(m, Number(l.lotId)), 0);
+  return Number(await publicClient().readContract({ address: CLOSED_AUCTION!, abi: closedAuctionAbi, functionName: "lotCount" }));
+}
+
+/**
+ * The cap is per closure: ReopenNote.mintedInEpoch(wrapper, epoch) is what this closure's notes still
+ * have outstanding, bounded by capShares(wrapper). `epoch` is the pointer's current epoch (the one a
+ * note minted now is stamped with). Specimen: the fixture notes of that epoch against the D-3 cap.
+ */
+export async function getClosureCap(wrapper: Address): Promise<{ epoch: number; usedRaw: bigint; capRaw: bigint; specimen: boolean }> {
+  if (!notesLive()) {
+    const epoch = (await getPointer(wrapper)).epoch;
+    const used = (await fixture("notes"))
+      .filter((n) => n.wrapper.toLowerCase() === wrapper.toLowerCase() && n.epochAtMint === epoch)
+      .reduce((s, n) => s + BigInt(n.outstandingRaw), 0n);
+    const cap = BigInt(Math.round((assetByWrapper(wrapper)?.noteCapShares ?? 0) * 1e6)) * 10n ** 12n;
+    return { epoch, usedRaw: used, capRaw: cap, specimen: true };
+  }
+  const pc = publicClient();
+  const epoch = Number(await pc.readContract({ address: REOPEN_POINTER!, abi: reopenPointerAbi, functionName: "epochOf", args: [wrapper] }));
+  const [used, cap] = await pc.multicall({
+    allowFailure: false,
+    contracts: [
+      { address: REOPEN_NOTE!, abi: reopenNoteAbi, functionName: "mintedInEpoch", args: [wrapper, epoch] },
+      { address: REOPEN_NOTE!, abi: reopenNoteAbi, functionName: "capShares", args: [wrapper] },
+    ],
+  });
+  return { epoch, usedRaw: used as bigint, capRaw: cap as bigint, specimen: false };
+}
+
+/** ReopenNote.noteCount(): note ids run 1..noteCount. Specimen: the fixture's highest id. */
+export async function getNoteCount(): Promise<number> {
+  if (!notesLive()) return (await fixture("notes")).reduce((m, n) => Math.max(m, Number(n.id)), 0);
+  return Number(await publicClient().readContract({ address: REOPEN_NOTE!, abi: reopenNoteAbi, functionName: "noteCount" }));
+}
+
+export async function getLot(lotId: number | bigint): Promise<LotView> {
   if (!auctionLive()) {
     const all = await fixture("lots");
-    return all.find((l) => l.lotId === String(lotId)) ?? all[0];
+    return { ...(all.find((l) => l.lotId === String(lotId)) ?? all[0]!), cutoffMs: null };
   }
   const pc = publicClient();
   const block = await pc.getBlockNumber();
@@ -181,7 +220,7 @@ export async function getLot(lotId: number | bigint): Promise<AuctionLot> {
     blockNumber: block,
     allowFailure: true,
     contracts: [
-      { address: CLOSED_AUCTION!, abi: closedAuctionAbi, functionName: "lotOf", args: [id] }, // GUESS getter
+      { address: CLOSED_AUCTION!, abi: closedAuctionAbi, functionName: "lotOf", args: [id] },
       { address: CLOSED_AUCTION!, abi: closedAuctionAbi, functionName: "currentPrice", args: [id] },
       { address: CLOSED_AUCTION!, abi: closedAuctionAbi, functionName: "realisedDiscountBps", args: [id] },
     ],
@@ -216,14 +255,15 @@ export async function getLot(lotId: number | bigint): Promise<AuctionLot> {
     currentPrice: current !== null ? usd(current) : null,
     discountBpsVsRef: current !== null ? discountBps(l.refPrice, current) : null,
     realisedDiscountBps: res[2].status === "success" ? Number(res[2].result as bigint) : null,
+    cutoffMs: l.cutoff > 0n ? Number(l.cutoff) * 1000 : null,
     specimen: false,
     block: Number(block),
     source: "chain",
   };
 }
 
-export async function getLots(ids: (number | bigint)[] = knownIds("lots")): Promise<AuctionLot[]> {
-  if (!auctionLive()) return fixture("lots");
+export async function getLots(ids: (number | bigint)[] = knownIds("lots")): Promise<LotView[]> {
+  if (!auctionLive()) return (await fixture("lots")).map((l) => ({ ...l, cutoffMs: null }));
   return Promise.all(ids.map((id) => getLot(id)));
 }
 
@@ -270,7 +310,9 @@ export async function listNote(p: { noteId: bigint; amount: bigint; startPrice: 
   const auction = need(CLOSED_AUCTION, "ClosedAuction");
   const o = await write({
     address: auction, abi: closedAuctionAbi, functionName: "list",
-    args: [p.noteId, p.amount, p.startPrice, p.floorPrice, BigInt(p.decaySeconds), BigInt(p.endAt)],
+    // list(uint256 noteId, uint128 amount, uint128 startPrice, uint128 floorPrice, uint32 decaySeconds, uint64 endAt);
+    // endAt must be <= MarketClock.stateOf(wrapper).nextTransitionAt (else SpansTransition / NoCutoff).
+    args: [p.noteId, p.amount, p.startPrice, p.floorPrice, p.decaySeconds, BigInt(p.endAt)],
   });
   let lotId: bigint | null = null;
   for (const log of o.receipt.logs) {

@@ -3,8 +3,8 @@
  * cure clock, refusals), per docs/specs/W3W4-contracts.md and src/interfaces/IDepthCert.sol.
  *
  * While DEPTH_CERT / CURB_CREDIT are null, readers return the specimen fixtures (`specimen: true`) and
- * writers throw. CurbCredit's Solidity types are not in the spec: abi/curbCredit.ts is provisional (GUESS)
- * until `node web/scripts/sync-abi.mjs` regenerates it from forge out/.
+ * writers throw. ABIs are generated from forge out/ by `node web/scripts/sync-abi.mjs` (24 Sep, src/*.sol on
+ * main): CurbCredit.positionOf/cureOf return structs, DepthCert.bookOf lists a (wrapper, beneficiary) book.
  */
 import { decodeEventLog, maxUint256, toFunctionSelector } from "viem";
 import { CURB_CREDIT, DEPTH_CERT, MARKET_CLOCK, USDG, symbolOf } from "./addresses.ts";
@@ -31,8 +31,12 @@ export const APR_BPS = 500;
 export const MIN_BOND_BPS = 1000;
 export const MIN_LIFE_S = 10 * 60;
 export const MAX_LIFE_S = 30 * 86_400;
-export const MIN_CERT_LIFE_S = 3600; // CurbCredit counts only certs expiring ≥ 1 h out
+export const MIN_CERT_LIFE_S = 3600; // CurbCredit.MIN_CERT_LIFE (open market)
+/** CurbCredit.SHUT_CERT_LIFE: while shut a cert must outlive max(73 h, next transition + 1 h), plus a cure. */
+export const SHUT_CERT_LIFE_S = 73 * 3600;
 export const CURE_OPEN_SECONDS = 1800;
+/** DepthCert.MIN_NOTIONAL: every cert promises at least 1 USDG. */
+export const MIN_NOTIONAL_USDG = 1_000_000n;
 export const CERT_STATUS: CertStatus[] = ["NONE", "LIVE", "FADED", "CLOSED"];
 
 export const depthLive = () => DEPTH_CERT !== null && !isMock();
@@ -58,9 +62,20 @@ export function regimeCapBps(regime: RegimeName, cap: number): number {
 }
 
 /**
- * The published LTV function, in display units (shares, USDG/share, USD/share):
+ * CurbCredit.ltvFor (24 Sep review): a PER-POSITION ratio, the same for every borrower:
+ *   ltvFor = 0 if UNKNOWN, no honoured depth or no price; else min(regimeCap, minBid / P · 1e4)
+ */
+export function ltvForBps(p: { depthShares: number; minBidPx: number; price: number | null; regimeCapBps: number }): number {
+  if (!p.price || p.depthShares <= 0 || p.minBidPx <= 0 || p.regimeCapBps === 0) return 0;
+  return Math.min(p.regimeCapBps, Math.floor((p.minBidPx / p.price) * 10_000));
+}
+
+/**
+ * What the POOL can borrow against an asset, as a share of its collateral's value, in display units:
+ * min(ltvFor, realisable / value(totalCollateral)), realisable = notional(min(totalCollateral, depth), minBid)
+ * (CurbCredit refuses a borrow past realisable with ExceedsDepth). Equivalently:
  *   basis = totalCollateral > 0 ? totalCollateral : depth;  covered = min(basis, depth)
- *   ltv   = 0 if depth == 0 or no price; else min(regimeCap, covered · minBid / (basis · P) · 1e4)
+ *   = 0 if depth == 0 or no price; else min(regimeCap, covered · minBid / (basis · P) · 1e4)
  */
 export function ltvBpsAt(p: { depthShares: number; totalCollateral: number; minBidPx: number; price: number | null; regimeCapBps: number }): number {
   if (!p.price || p.depthShares <= 0 || p.regimeCapBps === 0) return 0;
@@ -158,6 +173,13 @@ export async function getCerts(ids: (number | bigint)[] = knownIds("certs")): Pr
   return Promise.all(ids.map((id) => getCert(id)));
 }
 
+/** DepthCert.bookOf(wrapper, beneficiary): the cert ids a book lists, takeable or not. Specimen: fixture ids. */
+export async function getBook(wrapper: Address, beneficiary: Address): Promise<number[]> {
+  if (!depthLive()) return (await fixture("certs")).filter((c) => c.wrapper.toLowerCase() === wrapper.toLowerCase()).map((c) => Number(c.id));
+  const ids = await publicClient().readContract({ address: DEPTH_CERT!, abi: depthCertAbi, functionName: "bookOf", args: [wrapper, beneficiary] });
+  return ids.map((x) => Number(x));
+}
+
 async function regimeOf(wrapper: Address): Promise<{ regime: RegimeName; cap: number }> {
   const pc = publicClient();
   const [r, cap] = await pc.multicall({
@@ -187,7 +209,11 @@ export async function getDepth(wrapper: Address, certIds: (number | bigint)[] = 
   }
   const pc = publicClient();
   const block = await pc.getBlock({ blockTag: "latest" });
-  const minExpiry = block.timestamp + BigInt(MIN_CERT_LIFE_S);
+  // Count certs exactly as CurbCredit does: expiry >= minCertExpiry(asset) (an open-market hour, or while shut
+  // the next transition / 73 h, plus a full cure). Falls back to the open-market horizon if unreadable.
+  const minExpiry = await pc
+    .readContract({ address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "minCertExpiry", args: [wrapper], blockNumber: block.number })
+    .catch(() => block.timestamp + BigInt(MIN_CERT_LIFE_S + CURE_OPEN_SECONDS));
   const res = await pc.multicall({
     blockNumber: block.number,
     allowFailure: true,
@@ -207,7 +233,10 @@ export async function getDepth(wrapper: Address, certIds: (number | bigint)[] = 
   const capBps = regimeCapBps(regime, cap);
   const minBidPx = minBid > 0n ? units(minBid, 6) : null;
   const honouredShares = units(dS);
-  const certs = (await getCerts(certIds)).filter((c) => c.wrapper.toLowerCase() === wrapper.toLowerCase());
+  // The book CurbCredit reads (certs naming it), plus any other ids this browser knows for the asset.
+  const book = await getBook(wrapper, CURB_CREDIT!).catch(() => [] as number[]);
+  const ids = [...new Set([...book, ...certIds.map(Number)])].sort((a, b) => b - a);
+  const certs = (await getCerts(ids)).filter((c) => c.wrapper.toLowerCase() === wrapper.toLowerCase());
   const maxDepth = Math.max(honouredShares * 2, totalCollateral * 1.5, 0.01);
   const curve: LtvCurve = {
     wrapper,
@@ -251,16 +280,18 @@ export async function getCreditPosition(borrower: Address, wrapper: Address): Pr
     blockNumber: block,
     allowFailure: true,
     contracts: [
-      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "positions", args: [borrower, wrapper] }, // GUESS getter
+      // positionOf(b, a) → Position { uint256 collateral; uint256 principal; uint256 accrued; uint64 lastAccrual }
+      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "positionOf", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "debtOf", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "limitOf", args: [borrower, wrapper] },
-      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "ltvFor", args: [wrapper] },
+      // The ratio limitOf applies: ltvEffective = ltvFor · min(1, cover / totalPrincipal) (P4 re-review).
+      { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "ltvEffective", args: [wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "isBreached", args: [borrower, wrapper] },
       { address: CURB_CREDIT!, abi: curbCreditAbi, functionName: "cureOf", args: [borrower, wrapper] },
     ],
   });
   const ok = <T,>(i: number, d: T): T => (res[i].status === "success" ? (res[i].result as T) : d);
-  const pos = ok<readonly [bigint, bigint, bigint, bigint]>(0, [0n, 0n, 0n, 0n]);
+  const pos = ok<{ collateral: bigint; principal: bigint; accrued: bigint; lastAccrual: bigint }>(0, { collateral: 0n, principal: 0n, accrued: 0n, lastAccrual: 0n });
   const debt = ok<bigint>(1, 0n);
   const limit = ok<bigint>(2, 0n);
   const [known, breached] = ok<readonly [boolean, boolean]>(4, [false, false]);
@@ -271,8 +302,8 @@ export async function getCreditPosition(borrower: Address, wrapper: Address): Pr
     borrower,
     wrapper,
     symbol: symbolOf(wrapper),
-    collateralRaw: pos[0].toString(),
-    collateral: units(pos[0]),
+    collateralRaw: pos.collateral.toString(),
+    collateral: units(pos.collateral),
     debt: units(debt, 6),
     debtRaw: debt.toString(),
     limit: units(limit, 6),
