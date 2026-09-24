@@ -192,14 +192,25 @@ export async function S05(ctx) {
   return { path: await s.finish() };
 }
 
+/** Wait (up to 60 s) until an instrument page's status tag says it is reading the live contracts. The site
+ *  reads the public RPC at 3 requests a second, so the first paint is the specimen for a few seconds. */
+async function waitLive(s, sel) {
+  return s.page.waitForFunction((q) => /Live on X Layer/.test(document.querySelector(q)?.textContent ?? ""), sel, { timeout: 60000 })
+    .then(() => s.page.waitForTimeout(1500)).then(() => true, () => false);
+}
+
 /** S06 · /notes: the certificate (guilloche, tilt) and the descending clock. Variant B = specimen. */
 export async function S06(ctx) {
   const s = await newSession(clipId(ctx, "S06"), { headless: !ctx.headed });
   const t = await sitePage(s, site(ctx, "/notes"), /reopen/i);
   ok(s.id, "honest label when not live", !/specimen/i.test(t) || /in build/i.test(t));
-  await s.moveToSel("canvas, .nt-certificate, [data-certificate]"); await s.hold(1400);
+  ok(s.id, "live contracts read (not the specimen)", await waitLive(s, "[data-nt-status]"));
+  await s.moveToSel("[data-nt-cert] .crt, .crt"); await s.hold(1400);
   await s.move(W * 0.62, H * 0.42, 40); await s.hold(1400);
   await s.still("S06-certificate");
+  // The descending clock for the live lot: cleared price, realised discount once the reopen is printed.
+  const clockY = await s.page.locator("#clock").evaluate((el) => el.getBoundingClientRect().top + window.scrollY - 40).catch(() => null);
+  if (clockY != null) { await s.scrollTo(clockY, 1600); await s.hold(1800); await s.still("S06-clock"); }
   return { path: await s.finish() };
 }
 
@@ -208,6 +219,7 @@ export async function S07(ctx) {
   const s = await newSession(clipId(ctx, "S07"), { headless: !ctx.headed });
   const t = await sitePage(s, site(ctx, "/depth"), /LTV|depth/i);
   ok(s.id, "honest label when not live", !/specimen/i.test(t) || /in build/i.test(t));
+  ok(s.id, "live contracts read (not the specimen)", await waitLive(s, "[data-dp-status]"));
   const handle = s.page.locator("[data-handle], .dp-handle, [role=slider]").first();
   if (await handle.count()) {
     const b = await s.moveTo(handle);
