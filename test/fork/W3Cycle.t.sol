@@ -59,8 +59,12 @@ contract W3CycleForkTest is Test {
     ReopenNote note;
     ClosedAuction auction;
 
+    /// Latest block by default. The public RPC answers in ~1-2 s per request and a fork at "latest" is never
+    /// cached, so a full run takes minutes; pin W3_FORK_BLOCK to re-run from Foundry's on-disk RPC cache.
     function setUp() public {
-        vm.createSelectFork("xlayer");
+        uint256 pinned = vm.envOr("W3_FORK_BLOCK", uint256(0));
+        if (pinned == 0) vm.createSelectFork("xlayer");
+        else vm.createSelectFork("xlayer", pinned);
     }
 
     // --- helpers ----------------------------------------------------------------------------------
