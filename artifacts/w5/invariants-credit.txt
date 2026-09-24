@@ -1,6 +1,6 @@
 CurbCredit invariants (P4) -- test/invariant/CreditInvariant.t.sol + test/invariant/handlers/CreditHandler.sol
-generated: 2026-09-24T13:48:44Z
-commit:    f3df611 (+ working tree)
+generated: 2026-09-24T14:29:00Z
+commit:    37ca73c (+ working tree)
 forge:     forge Version: 1.8.3-Homebrew
 command:   CREDIT_INV_LOG=artifacts/w5/.credit-cov.csv forge test --match-path test/invariant/CreditInvariant.t.sol
 config:    runs 256, depth 128 (inline forge-config), fail_on_revert false
@@ -16,8 +16,8 @@ Properties (assertion messages in the test):
 ---- forge output ----
 
 Ran 1 test for test/invariant/CreditInvariant.t.sol:CreditHandlerCoverageTest
-[PASS] test_handler_reaches_every_state() (gas: 25065175)
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 3.30ms (2.90ms CPU time)
+[PASS] test_handler_reaches_every_state() (gas: 25065187)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.37ms (6.63ms CPU time)
 
 Ran 1 test for test/invariant/CreditInvariant.t.sol:CreditInvariantTest
 [PASS]
@@ -33,65 +33,65 @@ CreditInvariantTest invariants:
 ╭---------------+-------------+-------+---------+----------╮
 | Contract      | Selector    | Calls | Reverts | Discards |
 +==========================================================+
-| CreditHandler | borrow      | 1869  | 0       | 0        |
+| CreditHandler | borrow      | 1847  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | defund      | 1837  | 0       | 0        |
+| CreditHandler | defund      | 1787  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | deposit     | 1761  | 0       | 0        |
+| CreditHandler | deposit     | 1806  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | flagBreach  | 1872  | 0       | 0        |
+| CreditHandler | flagBreach  | 1849  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | fund        | 1841  | 0       | 0        |
+| CreditHandler | fund        | 1830  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | keeperRun   | 1873  | 0       | 0        |
+| CreditHandler | keeperRun   | 1773  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | liquidate   | 1739  | 0       | 0        |
+| CreditHandler | liquidate   | 1767  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | longWarp    | 1781  | 0       | 0        |
+| CreditHandler | longWarp    | 1842  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | realise     | 1817  | 0       | 0        |
+| CreditHandler | realise     | 1832  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | repay       | 1831  | 0       | 0        |
+| CreditHandler | repay       | 1880  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | setDepth    | 1797  | 0       | 0        |
+| CreditHandler | setDepth    | 1799  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | setEligible | 1843  | 0       | 0        |
+| CreditHandler | setEligible | 1838  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | setPrice    | 1772  | 0       | 0        |
+| CreditHandler | setPrice    | 1820  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | setRegime   | 1913  | 0       | 0        |
+| CreditHandler | setRegime   | 1816  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | tick        | 1839  | 0       | 0        |
+| CreditHandler | tick        | 1789  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | tickAll     | 1798  | 0       | 0        |
+| CreditHandler | tickAll     | 1858  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | warp        | 1780  | 0       | 0        |
+| CreditHandler | warp        | 1794  | 0       | 0        |
 |---------------+-------------+-------+---------+----------|
-| CreditHandler | withdraw    | 1805  | 0       | 0        |
+| CreditHandler | withdraw    | 1841  | 0       | 0        |
 ╰---------------+-------------+-------+---------+----------╯
 
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 12.74s (12.74s CPU time)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 23.50s (23.49s CPU time)
 
-Ran 2 test suites in 12.75s (12.75s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+Ran 2 test suites in 23.50s (23.51s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
 
 ---- handler coverage, summed over all runs (from afterInvariant; refusal columns by reason) ----
 runs logged: 257
-  borrowsOk        total=734    runs-with-any=228
-  refusals         total=1374   runs-with-any=253
+  borrowsOk        total=725    runs-with-any=225
+  refusals         total=1373   runs-with-any=257
   breaches         total=132    runs-with-any=108
-  ticks            total=1373   runs-with-any=101
-  shutTicks        total=500    runs-with-any=47
-  liquidations     total=20     runs-with-any=20
-  fills            total=9      runs-with-any=9
-  fades            total=6      runs-with-any=5
-  Ineligible       total=242    runs-with-any=109
+  ticks            total=1544   runs-with-any=101
+  shutTicks        total=450    runs-with-any=36
+  liquidations     total=31     runs-with-any=31
+  fills            total=22     runs-with-any=13
+  fades            total=23     runs-with-any=17
+  Ineligible       total=229    runs-with-any=108
   UnsupportedAsset total=0      runs-with-any=0
-  MarketUnknown    total=157    runs-with-any=65
-  PriceUnavailable total=74     runs-with-any=28
-  NoDepth          total=266    runs-with-any=112
-  ExceedsLtv       total=322    runs-with-any=163
-  ExceedsDepth     total=2      runs-with-any=2
-  ReserveShort     total=58     runs-with-any=35
-  InCure           total=129    runs-with-any=61
-  WouldBreach      total=124    runs-with-any=87
+  MarketUnknown    total=170    runs-with-any=67
+  PriceUnavailable total=69     runs-with-any=29
+  NoDepth          total=248    runs-with-any=121
+  ExceedsLtv       total=350    runs-with-any=164
+  ExceedsDepth     total=11     runs-with-any=7
+  ReserveShort     total=47     runs-with-any=30
+  InCure           total=120    runs-with-any=56
+  WouldBreach      total=129    runs-with-any=88
   (UnsupportedAsset is unreachable by construction in the handler; it is covered in test/CurbCredit.t.sol.)
