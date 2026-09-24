@@ -48,6 +48,8 @@ export const PREVIEW_SCHEMA = "curb.asp.calendar.preview/1";
 export const CALENDAR_METHOD = "curb.reopen/1";
 export const ISSUER_EARLY_CUT_MS = 300_000;
 export const DEFAULT_HORIZON_DAYS = 7;
+/** The calendar a request with no symbol gets: Tencent, the Hong Kong name the rest of Curb is staged on. */
+export const DEFAULT_SYMBOL = "wTCENTx";
 export const MAX_HORIZON_DAYS = 14;
 
 const DAY = 86_400_000;

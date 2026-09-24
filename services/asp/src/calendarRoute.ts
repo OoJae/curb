@@ -1,5 +1,6 @@
 /**
- * GET /v1/closure-calendar?symbol=wTCENTx&horizonDays=7 -- the priced handler.
+ * GET /v1/closure-calendar?symbol=wTCENTx&horizonDays=7 -- the priced handler. Both parameters are
+ * optional: the symbol defaults to wTCENTx, the horizon to 7 days.
  *
  * Validation and availability are checked in `accept`, before any payment: an unknown symbol is a free
  * 400 that lists the valid ones, and an issuer that has been dark for 30 minutes is a free 503. `build`
@@ -8,7 +9,7 @@
  *
  * The preview is cut from the same answer the buyer would pay for, so it cannot drift from it.
  */
-import { buildCalendar, previewOf, DEFAULT_HORIZON_DAYS, MAX_HORIZON_DAYS } from "./closureCalendar.ts";
+import { buildCalendar, previewOf, DEFAULT_HORIZON_DAYS, DEFAULT_SYMBOL, MAX_HORIZON_DAYS } from "./closureCalendar.ts";
 import type { TimelineCache } from "./closureCalendar.ts";
 import type { VenueStore } from "./venue.ts";
 import type { Asset } from "./cohort.ts";
@@ -55,16 +56,19 @@ export function calendarHandler(d: CalendarRouteDeps): PricedHandler {
       if (cohort.length === 0) return refuse(503, { error: "cohort-unavailable" });
       const valid = cohort.map((a) => a.symbol);
 
+      // No symbol means DEFAULT_SYMBOL, not an error: OKX's marketplace probes an endpoint with no
+      // parameters and expects the challenge for the priced answer, and the listing documents the default.
       const s = single(adapter, "symbol");
       if ("ok" in s) return s;
-      if (!s.v || !s.v.trim()) return refuse(400, { error: "missing-symbol", valid });
-      const asset = findAsset(cohort, s.v);
-      if (!asset) return refuse(400, { error: "unknown-symbol", symbol: s.v.slice(0, 64), valid });
+      const symbol = s.v && s.v.trim() ? s.v : DEFAULT_SYMBOL;
+      const asset = findAsset(cohort, symbol);
+      if (!asset) return refuse(400, { error: "unknown-symbol", symbol: symbol.slice(0, 64), valid });
 
+      // Absent or empty is the default, as in intParam.
       const h = single(adapter, "horizonDays");
       if ("ok" in h) return h;
       let horizonDays = DEFAULT_HORIZON_DAYS;
-      if (h.v !== undefined) {
+      if (h.v !== undefined && h.v.trim() !== "") {
         const n = /^\d{1,2}$/.test(h.v) ? Number(h.v) : NaN;
         if (!(n >= 1 && n <= MAX_HORIZON_DAYS)) {
           return refuse(400, { error: "bad-horizon", horizonDays: h.v.slice(0, 16), min: 1, max: MAX_HORIZON_DAYS });

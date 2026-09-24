@@ -195,8 +195,35 @@ Verified live from outside, 24 Sept 07:1xZ:
 | unpaid `/v1/accuracy-record`, `/v1/discount-curve` | **402**, `50000` ($0.05) and `100000` ($0.10) |
 | `/`, `/v1/assets`, `/.well-known/x402` | 200 |
 
-**Not yet done:** a paid call from an external wallet holding USDT0 (the end-to-end gate), and the OKX
-marketplace listing itself, which needs the `onchainos` CLI, an Agentic Wallet email login and an avatar.
+### Listed on the OKX AI marketplace — agent #13869, 24 Sept 2026
+
+Registered with `onchainos` 4.6.2 from the team's Agentic Wallet `0x055b…7105` (see `docs/WALLETS.md`)
+in [`0xe2420407…ccc7`](https://www.oklink.com/xlayer/tx/0xe2420407a65b51a468f060a52496e15587ce13d1c23fccff30330d8ab293ccc7),
+then submitted for listing review (`submitApproval.success: true`, under review). The exact text
+submitted is `script/asp/agent-description.txt` and `script/asp/services.json`; the avatar is
+`script/asp/curb-avatar.png`. Three A2MCP services: Closure Calendar ($0.01), Reopen Price Accuracy
+Record ($0.05), Closure Discount by Duration ($0.10). No subscription and no free trial: A2MCP
+forbids both.
+
+Before submitting, four independent reviewers checked each claim in the text against the live endpoints
+and the code. They found one blocker in the service and two claims the data did not support:
+
+- **OKX's endpoint self-check is `curl -i -X POST <endpoint>` with no parameters, and expects 402.** The
+  API answered 405 to any POST, and 400 to a bare calendar GET (`missing-symbol`). Fixed and redeployed:
+  a priced route now answers POST exactly as GET, with parameters from the query string, a flat JSON body
+  or a form body (the same name in two places with different values is a free 400); the calendar's
+  `symbol` defaults to wTCENTx; an empty `horizonDays=` means the default, as on the other routes.
+  Verified live: a bare POST to all three priced paths returns 402 with the challenge, and
+  `onchainos payment quote` on each bare URL decodes it as supported, paying curb-revenue.
+- **"Closing VWAP" was the last pool price in all 15 settled rows**: nothing traded in the 15 minutes
+  before any cut, so the keeper committed the last print as the baseline, and the chain cannot tell the
+  two apart. The listing and the route's own description now say "the pre-close price (the 15-minute
+  closing VWAP, or the last pool price when nothing traded)".
+- **"A mark before every reopen" overstated coverage**: wSHEINx has no price source and closures shorter
+  than 30 minutes are skipped. The agent description now says "the closures it has graded".
+
+**Not yet done:** a paid call from a wallet holding USDT0 (the end-to-end gate). The Agentic Wallet above
+holds none yet.
 
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 

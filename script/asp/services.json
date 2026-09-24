@@ -1,0 +1,23 @@
+[
+  {
+    "serviceName": "Closure Calendar",
+    "serviceType": "A2MCP",
+    "fee": "0.01",
+    "endpoint": "https://api.curb.markets/v1/closure-calendar",
+    "serviceDescription": "1. [Service Description] For one tokenized equity on X Layer, returns every window in the next 1-14 days in which the issuer's primary order cap is zero, and the instant it returns, computed from the issuer's published schedule and limits plus its observed cut to zero 5 minutes before each period ends (a 12:00 close starts at 11:55), with the current period and cap and the hashes of the exact issuer responses used.\n2. [Parameter Spec] symbol(string, optional): wrapped xStock, one of wTCENTx, wSHEINx, wXIAOx, wMEITx, wNVDAx, wAAPLx, default wTCENTx; horizonDays(integer, optional): days ahead to cover, 1-14, default 7\n3. [Request Method] GET\n4. [Request Example] curl \"https://api.curb.markets/v1/closure-calendar?symbol=wTCENTx&horizonDays=7\""
+  },
+  {
+    "serviceName": "Reopen Price Accuracy Record",
+    "serviceType": "A2MCP",
+    "fee": "0.05",
+    "endpoint": "https://api.curb.markets/v1/accuracy-record",
+    "serviceDescription": "1. [Service Description] Returns Curb's graded record, read from its Scorecard contract on X Layer at one pinned block: the reopen price marks committed on chain before each reopen, newest first up to limit, each with both baselines, the reopen price the contract read from the pool itself and the errors in basis points; per-asset counts, ties and median errors; and the contract's own win tally across all assets, in which a tie is not a win.\n2. [Parameter Spec] symbol(string, optional): one of wTCENTx, wXIAOx, wMEITx, wNVDAx, wAAPLx (wNVDAx and wAAPLx close only at weekends, so they have few or no rows yet), omit for every graded asset; limit(integer, optional): newest rows to return, 1-200, default 50\n3. [Request Method] GET\n4. [Request Example] curl \"https://api.curb.markets/v1/accuracy-record?symbol=wTCENTx&limit=20\""
+  },
+  {
+    "serviceName": "Closure Discount by Duration",
+    "serviceType": "A2MCP",
+    "fee": "0.1",
+    "endpoint": "https://api.curb.markets/v1/discount-curve",
+    "serviceDescription": "1. [Service Description] Returns one observation per closure of a tokenized equity on X Layer that Curb marked on chain before the reopen and its Scorecard contract then settled: how long the primary market was shut (from the on-chain close to the scheduled reopen), the discount in basis points from the pre-close price (the 15-minute closing VWAP, or the last pool price when nothing traded) to the reopen price, and the discount Curb's mark implied, grouped into five duration buckets with counts. Chain data only; nothing is fitted.\n2. [Parameter Spec] symbol(string, optional): one of wTCENTx, wXIAOx, wMEITx, wNVDAx, wAAPLx (wNVDAx and wAAPLx close only at weekends, so they have few or no rows yet), omit for every graded asset; minMinutes(integer, optional): shortest closure counted in the buckets (shorter ones are still listed, marked excluded), 30-10080, default 30\n3. [Request Method] GET\n4. [Request Example] curl \"https://api.curb.markets/v1/discount-curve?symbol=wTCENTx&minMinutes=30\""
+  }
+]

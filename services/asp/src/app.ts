@@ -10,7 +10,8 @@
  *   GET /receipts/<id>.json    a paid call's receipt, immutable
  *   GET /issuer/<hash>.json    the exact issuer bytes a calendar was computed from, immutable
  *
- * Priced (pay/flow.ts): /v1/closure-calendar, /v1/accuracy-record, /v1/discount-curve. A priced route
+ * Priced (pay/flow.ts): /v1/closure-calendar, /v1/accuracy-record, /v1/discount-curve, by GET or by POST
+ * with the same parameters as a body (NodeHttpAdapter.asGet); every other method is a 405. A priced route
  * without a handler (the two Scorecard routes when SCORECARD is unset) answers 503 not-yet-available
  * BEFORE the payment layer: it is listed with its price, but it never issues a challenge for an answer
  * that does not exist.
@@ -89,12 +90,20 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
     try { body = await bufferBody(req); } catch (e) {
       return sendJson(res, e instanceof BodyTooLarge ? 413 : 400, { error: e instanceof BodyTooLarge ? "body-too-large" : "bad-request" });
     }
-    const adapter = new NodeHttpAdapter(req, body, d.publicUrl);
-    const method = adapter.getMethod();
+    const request = new NodeHttpAdapter(req, body, d.publicUrl);
+    const method = request.getMethod();
     if (method === "OPTIONS") return send(res, 204, "");
-    if (method !== "GET") return sendJson(res, 405, { error: "method-not-allowed" }, { allow: "GET, OPTIONS" });
 
-    const path = adapter.getPath().length > 1 ? adapter.getPath().replace(/\/+$/, "") : adapter.getPath();
+    const path = request.getPath().length > 1 ? request.getPath().replace(/\/+$/, "") : request.getPath();
+    const priced = PRICED_ROUTES.find((r) => r.path === path);
+    // A priced route also answers POST, as the GET it stands for (NodeHttpAdapter.asGet). Nothing else does.
+    if (method !== "GET" && !(method === "POST" && priced)) {
+      return sendJson(res, 405, { error: "method-not-allowed" }, { allow: priced ? "GET, POST, OPTIONS" : "GET, OPTIONS" });
+    }
+    const asGet = request.asGet();
+    if (!asGet.ok) return sendJson(res, asGet.status, asGet.body);
+    const adapter = asGet.adapter;
+
     switch (path) {
       case "/": return send(res, 200, home, { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" });
       case "/healthz": return healthz(res);
@@ -109,7 +118,6 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
       if (existsSync(p)) return send(res, 200, readFileSync(p), { "content-type": "application/json; charset=utf-8", "cache-control": IMMUTABLE });
       return sendJson(res, 404, { error: "not-found" });
     }
-    const priced = PRICED_ROUTES.find((r) => r.path === path);
     if (priced) {
       return servePriced(res, adapter, {
         payments: d.payments, handler: d.handlers.get(priced.key), route: priced,
