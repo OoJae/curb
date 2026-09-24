@@ -61,8 +61,8 @@ test("wins are strict, exactly as Scorecard.settle() counts them: an exact tie i
   assert.equal(tie.method, "curb.scorecard.mark/1");
   assert.equal(tie.evidenceUrl, `${EVIDENCE_BASE_URL}${tie.inputRoot}.json`);
   assert.match(tie.evidenceUrl, /^https:\/\/archive\.curb\.markets\/marks\/0x[0-9a-f]{64}\.json$/);
-  assert.equal(tie.evidenceStatus, "pending-publisher", "the archive is not live, and the row says so");
-  assert.match(a.evidenceNote, /not live yet/);
+  assert.equal(tie.evidenceStatus, "archived");
+  assert.match(a.evidenceNote, /write-once archive/);
   assert.deepEqual(JSON.parse(JSON.stringify(a)), a, "plain JSON: no bigint, no undefined");
 });
 

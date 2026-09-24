@@ -681,7 +681,7 @@ test("accuracy record: the 402 carries only the skill triple and row count; paid
     assert.equal(body.rows.length, 2);
     assert.equal(body.rows[0].settled, false, "newest first: the row still owed a settle");
     assert.deepEqual([body.rows[1].tie, body.rows[1].beatLastPrint, body.rows[1].beatClosingVwap], [true, false, false]);
-    assert.equal(body.rows[1].evidenceStatus, "pending-publisher");
+    assert.equal(body.rows[1].evidenceStatus, "archived");
     assert.deepEqual(body.perSymbol.wTCENTx, {
       wrapper: COHORT[0].wrapper, committed: 4, settled: 3, beatLast: 0, beatVwap: 0, ties: 3, tiesClosingVwap: 3,
       medianCurbErrorBps: 5, medianLastPrintErrorBps: 5,

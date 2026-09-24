@@ -76,6 +76,12 @@ export default defineRailway(() => {
       ATTESTOR_KEY_PASSWORD: preserve(),
       // healthchecks.io ping URL (period 5m, grace 3m). A leaked ping URL can mask an outage, so it stays out of source.
       HC_URL: preserve(),
+      // R2 archive credentials (publish.ts): token curb-archive-a, Object Read & Write on bucket curb-archive
+      // only. Set 24 Sep 2026 via `railway variable set --stdin` from ~/.foundry/curb-secrets/r2-a.env.
+      R2_ACCOUNT_ID: preserve(),
+      R2_ACCESS_KEY_ID: preserve(),
+      R2_SECRET_ACCESS_KEY: preserve(),
+      R2_BUCKET: preserve(),
     },
   });
 

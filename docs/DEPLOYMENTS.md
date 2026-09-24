@@ -152,8 +152,28 @@ compromised host must not be able to rewrite the record.
 `public, max-age=31536000, immutable`; the index is rewritten and must not. A zone-wide cache rule
 on the hostname would make the index immutable too, so the publisher sets `Cache-Control` on each PUT.
 
-**Not yet done, deliberately:** the three R2 API tokens (host A, host B, keeper) are created when the
-publisher exists, so the secrets go straight to where they are used instead of sitting unused.
+### Publisher live — 24 Sept 2026 20:32Z
+
+Three **Account API tokens**, one per writer, each **Object Read & Write on `curb-archive` only** (no bucket
+configuration, so none can lift a lock): `curb-archive-a` (host A), `curb-archive-b` (host B),
+`curb-archive-keeper`. Created in the dashboard and written straight to where they are used: Railway variables on
+`attestor-a` (kept by `preserve()` in `.railway/railway.ts`), and root-owned `0600` files
+`/etc/curb/attestor-b.r2.env` and `/etc/curb/keeper.r2.env` on the VPS. The Mac keeps a `0600` copy in
+`~/.foundry/curb-secrets/` for the backfill. No value was printed or committed.
+
+| writer | deployed | `/healthz` `archive` after the deploy |
+|---|---|---|
+| host A (`railway up services/attestor`, deployment `016bc550`) | 20:28Z | `enabled: true`, first object `rounds/0x0d42afa2…5374.json` published in the first minute, `failed: 0` |
+| host B (`script/hostb/deploy.sh`) | 20:33Z | `enabled: true`, `armed: true`, standby |
+| keeper (same script, `KEEPER_MODE=live`) | 20:33Z | `enabled: true`, `mode: live` |
+
+`https://archive.curb.markets/rounds/0x0d42afa253ba138690564fa19f3ab0dc6a6d2f0e9d80b7df2af8849581da5374.json`
+→ **200**. Everything written before 20:32Z is filled by `tools/archive/backfill.ts`, which checks each object
+against the chain (`curb-verify tx`'s own pipeline) before it uploads it; log in `artifacts/archive/`.
+
+**A superseded token.** A first token, `curb-archive-host-a`, was created on 24 Sep ~14:00Z. Its value was
+exposed in an automation log while the dashboard was being read, so it was never used and is to be deleted;
+it had the same object-only scope on this one bucket.
 
 ## X Layer Builder Code — `dd7u50nckt5e729f`, 24 Sept 2026
 

@@ -14,8 +14,10 @@
  *   medians per asset                       order statistics of the settled rows (stats.ts), nothing fitted.
  *
  * The evidence link is stated as what it is. Each row names its input bundle by inputRoot, the Merkle root
- * committed on chain; the archive that will serve those bundles publicly is not live yet, so every row
- * says evidenceStatus "pending-publisher" instead of implying the link resolves today.
+ * committed on chain, in Curb's write-once R2 archive. The keeper publishes each new bundle after its
+ * fsync; tools/archive/backfill.ts filled the rows committed before the publisher went live (24 Sep 2026),
+ * checking each against the chain before upload. A row committed in the last few minutes can still be in
+ * the keeper's publish queue.
  */
 import { grade, recount } from "./index/scorecard.ts";
 import type { ScorecardRow, ScorecardSnapshot } from "./index/scorecard.ts";
@@ -25,7 +27,7 @@ import { median } from "./stats.ts";
 export const RECORD_SCHEMA = "curb.asp.record/1";
 export const RECORD_PREVIEW_SCHEMA = "curb.asp.record.preview/1";
 export const EVIDENCE_BASE_URL = "https://archive.curb.markets/marks/";
-export const EVIDENCE_STATUS = "pending-publisher";
+export const EVIDENCE_STATUS = "archived";
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 200;
 
@@ -233,8 +235,9 @@ export function buildRecord(i: RecordInput): RecordAnswer {
     rows,
     note,
     evidenceNote:
-      "evidenceUrl is where Curb's archive will serve each row's input bundle, named by the inputRoot committed on chain. " +
-      `The archive publisher is not live yet: evidenceStatus is "${EVIDENCE_STATUS}" and the link does not resolve today.`,
+      "evidenceUrl is each row's input bundle in Curb's write-once archive, named by the inputRoot committed on chain. " +
+      "Every object was checked against the chain before upload, and anyone can re-derive the row from its bytes. " +
+      "A row committed in the last few minutes may take a moment to appear.",
     definitions: {
       errorBps: "|estimate - reopenPrint| * 10000 / reopenPrint, floored, computed on chain by Scorecard.settle() (curbErrorBps for the mark, then the last print and the closing VWAP)",
       reopenPrintE18: "the pool price Scorecard read for itself at settlement, refused unless within 50 ticks of the pool's own TWAP; settle() is permissionless and takes no price argument",

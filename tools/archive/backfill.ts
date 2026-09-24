@@ -42,8 +42,12 @@ import {
 import type { Deps, Evidence } from "../curb-verify/src/tx.ts";
 import { EXIT } from "../curb-verify/src/render.ts";
 
-/** Host A and host B, the only keys whose witness statements belong in the archive. */
-export const CURB_ATTESTORS = ["0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4", "0x4c3eD38809FA6469871F4e0cbEa7ae7dBdA87fb8"];
+/** Host A, host B and the cold spare: the only keys whose witness statements belong in the archive. */
+export const CURB_ATTESTORS = [
+  "0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4",
+  "0x50Fa162a1dE84D2719644DC45E44EC5D16e539fB",
+  "0x4c3eD38809FA6469871F4e0cbEa7ae7dBdA87fb8",
+];
 
 export type Status =
   | "present"         // the public archive already serves it; not re-checked
