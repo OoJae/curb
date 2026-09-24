@@ -1,25 +1,6 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": false,
-    "allowImportingTsExtensions": false,
-    "types": [],
-    "rootDirs": ["../../src", "./stubs/src"],
-    "paths": {
-      "three": ["./node_modules/@types/three/index.d.ts"],
-      "three/addons/*": ["./node_modules/@types/three/examples/jsm/*"],
-      "gsap": ["./node_modules/gsap/types/index.d.ts"],
-      "gsap/*": ["./node_modules/gsap/types/*"],
-      "lenis": ["./node_modules/lenis/dist/lenis.d.ts"]
-    }
-  },
-  "include": ["./*.ts", "./stubs/src/**/*.ts", "../../src/ring/**/*.ts", "../../src/pages/home/**/*.ts"],
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "types": ["vite/client"] },
+  "include": ["./*.ts"],
   "exclude": ["./vite.config.ts", "./node_modules", "./dist"]
 }
