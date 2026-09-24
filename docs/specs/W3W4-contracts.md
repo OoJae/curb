@@ -307,3 +307,22 @@ No poke at the reopen (print late; delivery unaffected; poke.sh + self-witnessin
 >50-tick TWAP deviation (retry in window) · MarketClock stale → everything refuses, cure freezes · Agentic Wallet policy may
 block calls to new contracts (fallback: second disclosed keystore wallet) · USDG gas under the stipend (fork measures first) ·
 immutability (parameterised scripts, fork dry-runs) · stack-too-deep in legacy codegen (small events, memory structs).
+
+## Demo amendments after the pre-deploy reviews (24 Sep, ~16:30Z)
+
+- **Auction cutoff.** A lot must end by `clock.stateOf(w).nextTransitionAt` at list time.
+  - Overnight lots end by **01:00Z (09:00 HKT)**, before HKEX's pre-open auction. So cycle 1 lists at about 00:40Z and ends by 01:00Z.
+  - Lunch lots must be listed **after 04:00Z (12:00 HKT)**; before that the boundary is 12:00 itself. They end by 05:00Z.
+- **Per-closure cap.** `mintedInEpoch[w][epoch]` replaces the lifetime open-interest check.
+- **DepthCert.**
+  - Every cert is at least 1 USDG notional.
+  - Anyone can withdraw an expired cert; the bond goes to the maker.
+  - `committed()` ignores expired certs.
+  - Cert lists are capped per maker at 16.
+- **CurbCredit.**
+  - LTV is per position: `min(regimeCap, minBid/P)`. `realisable` bounds the total lent at borrow time.
+  - Bad debt is booked only when every share is seized.
+  - While the market is shut, a cert counts only if it expires after now + max(73h, the next transition + 1h) + 30 min.
+- **K's wTCENTx cert** (posted while open, before the 07:55Z cut): expiry **Fri 2 Oct 06:00Z**. This keeps the weekend loan supported through Monday's reopen and the 1 Oct holiday.
+- **Fade demo** uses **D (the deployer)** as maker, never K. D must first be made eligible (`setEligible(D, true, keccak256("team:deployer"))`). Its cert must be at least 1 USDG, e.g. 0.03e18 @ 52e6.
+- **Friday 25 Sep is a normal trading day.** Recess 03:55–05:00Z, afternoon session to 07:55Z. Checked live against the issuer's schedule through curb-asp; the 25 Sep half day in older test fixtures was withdrawn by the issuer on 18 Sep (D-4).

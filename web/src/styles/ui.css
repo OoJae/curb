@@ -654,17 +654,20 @@ button:hover .arrow--ext {
   animation-play-state: paused;
 }
 
-/* Confirmed: the two C halves rotate ±62° (MARK.cHalfGapDeg) to meet; the arc gives way. */
-.btn[data-state='confirmed'] .spin__top {
-  transform: rotate(62deg);
+/* Confirmed: the loop closes. The C and its arc fade out as a closed ring (the "open" glyph) fades in,
+   rather than rotating the halves, which would leave a gap facing west. Opacity only. */
+.btn .spin__ring {
+  opacity: 0;
 }
 
-.btn[data-state='confirmed'] .spin__bottom {
-  transform: rotate(-62deg);
-}
-
+.btn[data-state='confirmed'] .spin__top,
+.btn[data-state='confirmed'] .spin__bottom,
 .btn[data-state='confirmed'] .spin__arc {
   opacity: 0;
+}
+
+.btn[data-state='confirmed'] .spin__ring {
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

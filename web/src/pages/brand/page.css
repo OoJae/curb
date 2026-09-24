@@ -132,7 +132,7 @@
 .br-tx-status { min-height: calc(2 * var(--t-small) * var(--lh-small)); }
 .br-mo-count { margin: 0; display: grid; gap: var(--s-1); }
 .br-count { font-size: var(--t-h2); }
-.br-mo-h { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: var(--t-h2); line-height: var(--lh-h2); }
+.br-mo-h { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: max(calc(var(--t-h2) * 0.75), 1.75rem); line-height: var(--lh-h2); }
 .br-mo-h em { font-style: italic; }
 .br-line { display: block; overflow: hidden; padding-bottom: 0.08em; }
 .br-line > span { display: block; }
@@ -147,7 +147,7 @@
   font-family: var(--font-data); font-size: var(--t-data); font-stretch: var(--wdth-ledger);
 }
 .br-mo-page.is-new { opacity: 0; }
-.br-mo-regime { margin: 0; font-family: var(--font-display); font-size: var(--t-h2); line-height: var(--lh-h2); }
+.br-mo-regime { margin: 0; font-size: var(--t-lede); line-height: var(--lh-lede); }
 
 /* ── Guilloche ──────────────────────────────────────────────────────────────────────────────────────────────────── */
 .br-ros { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 17rem); gap: clamp(16px, 3vw, 40px); align-items: center; }
