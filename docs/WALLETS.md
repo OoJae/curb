@@ -74,6 +74,15 @@ pair is team ↔ team.
 | transfer | Agentic Wallet → curb-desk | 20 USDG | `0x1be006cc9b8abf71982c4c4836eed1c23f304932c2bd41c9cea2ac8b0fa0074c` |
 | transfer | Agentic Wallet → curb-desk | 0.1 wTCENTx | `0x7afc67e4b29ac129dd3dc1212c392d14852afe4c2d9d191f43e1e76e94d8eae6` |
 
+**Rebalancing for cycle 2 and the fade demo, 24 Sep ~21:15Z** (no new money: team wallet to team wallet).
+
+| step | wallet | detail | tx |
+|---|---|---|---|
+| transfer | curb-desk → Agentic Wallet | 3 USDG, so A can bid on cycle 2's lot | `0x66de800918580f8f8653bb5a3eeee3f8bb8cf66876ca63c17607cd75c9b8a61a` (block 71,515,480) |
+| transfer | Agentic Wallet → curb-desk | 0.1 wTCENTx, for K to mint cycle 2's note (A cannot list: listing needs `setApprovalForAll`, which the Agentic Wallet does not grant) | `0xd6b05e0158eff1dba034aabaa36fe6ea45c3cb01dfa1fb94d63148990791e001` (block 71,515,517) |
+| transfer | curb-desk → deployer | 2 USDG, the fade demo's bond (D is the fading maker) | `0x6efcb6e99afd5bf67d0ac3ad5d74e30fcb499f604bad65c2b05fad2bf30b6bb0` (block 71,515,679) |
+| transfer | curb-desk → deployer | 2 USDG more, sent by mistake (a retry of the line above whose output was lost); left with D, returned at cleanup | `0xaa52f33416d05d50ef0ea04385f27c9ccea1bea9bd36ead06a57672379974c32` (block 71,515,747) |
+
 ## Admin transactions
 
 Every privileged call, signed by the deployer/admin from the team's Mac.
