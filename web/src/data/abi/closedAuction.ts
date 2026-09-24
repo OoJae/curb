@@ -250,6 +250,10 @@ export const closedAuctionAbi = [
           {
             "name": "clearedAt",
             "type": "uint64"
+          },
+          {
+            "name": "cutoff",
+            "type": "uint64"
           }
         ]
       }
@@ -570,6 +574,11 @@ export const closedAuctionAbi = [
   },
   {
     "type": "error",
+    "name": "NoCutoff",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotPrinted",
     "inputs": []
   },
@@ -611,6 +620,16 @@ export const closedAuctionAbi = [
     "type": "error",
     "name": "ReopenedSinceMint",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SpansTransition",
+    "inputs": [
+      {
+        "name": "cutoff",
+        "type": "uint64"
+      }
+    ]
   },
   {
     "type": "error",

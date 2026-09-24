@@ -163,7 +163,12 @@ export async function getNotes(ids: (number | bigint)[] = knownIds("notes"), hol
 type LotTuple = {
   seller: Address; wrapper: Address; noteId: bigint; amount: bigint; startPrice: bigint; floorPrice: bigint; refPrice: bigint;
   startAt: bigint; endAt: bigint; decaySeconds: number; epochAtMint: number; status: number; buyer: Address; clearedPrice: bigint; clearedAt: bigint;
+  /** MarketClock.stateOf(w).nextTransitionAt read at list time; the lot's endAt is at most this. */
+  cutoff: bigint;
 };
+
+/** A lot plus its cutoff (unix ms; null in fixtures, which predate the field). */
+export type LotView = AuctionLot & { cutoffMs: number | null };
 
 /** ClosedAuction.lotCount(): lot ids run 1..lotCount. Specimen: the fixture's highest id. */
 export async function getLotCount(): Promise<number> {
@@ -177,10 +182,10 @@ export async function getNoteCount(): Promise<number> {
   return Number(await publicClient().readContract({ address: REOPEN_NOTE!, abi: reopenNoteAbi, functionName: "noteCount" }));
 }
 
-export async function getLot(lotId: number | bigint): Promise<AuctionLot> {
+export async function getLot(lotId: number | bigint): Promise<LotView> {
   if (!auctionLive()) {
     const all = await fixture("lots");
-    return all.find((l) => l.lotId === String(lotId)) ?? all[0];
+    return { ...(all.find((l) => l.lotId === String(lotId)) ?? all[0]!), cutoffMs: null };
   }
   const pc = publicClient();
   const block = await pc.getBlockNumber();
@@ -224,14 +229,15 @@ export async function getLot(lotId: number | bigint): Promise<AuctionLot> {
     currentPrice: current !== null ? usd(current) : null,
     discountBpsVsRef: current !== null ? discountBps(l.refPrice, current) : null,
     realisedDiscountBps: res[2].status === "success" ? Number(res[2].result as bigint) : null,
+    cutoffMs: l.cutoff > 0n ? Number(l.cutoff) * 1000 : null,
     specimen: false,
     block: Number(block),
     source: "chain",
   };
 }
 
-export async function getLots(ids: (number | bigint)[] = knownIds("lots")): Promise<AuctionLot[]> {
-  if (!auctionLive()) return fixture("lots");
+export async function getLots(ids: (number | bigint)[] = knownIds("lots")): Promise<LotView[]> {
+  if (!auctionLive()) return (await fixture("lots")).map((l) => ({ ...l, cutoffMs: null }));
   return Promise.all(ids.map((id) => getLot(id)));
 }
 
@@ -278,7 +284,8 @@ export async function listNote(p: { noteId: bigint; amount: bigint; startPrice: 
   const auction = need(CLOSED_AUCTION, "ClosedAuction");
   const o = await write({
     address: auction, abi: closedAuctionAbi, functionName: "list",
-    // list(uint256 noteId, uint128 amount, uint128 startPrice, uint128 floorPrice, uint32 decaySeconds, uint64 endAt)
+    // list(uint256 noteId, uint128 amount, uint128 startPrice, uint128 floorPrice, uint32 decaySeconds, uint64 endAt);
+    // endAt must be <= MarketClock.stateOf(wrapper).nextTransitionAt (else SpansTransition / NoCutoff).
     args: [p.noteId, p.amount, p.startPrice, p.floorPrice, p.decaySeconds, BigInt(p.endAt)],
   });
   let lotId: bigint | null = null;
