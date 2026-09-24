@@ -116,6 +116,8 @@ contract DeployW4 is Script {
         require(d.MAX_LIFE() == 30 days, "DepthCert: MAX_LIFE");
         require(d.MAX_LIVE_PER_BOOK() == 8, "DepthCert: MAX_LIVE_PER_BOOK");
         require(d.TRANSFER_GAS() == 150_000, "DepthCert: TRANSFER_GAS");
+        require(d.MIN_NOTIONAL() == 1e6, "DepthCert: MIN_NOTIONAL");
+        require(d.MAX_LIVE_PER_MAKER() == 16, "DepthCert: MAX_LIVE_PER_MAKER");
         require(d.totalBonds() == 0 && d.nextId() == 1, "DepthCert: fresh");
         (uint256 s,,,) = d.honouredDepth(W_TCENT, credit, uint64(block.timestamp + 1 hours));
         require(s == 0, "DepthCert: empty book");

@@ -219,7 +219,7 @@ contract CreditHandler is Test {
 
     function setPrice(uint256 assetSeed, uint256 bps, uint256 failSeed) external {
         address a = _asset(assetSeed);
-        bps = bound(bps, 4_000, 14_000);
+        bps = bound(bps, 2_500, 14_000); // deep enough that some liquidations take every share
         sc.setPrice(a, uint128(MulDiv.mulDiv(basePrice[a], bps, 1e4)));
         sc.setRevert(a, _h(failSeed) % 20 == 0);
     }
