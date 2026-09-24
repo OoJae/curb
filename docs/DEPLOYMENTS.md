@@ -222,8 +222,29 @@ and the code. They found one blocker in the service and two claims the data did 
 - **"A mark before every reopen" overstated coverage**: wSHEINx has no price source and closures shorter
   than 30 minutes are skipped. The agent description now says "the closures it has graded".
 
-**Not yet done:** a paid call from a wallet holding USDT0 (the end-to-end gate). The Agentic Wallet above
-holds none yet.
+### The first paid call — end to end through OKX's own buyer CLI, 24 Sept 2026 11:56Z
+
+A **team** wallet paying the team, disclosed as such (`docs/WALLETS.md`): it proves the rail, not demand.
+
+1. The team withdrew 0.01 OKB from its OKX exchange account to the Agentic Wallet `0x055b…7105`, which
+   swapped 0.009 OKB → 1.061866 USDT0 through OKX's DEX aggregator (Uniswap V3, 0.04% impact) in
+   [`0x60d93474…8283`](https://www.oklink.com/xlayer/tx/0x60d93474f738158a87bfff9c2018dfcd7065f9b6c70c270b0e0a7bc8145e8283),
+   block 71,481,865. The wallet paid no gas for it.
+2. `onchainos payment quote` on `/v1/closure-calendar?symbol=wTCENTx&horizonDays=7` → `payment pay`: the
+   Agentic Wallet signed an EIP-3009 authorization in OKX's TEE, the CLI replayed the request, and the
+   API answered **200** with the paid calendar (9 windows) after the OKX Broker settled.
+3. Settlement [`0xe8740458…4de7`](https://www.oklink.com/xlayer/tx/0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7),
+   block 71,481,945, status 1: **10000 USD₮0 units ($0.01) from `0x055b…7105` to curb-revenue
+   `0x277c…6068`**, submitted by OKX's relayer `0xde95…0591`, with the token's `AuthorizationUsed` event.
+4. Receipt [`/receipts/0xcee1ee75…817c.json`](https://api.curb.markets/receipts/0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c.json),
+   served immutable. Its id is `keccak256(transaction ‖ responseDigest)`, and `responseDigest` is the
+   sha256 of the exact 2,256 bytes delivered. Checked independently: the answer the buyer received,
+   serialised in the server's key order, hashes to that digest.
+
+**A finding about OKX's CLI, for anyone checking a receipt:** `onchainos payment pay` prints the paid
+answer re-serialised with its keys sorted, so its output is not the bytes the server sent, and hashing it
+does not reproduce `responseDigest`. The receipt binds the exact bytes on the wire; a buyer that wants to
+check it must keep the raw response body (or restore the server's key order, as above).
 
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 
