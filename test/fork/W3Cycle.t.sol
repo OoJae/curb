@@ -201,11 +201,19 @@ contract W3CycleForkTest is Test {
     }
 
     function _phaseList() internal {
+        // Host A attested the next boundary with the regime; a lot may not run past it.
+        uint64 cutoff = clock.stateOf(W_TCENT).nextTransitionAt;
+        vm.prank(DESK);
+        vm.expectRevert(abi.encodeWithSelector(ClosedAuction.SpansTransition.selector, cutoff));
+        auction.list(noteId, AMOUNT, START, FLOOR, DECAY, cutoff + 1);
+
         uint256 g = gasleft();
-        lotId = _list(noteId);
+        lotId = _list(noteId); // ends at now + 2400, before the boundary at now + 3600
         console2.log("list gas:", g - gasleft());
         ClosedAuction.Lot memory l = auction.lotOf(lotId);
         console2.log("refPrice (USDG units):", l.refPrice);
+        assertEq(l.cutoff, cutoff, "the attested boundary is the lot's cutoff");
+        assertLe(l.endAt, cutoff);
         assertEq(l.epochAtMint, epochAtMint);
         assertEq(note.balanceOf(address(auction), noteId), AMOUNT, "escrowed");
     }
@@ -271,8 +279,8 @@ contract W3CycleForkTest is Test {
 
     // --- negatives --------------------------------------------------------------------------------
 
-    /// No hindsight: once the reopen is witnessed nobody can buy a note at a pre-reopen price, and a later
-    /// shut does not revive the lot.
+    /// No hindsight, defence in depth: even a reopen BEFORE the attested boundary (a wrong schedule) stops the
+    /// lot once witnessed, and a later shut does not revive it.
     function test_bid_after_the_reopen_is_refused() public {
         _deployW3();
         _fund();
@@ -299,6 +307,46 @@ contract W3CycleForkTest is Test {
         vm.prank(DESK);
         auction.withdraw(lotId);
         assertEq(note.balanceOf(DESK, id), AMOUNT);
+    }
+
+    /// No hindsight, the binding rule: a lot ends by host A's attested boundary, so a session that nobody
+    /// witnesses (the pointer's epoch never moves) cannot be traded on in the next closure.
+    function test_a_lot_cannot_outlive_the_attested_boundary() public {
+        _deployW3();
+        _fund();
+        uint256 id = _shutAndMint();
+        uint64 cutoff = clock.stateOf(W_TCENT).nextTransitionAt;
+        vm.prank(DESK);
+        uint256 lotId = auction.list(id, AMOUNT, START, FLOOR, DECAY, cutoff); // endAt == cutoff is allowed
+        vm.prank(AGENTIC);
+        usdg.approve(address(auction), START);
+
+        // The market reopens at the boundary and trades a session nobody observes, then shuts again.
+        vm.warp(cutoff);
+        _attest(IMarketClock.Regime.MARKET, 20_000_000);
+        _warp(4 hours);
+        _attest(IMarketClock.Regime.CLOSED, 0);
+        assertEq(pointer.epochOf(W_TCENT), note.unitOf(id).epochAtMint, "the pointer never saw the session");
+
+        vm.prank(AGENTIC);
+        vm.expectRevert(ClosedAuction.LotExpired.selector);
+        auction.bid(lotId, START);
+
+        vm.prank(DESK);
+        auction.withdraw(lotId);
+
+        // A round whose boundary is already behind it, or missing, refuses new listings outright.
+        uint64 nowTs = uint64(vm.getBlockTimestamp());
+        vm.prank(HOST_A);
+        clock.attest(W_TCENT, IMarketClock.Regime.CLOSED, 0, nowTs - 60, false, keccak256("stale-schedule"));
+        vm.prank(DESK);
+        vm.expectRevert(ClosedAuction.NoCutoff.selector);
+        auction.list(id, AMOUNT, START, FLOOR, DECAY, nowTs + 600);
+        vm.prank(HOST_A);
+        clock.attest(W_TCENT, IMarketClock.Regime.CLOSED, 0, 0, false, keccak256("no-schedule"));
+        vm.prank(DESK);
+        vm.expectRevert(ClosedAuction.NoCutoff.selector);
+        auction.list(id, AMOUNT, START, FLOOR, DECAY, nowTs + 600);
     }
 
     /// wSHEINx has no Scorecard price source: no note can be minted on it, and a note contract that tried
