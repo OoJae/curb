@@ -1,2 +1,353 @@
-/* API page styles: STUB from lane A. The page owner replaces this file.
-   Rules: every class starts with .api- ; tokens only (no raw hex, no px font sizes). */
+/* /api. Every class starts with .api- ; tokens only (no raw hex, no px font sizes).
+   Terminals and consoles are ink windows in both regimes. */
+
+/* ── intro ─────────────────────────────────────────────────────────────────────────────────── */
+.api-intro {
+  padding-block: var(--s-10) var(--s-8);
+  row-gap: var(--s-6);
+  align-items: end;
+}
+
+.api-intro__text > * + * {
+  margin-top: var(--s-3);
+}
+
+.api-status {
+  display: grid;
+  gap: var(--s-1-5);
+}
+
+.api-base {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--s-2);
+}
+
+.api-base .copy {
+  margin-block: calc(-1 * var(--s-1-5));
+}
+
+[data-api-health] {
+  min-height: calc(2em * var(--lh-small));
+}
+
+.api-head {
+  display: grid;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+
+.api-sub {
+  display: block;
+  font-size: var(--t-small);
+}
+
+.api-wrap {
+  overflow-wrap: anywhere;
+}
+
+/* ── priced routes ─────────────────────────────────────────────────────────────────────────── */
+.api-routes__asof {
+  min-height: calc(var(--t-data) * var(--lh-data));
+  margin-bottom: var(--s-3);
+}
+
+.api-list {
+  padding: 0;
+  list-style: none;
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+.api-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-2) var(--gutter);
+  padding-block: var(--s-4);
+  border-top: var(--rule) solid var(--hairline);
+}
+
+@media (min-width: 1024px) {
+  .api-route {
+    grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+    align-items: start;
+  }
+
+  .api-route__try {
+    justify-self: end;
+  }
+}
+
+.api-route--ph {
+  min-height: calc(var(--s-20) + var(--s-4));
+}
+
+.api-route__main {
+  display: grid;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.api-route__path {
+  font-size: var(--t-small);
+  font-stretch: var(--wdth-code);
+}
+
+.api-route__method {
+  color: var(--muted);
+}
+
+.api-route__price {
+  margin-top: var(--s-half);
+}
+
+.api-route__per {
+  letter-spacing: 0;
+}
+
+.api-route__summary {
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+
+.api-route__qk {
+  font-weight: 500;
+  margin-inline-end: var(--s-1);
+}
+
+.api-route__more summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch);
+  cursor: pointer;
+  color: var(--muted);
+  text-decoration: underline;
+  text-decoration-color: var(--hairline-strong);
+  text-underline-offset: 0.2em;
+}
+
+.api-route__more summary:hover {
+  color: var(--figure);
+}
+
+.api-route__more p {
+  max-width: 72ch;
+  padding-bottom: var(--s-1);
+}
+
+.api-ask[aria-busy='true'] {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+/* ── the console: 402 → decoded challenge → preview ────────────────────────────────────────── */
+.api-console {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--wash);
+  color: var(--figure);
+  font-size: var(--t-small);
+}
+
+.api-step {
+  display: grid;
+  gap: var(--s-half);
+  min-width: 0;
+}
+
+.api-step code {
+  overflow-wrap: anywhere;
+}
+
+.api-step__k {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  color: var(--muted);
+}
+
+.api-step__note {
+  color: var(--muted);
+}
+
+/* The 402 is the moment: Streetlamp is legal here, inside the ink window. */
+.api-402 {
+  color: var(--streetlamp);
+}
+
+.api-kv {
+  display: grid;
+  margin-top: var(--s-half);
+  border-top: var(--rule) solid var(--hairline);
+}
+
+.api-kv > div {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+  gap: var(--s-2);
+  padding-block: var(--s-half);
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+.api-kv dt {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  color: var(--muted);
+}
+
+.api-kv dd {
+  margin: 0;
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-ledger);
+  overflow-wrap: anywhere;
+}
+
+.api-json {
+  max-height: 22rem;
+  padding: var(--s-1-5);
+  overflow: auto;
+  border: var(--rule) solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--ground);
+}
+
+/* Steps arrive in order, once per answer (transform/opacity only). */
+.api-console--animate .api-step {
+  animation: api-step-in var(--dur-ui) var(--ease-curb) both;
+  animation-delay: calc(var(--i, 0) * 280ms);
+}
+
+@keyframes api-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--s-1));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .api-console--animate .api-step {
+    animation: none;
+  }
+}
+
+/* ── terminals ─────────────────────────────────────────────────────────────────────────────── */
+.api-agent,
+.api-proof,
+.api-market {
+  row-gap: var(--s-5);
+}
+
+.api-agent .col-ledger > * + *,
+.api-proof .col-ledger > * + *,
+.api-market .col-ledger > * + * {
+  margin-top: var(--s-2);
+}
+
+.api-cmds {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.api-term {
+  border: var(--rule) solid var(--hairline-strong);
+  border-radius: var(--radius);
+  background: var(--wash);
+  color: var(--figure);
+}
+
+.api-term__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding-inline-start: var(--s-2);
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+.api-term__name {
+  color: var(--muted);
+}
+
+.api-term__bar .copy {
+  flex: none;
+  padding-inline: var(--s-2);
+  border-inline-start: var(--rule) solid var(--hairline);
+}
+
+.api-term__pre {
+  padding: var(--s-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── proof ─────────────────────────────────────────────────────────────────────────────────── */
+.api-proof__facts {
+  margin-top: var(--s-4);
+}
+
+.api-bind {
+  display: grid;
+  align-content: start;
+  gap: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: var(--rule-strong) solid var(--figure);
+}
+
+.api-bind__steps {
+  display: grid;
+  gap: var(--s-1-5);
+  padding: 0;
+  list-style: none;
+  counter-reset: api-bind;
+}
+
+.api-bind__steps li {
+  position: relative;
+  padding-inline-start: var(--s-4);
+  font-size: var(--t-small);
+  counter-increment: api-bind;
+}
+
+.api-bind__steps li::before {
+  content: counter(api-bind);
+  position: absolute;
+  inset-inline-start: 0;
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  color: var(--muted);
+}
+
+/* ── marketplace ───────────────────────────────────────────────────────────────────────────── */
+.api-market__facts {
+  margin-top: var(--s-3);
+}
+
+.api-market__cmd {
+  align-self: end;
+}
+
+/* ── free routes ───────────────────────────────────────────────────────────────────────────── */
+.api-free__list {
+  padding: 0;
+  list-style: none;
+}
+
+.api-free__row {
+  font-size: var(--t-small);
+}
+
+@media (min-width: 768px) {
+  .api-free__row {
+    grid-template-columns: minmax(16rem, 4fr) 8fr;
+  }
+}
+
+.api-free__what {
+  max-width: 72ch;
+}

@@ -9,9 +9,126 @@
   <body data-page="api">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
     <main id="main" class="page page--api" tabindex="-1">
-      <section class="wrap section stub">
-        <h1 class="t-h1 vt-title-api" data-reveal>API</h1>
-        <p class="t-lede muted measure stub__note">This page is in build. The shell around it is live.</p>
+      <section class="wrap api-intro grid" aria-labelledby="api-title">
+        <div class="col-ledger api-intro__text">
+          <p class="t-label">api.curb.markets · x402 on X Layer</p>
+          <h1 id="api-title" class="t-h1 vt-title-api" data-reveal>What an agent can buy about the hours the market is <em>shut</em>.</h1>
+          <p class="t-lede measure">Curb sells what MarketClock and Scorecard know, one call at a time. Ask without paying and you get the price and a free preview. Pay from an OKX Agentic Wallet and you get the answer, with a receipt bound to the exact bytes you received.</p>
+        </div>
+        <aside class="col-instrument api-status" aria-labelledby="api-status-title">
+          <h2 id="api-status-title" class="t-label">The service</h2>
+          <dl class="ledger">
+            <div class="ledger__row"><dt>Base URL</dt><dd class="api-base"><code>https://api.curb.markets</code><button class="copy" type="button" data-copy="https://api.curb.markets">Copy</button></dd></div>
+            <div class="ledger__row"><dt>Status</dt><dd data-api-health>Reading /healthz…</dd></div>
+            <div class="ledger__row"><dt>Payment</dt><dd>USD₮0 on X Layer (<code>eip155:196</code>), scheme <code>exact</code>, verified and settled by the OKX Broker</dd></div>
+            <div class="ledger__row"><dt>Marketplace</dt><dd>OKX AI, agent #13869, listing under review</dd></div>
+          </dl>
+        </aside>
+      </section>
+
+      <section class="wrap section api-routes" aria-labelledby="api-routes-title">
+        <div class="api-head">
+          <h2 id="api-routes-title" class="t-h2">Three priced routes</h2>
+          <p class="t-body muted measure">Each answers <code>GET</code>, or <code>POST</code> with the same parameters. Unpaid, it answers HTTP 402: the challenge is base64 in the <code>PAYMENT-REQUIRED</code> header, and a free preview is in the body. Try it here. Nothing is signed and nothing is paid.</p>
+        </div>
+        <p class="t-data muted api-routes__asof" data-api-x402-asof>Reading /.well-known/x402…</p>
+        <ol class="api-list" role="list" data-api-routes>
+          <li class="api-route api-route--ph"><div class="api-route__main"><p class="api-route__path t-data">/v1/closure-calendar</p><p class="api-route__price t-h2">&nbsp;</p><p class="api-route__summary">&nbsp;</p></div></li>
+          <li class="api-route api-route--ph"><div class="api-route__main"><p class="api-route__path t-data">/v1/accuracy-record</p><p class="api-route__price t-h2">&nbsp;</p><p class="api-route__summary">&nbsp;</p></div></li>
+          <li class="api-route api-route--ph"><div class="api-route__main"><p class="api-route__path t-data">/v1/discount-curve</p><p class="api-route__price t-h2">&nbsp;</p><p class="api-route__summary">&nbsp;</p></div></li>
+        </ol>
+      </section>
+
+      <section class="wrap section api-agent grid" aria-labelledby="api-agent-title">
+        <div class="col-ledger">
+          <h2 id="api-agent-title" class="t-h2">From an agent: quote, then pay</h2>
+          <p class="t-body measure">OKX's <code>onchainos</code> CLI does the whole buyer side. <code>quote</code> probes the route, decodes the 402, checks your balance and stores a payment id. It never signs. <code>pay</code> signs an EIP-3009 authorization in the Agentic Wallet's TEE, replays the request, and returns the answer once the OKX Broker settles.</p>
+          <p class="t-small muted measure"><code>pay</code> asks you to confirm before it moves funds. Keep the raw response body if you want to check the receipt: the CLI prints the answer re-serialised with its keys sorted, and those are not the bytes the server sent.</p>
+        </div>
+        <div class="api-cmds">
+          <div class="api-term surface-ink">
+            <div class="api-term__bar"><span class="t-data api-term__name">1 · Quote (never signs)</span><button class="copy" type="button" data-copy-cmd="quote">Copy</button></div>
+            <pre class="api-term__pre" tabindex="0" aria-label="Quote command"><code data-cmd="quote">onchainos payment quote "https://api.curb.markets/v1/closure-calendar?symbol=wTCENTx&amp;horizonDays=7"</code></pre>
+          </div>
+          <div class="api-term surface-ink">
+            <div class="api-term__bar"><span class="t-data api-term__name">2 · Pay (signs in the TEE, replays, returns the answer)</span><button class="copy" type="button" data-copy-cmd="pay">Copy</button></div>
+            <pre class="api-term__pre" tabindex="0" aria-label="Pay command"><code data-cmd="pay">onchainos payment pay --payment-id &lt;paymentId from the quote&gt;</code></pre>
+          </div>
+          <div class="api-term surface-ink">
+            <div class="api-term__bar"><span class="t-data api-term__name">Or see the raw 402</span><button class="copy" type="button" data-copy-cmd="curl">Copy</button></div>
+            <pre class="api-term__pre" tabindex="0" aria-label="curl command"><code data-cmd="curl">curl -si https://api.curb.markets/v1/closure-calendar</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap section api-proof grid" aria-labelledby="api-proof-title">
+        <div class="col-ledger">
+          <h2 id="api-proof-title" class="t-h2">The first paid call</h2>
+          <p class="t-body measure">On 24 Sep at 11:56Z, the team's own Agentic Wallet paid one cent for a closure calendar through <code>onchainos payment quote</code> then <code>pay</code>. The API answered 200 once the OKX Broker settled. It is our wallet paying us: it proves the rail, not demand.</p>
+          <dl class="ledger api-proof__facts">
+            <div class="ledger__row"><dt>Request</dt><dd><code class="api-wrap">GET /v1/closure-calendar?symbol=wTCENTx&amp;horizonDays=7</code></dd></div>
+            <div class="ledger__row"><dt>Settlement</dt><dd><a class="txlink" href="https://www.oklink.com/xlayer/tx/0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7" target="_blank" rel="noopener" title="0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7">0xe8740458…4de7<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a><span class="api-sub muted">block 71,481,945 · status 1 · submitted by OKX's relayer</span></dd></div>
+            <div class="ledger__row"><dt>Amount</dt><dd>10,000 units of USD₮0 ($0.01)</dd></div>
+            <div class="ledger__row"><dt>From</dt><dd><a class="txlink" href="https://www.oklink.com/xlayer/address/0x055ba8acd60a2287b2d01cb3bf237e4424357105" target="_blank" rel="noopener" title="0x055ba8acd60a2287b2d01cb3bf237e4424357105">0x055b…7105<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a><span class="api-sub muted">the team's Agentic Wallet</span></dd></div>
+            <div class="ledger__row"><dt>To</dt><dd><a class="txlink" href="https://www.oklink.com/xlayer/address/0x277cA91276A3801667B76C97Da3872Ccb6E96068" target="_blank" rel="noopener" title="0x277cA91276A3801667B76C97Da3872Ccb6E96068">0x277c…6068<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a><span class="api-sub muted">curb-revenue, receive-only</span></dd></div>
+            <div class="ledger__row"><dt>Receipt</dt><dd><a class="txlink" href="https://api.curb.markets/receipts/0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c.json" target="_blank" rel="noopener" title="0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c">/receipts/0xcee1ee75…817c.json<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens in a new tab)</span></a><span class="api-sub muted">served immutable</span></dd></div>
+          </dl>
+        </div>
+        <div class="col-instrument api-bind">
+          <h3 class="t-h3">What the receipt binds</h3>
+          <p class="t-body">The server hashes the exact bytes it delivered, then binds that hash to the payment.</p>
+          <ol class="api-bind__steps" role="list">
+            <li><code>responseDigest</code> = sha256 of the 2,256 bytes sent<span class="api-sub muted"><code class="api-wrap">0x902e20a0…0dec4f</code></span></li>
+            <li><code>receiptId</code> = keccak256(<code>transaction</code> ‖ <code>responseDigest</code>)<span class="api-sub muted"><code class="api-wrap">0xcee1ee75…a9817c</code></span></li>
+          </ol>
+          <p class="t-small muted">Change one byte of the answer and the digest no longer matches. Pay for a different call and the id no longer matches. So a buyer holding the raw body can prove what it was sold, and for which payment.</p>
+        </div>
+      </section>
+
+      <section class="wrap section api-market grid" aria-labelledby="api-market-title">
+        <div class="col-ledger">
+          <h2 id="api-market-title" class="t-h2">On the OKX AI marketplace</h2>
+          <p class="t-body measure">Curb is registered as agent #13869, role ASP, from the team's Agentic Wallet. The listing is under review. It offers the same three routes as A2MCP services at the same prices, with no subscription and no free trial.</p>
+          <dl class="ledger api-market__facts">
+            <div class="ledger__row"><dt>Agent</dt><dd>#13869 "Curb" · listing under review</dd></div>
+            <div class="ledger__row"><dt>Registration</dt><dd><a class="txlink" href="https://www.oklink.com/xlayer/tx/0xe2420407a65b51a468f060a52496e15587ce13d1c23fccff30330d8ab293ccc7" target="_blank" rel="noopener" title="0xe2420407a65b51a468f060a52496e15587ce13d1c23fccff30330d8ab293ccc7">0xe2420407…ccc7<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a></dd></div>
+          </dl>
+        </div>
+        <div class="col-instrument api-market__cmd">
+          <div class="api-term surface-ink">
+            <div class="api-term__bar"><span class="t-data api-term__name">Look it up</span><button class="copy" type="button" data-copy-cmd="agent">Copy</button></div>
+            <pre class="api-term__pre" tabindex="0" aria-label="Agent lookup command"><code data-cmd="agent">onchainos agent get-agents --agent-ids 13869</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap section api-free" aria-labelledby="api-free-title">
+        <div class="api-head">
+          <h2 id="api-free-title" class="t-h2">Free routes</h2>
+          <p class="t-body muted measure">No payment and no key. Discovery, the cohort, the issuer's corporate actions, and the relay that carries mark/2's perpetual-futures leg.</p>
+        </div>
+        <ul class="ledger api-free__list" role="list">
+          <li class="ledger__row api-free__row">
+            <span class="api-free__path"><a class="txlink" href="https://api.curb.markets/.well-known/x402" target="_blank" rel="noopener">GET /.well-known/x402<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens in a new tab)</span></a></span>
+            <span class="api-free__what">The priced routes and their terms, for discovery. The prices on this page are read from it.</span>
+          </li>
+          <li class="ledger__row api-free__row">
+            <span class="api-free__path"><a class="txlink" href="https://api.curb.markets/v1/assets" target="_blank" rel="noopener">GET /v1/assets<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens in a new tab)</span></a></span>
+            <span class="api-free__what">The cohort MarketClock tracks, and which of it Scorecard can grade. <span class="muted" data-api-assets>&nbsp;</span></span>
+          </li>
+          <li class="ledger__row api-free__row">
+            <span class="api-free__path"><a class="txlink" href="https://api.curb.markets/v1/corporate-actions?symbol=AAPLx" target="_blank" rel="noopener">GET /v1/corporate-actions?symbol=<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens in a new tab)</span></a></span>
+            <span class="api-free__what">Every version of the issuer's corporate actions for a symbol, cancelled and corrected ones included, newest first.</span>
+          </li>
+          <li class="ledger__row api-free__row">
+            <span class="api-free__path"><a class="txlink" href="https://api.curb.markets/v1/relay/binance/klines?symbol=HK0700USDT&amp;startTime=1790236440000&amp;limit=1" target="_blank" rel="noopener">GET /v1/relay/binance/klines<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens in a new tab)</span></a></span>
+            <span class="api-free__what">Closed one-minute Binance perpetual klines, the upstream bytes verbatim, with <code>x-curb-upstream-url</code> and <code>x-curb-upstream-sha256</code>. Binance refuses US hosts, so mark/2's keeper reads through it, and anyone elsewhere can refetch the same URL and compare hashes.</span>
+          </li>
+          <li class="ledger__row api-free__row">
+            <span class="api-free__path"><a class="txlink" href="https://api.curb.markets/healthz" target="_blank" rel="noopener">GET /healthz<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens in a new tab)</span></a></span>
+            <span class="api-free__what">Liveness, payments readiness, and how fresh the issuer and Scorecard reads are.</span>
+          </li>
+        </ul>
       </section>
     </main>
     <script type="module" src="/src/pages/api/page.ts"></script>
