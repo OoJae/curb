@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {CurbCredit} from "../src/CurbCredit.sol";
+import {DepthCert} from "../src/DepthCert.sol";
 import {IMarketClock} from "../src/interfaces/IMarketClock.sol";
 import {IScorecardPrice} from "../src/interfaces/IScorecardPrice.sol";
 import {IDepthCert} from "../src/interfaces/IDepthCert.sol";
@@ -41,7 +42,9 @@ contract DeployW4 is Script {
         _preflight(registry, five);
 
         vm.startBroadcast();
-        depthCert = _deployDepthCert(registry);
+        // Makers of certs naming a beneficiary (i.e. CurbCredit's book) must be eligible in the same registry that
+        // gates CurbCredit's borrowers, so nobody else can seed or grief the book the LTV is priced from.
+        depthCert = address(new DepthCert(IERC20(USDG), IEligibility(registry)));
         credit = address(
             new CurbCredit(
                 IMarketClock(CLOCK),
@@ -55,20 +58,13 @@ contract DeployW4 is Script {
         );
         vm.stopBroadcast();
 
-        _readBackDepthCert(depthCert, credit);
+        _readBackDepthCert(DepthCert(depthCert), credit, registry);
         _readBackCredit(CurbCredit(credit), depthCert, registry, five);
 
         console2.log("DepthCert  :", depthCert);
         console2.log("CurbCredit :", credit);
         console2.log("registry   :", registry);
         console2.log("admin      :", DEPLOYER);
-    }
-
-    /// @dev P3's DepthCert(IERC20 usdg, IEligibility makers): a cert naming a beneficiary may only be posted by an
-    ///      eligible maker, gated by the same registry as CurbCredit's borrowers. Built from its compiled artifact so
-    ///      this script compiles before src/DepthCert.sol is merged; becomes `new DepthCert(...)` once it is.
-    function _deployDepthCert(address registry) internal returns (address) {
-        return deployCode("DepthCert.sol:DepthCert", abi.encode(USDG, registry));
     }
 
     function _five() internal pure returns (address[] memory five) {
@@ -99,17 +95,17 @@ contract DeployW4 is Script {
         }
     }
 
-    function _readBackDepthCert(address depthCert, address credit) internal view {
-        require(depthCert.code.length > 0, "DepthCert: no code");
-        IDepthCertReadBack d = IDepthCertReadBack(depthCert);
-        require(d.usdg() == USDG, "DepthCert: usdg");
+    function _readBackDepthCert(DepthCert d, address credit, address registry) internal view {
+        require(address(d).code.length > 0, "DepthCert: no code");
+        require(address(d.usdg()) == USDG, "DepthCert: usdg");
+        require(address(d.makers()) == registry, "DepthCert: makers registry");
         require(d.MIN_BOND_BPS() == 1000, "DepthCert: MIN_BOND_BPS");
         require(d.MIN_LIFE() == 10 minutes, "DepthCert: MIN_LIFE");
         require(d.MAX_LIFE() == 30 days, "DepthCert: MAX_LIFE");
         require(d.MAX_LIVE_PER_BOOK() == 8, "DepthCert: MAX_LIVE_PER_BOOK");
         require(d.TRANSFER_GAS() == 150_000, "DepthCert: TRANSFER_GAS");
-        require(d.totalBonds() == 0, "DepthCert: fresh");
-        (uint256 s,,,) = IDepthCert(depthCert).honouredDepth(W_TCENT, credit, uint64(block.timestamp + 1 hours));
+        require(d.totalBonds() == 0 && d.nextId() == 1, "DepthCert: fresh");
+        (uint256 s,,,) = d.honouredDepth(W_TCENT, credit, uint64(block.timestamp + 1 hours));
         require(s == 0, "DepthCert: empty book");
     }
 
@@ -140,15 +136,4 @@ contract DeployW4 is Script {
 /// @dev MarketClock's auto-generated `assets(address)` getter.
 interface IClockAssets {
     function assets(address wrapper) external view returns (address raw, bytes4 mic, uint8 hoursMode, bool registered);
-}
-
-/// @dev DepthCert public getters beyond IDepthCert (frozen spec constants and state).
-interface IDepthCertReadBack {
-    function usdg() external view returns (address);
-    function MIN_BOND_BPS() external view returns (uint256);
-    function MIN_LIFE() external view returns (uint256);
-    function MAX_LIFE() external view returns (uint256);
-    function MAX_LIVE_PER_BOOK() external view returns (uint256);
-    function TRANSFER_GAS() external view returns (uint256);
-    function totalBonds() external view returns (uint256);
 }

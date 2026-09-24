@@ -10,16 +10,17 @@ import {IDepthCert} from "../../src/interfaces/IDepthCert.sol";
 import {IEligibility} from "../../src/interfaces/IEligibility.sol";
 import {IERC20} from "../../src/interfaces/IERC20.sol";
 import {MulDiv} from "../../src/lib/MulDiv.sol";
-import {MockDepthCert} from "../mocks/MockDepthCert.sol";
+import {DepthCert} from "../../src/DepthCert.sol";
 import {AllowList} from "../CurbCredit.t.sol";
 
 /// @notice W4 on a mainnet fork: the deployed MarketClock (regime flipped by pranking host A's `attest`), the
 ///         deployed Scorecard v2 (live `priceNow` from the real wTCENTx/USDG pool), real USDG and real wTCENTx
 ///         (both funded by pranking the pool). Walks the W4 demo: deposit -> Refusal(NoDepth) -> a cert naming
 ///         CurbCredit -> ltvFor ~52% -> borrow -> the 07:55 cut takes LTV 60% -> 30% -> flagBreach -> the cure
-///         clock freezes through the closure (and while the attestation is stale) and runs only when open.
-/// @dev Depth comes from MockDepthCert on this fork until P3's DepthCert is merged; the property under test here
-///      is CurbCredit against the live clock and price.
+///         clock freezes through the closure (and while the attestation is stale) and runs only when open ->
+///         liquidation at the live price -> the seized shares realised into the desk's real DepthCert.
+/// @dev Depth is P3's real DepthCert(USDG, registry): the desk (K) is an eligible maker, posts bonded certs naming
+///      CurbCredit with real USDG, and its allowance/balance are what make them count.
 contract W4CreditForkTest is Test {
     address constant CLOCK = 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b;
     address constant SCORECARD = 0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f;
@@ -35,15 +36,15 @@ contract W4CreditForkTest is Test {
     address constant W_AAPL = 0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f;
 
     CurbCredit credit;
-    MockDepthCert dc;
+    DepthCert dc;
     AllowList elig;
     address desk = makeAddr("curb-desk (K)"); // reserve funder, cert maker
     address agent = makeAddr("agentic (A)"); // borrower
 
     function setUp() public {
         vm.createSelectFork("xlayer");
-        dc = new MockDepthCert(IERC20(USDG));
         elig = new AllowList();
+        dc = new DepthCert(IERC20(USDG), IEligibility(address(elig)));
         address[] memory five = new address[](5);
         five[0] = W_TCENT;
         five[1] = W_XIAO;
@@ -55,10 +56,11 @@ contract W4CreditForkTest is Test {
             IERC20(USDG), DEPLOYER, five
         );
         elig.set(agent, true);
+        elig.set(desk, true); // an eligible maker may post certs naming CurbCredit
 
         // Fund from the pool, which holds both sides of wTCENTx/USDG.
         vm.startPrank(POOL_TCENT);
-        IERC20(USDG).transfer(desk, 10e6);
+        IERC20(USDG).transfer(desk, 150e6);
         IERC20(W_TCENT).transfer(agent, 0.1e18);
         vm.stopPrank();
 
@@ -66,6 +68,8 @@ contract W4CreditForkTest is Test {
         IERC20(USDG).approve(address(credit), type(uint256).max);
         vm.prank(desk);
         credit.fund(3e6); // "K fund 3 USDG"
+        vm.prank(desk);
+        IERC20(USDG).approve(address(dc), type(uint256).max);
         vm.startPrank(agent);
         IERC20(W_TCENT).approve(address(credit), type(uint256).max);
         IERC20(USDG).approve(address(credit), type(uint256).max);
@@ -87,9 +91,14 @@ contract W4CreditForkTest is Test {
         _attest(IMarketClock.Regime.CLOSED, 0);
     }
 
+    function _post(uint128 size, uint128 bid, uint64 life, uint128 bond) internal returns (uint256 id) {
+        vm.prank(desk);
+        id = dc.post(W_TCENT, address(credit), size, bid, uint64(block.timestamp) + life, bond);
+    }
+
     /// @dev "K post(wTCENTx, credit, 0.028e18, 52e6, now+26h, 1e6)".
-    function _postDemoCert() internal {
-        dc.setDepth(W_TCENT, address(credit), 0.028e18, 52e6, uint64(block.timestamp + 26 hours));
+    function _postDemoCert() internal returns (uint256) {
+        return _post(0.028e18, 52e6, 26 hours, 1e6);
     }
 
     function _p() internal view returns (uint256) {
@@ -107,6 +116,10 @@ contract W4CreditForkTest is Test {
 
     /// @dev deposit 0.05 -> Refusal(NoDepth) -> cert -> ltvFor ~52% -> borrow min(1.4 USDG, limit). Returns debt.
     function _demoBorrow() internal returns (uint256 borrowed) {
+        (borrowed,) = _demoBorrowWithCert();
+    }
+
+    function _demoBorrowWithCert() internal returns (uint256 borrowed, uint256 certId) {
         _openHk();
         vm.prank(agent);
         credit.deposit(W_TCENT, 0.05e18);
@@ -118,7 +131,7 @@ contract W4CreditForkTest is Test {
         assertEq(reason, CurbCredit.NoDepth.selector);
         assertEq(credit.ltvFor(W_TCENT), 0);
 
-        _postDemoCert();
+        certId = _postDemoCert();
         uint256 p = _p();
         uint256 expected = MulDiv.mulDiv(0.028e18 * 1e4, 52e6 * 1e12, 0.05e18 * p);
         if (expected > 6000) expected = 6000;
@@ -177,7 +190,7 @@ contract W4CreditForkTest is Test {
         _openHk();
         uint256 p = _p();
         uint128 bid = uint128(p / 1e12 + 1e6);
-        dc.setDepth(W_TCENT, address(credit), 1e18, bid, uint64(block.timestamp + 26 hours));
+        _post(1e18, bid, 26 hours, uint128(uint256(bid) / 10 + 1));
         vm.prank(agent);
         credit.deposit(W_TCENT, 0.05e18);
         assertEq(credit.ltvFor(W_TCENT), 6000, "open: 60%");
@@ -200,7 +213,7 @@ contract W4CreditForkTest is Test {
     }
 
     function test_demo_cut_breaches_then_cure_clock_freezes_shut_and_runs_open() public {
-        _demoBorrow();
+        (, uint256 certId) = _demoBorrowWithCert();
         uint256 p0 = _p();
 
         // 07:55 cut: LTV 30%, the ~1.4 USDG loan is over its limit.
@@ -226,8 +239,9 @@ contract W4CreditForkTest is Test {
         assertEq(credit.cureOf(agent, W_TCENT).openSecondsUsed, 0, "frozen while UNKNOWN");
         assertTrue(credit.cureOf(agent, W_TCENT).active, "a stale clock never cures");
 
-        // The cert is re-posted at a lower bid before the reopen, so the loan stays over its limit when open.
-        dc.setDepth(W_TCENT, address(credit), 0.028e18, 20e6, uint64(block.timestamp + 26 hours));
+        // Bids fall before the reopen: the desk adds a cert at 20 USDG a share, which becomes the book's minimum
+        // bid, so the loan stays over its limit even when the market is open.
+        _post(0.028e18, 20e6, 26 hours, 0.1e6);
 
         // Reopen: the first open tick only witnesses; then every open 5-minute gap counts.
         _openHk();
@@ -257,5 +271,40 @@ contract W4CreditForkTest is Test {
         );
         console2.log("seized (wTCENTx wei):", seized);
         console2.log("debt cleared (USDG units):", debt - credit.badDebt(W_TCENT));
+
+        // The admin realises the seized shares into the desk's 52-USDG cert, with real USDG moving.
+        uint256 r = credit.reserve();
+        uint256 cost = MulDiv.mulDiv(seized, 52e6, 1e18);
+        vm.prank(DEPLOYER);
+        credit.realise(certId, seized);
+        assertEq(credit.seized(W_TCENT), 0);
+        assertEq(credit.reserve(), r + cost, "fill proceeds join the reserve");
+        assertEq(dc.claimableShares(desk, W_TCENT), seized, "the desk bought the seized shares");
+        assertEq(IERC20(USDG).balanceOf(address(credit)), credit.reserve());
+        console2.log("realised (USDG units):", cost);
+    }
+
+    function test_realise_fade_on_live_usdg() public {
+        (, uint256 certId) = _demoBorrowWithCert();
+        _shutHk();
+        credit.flagBreach(agent, W_TCENT);
+        _post(0.028e18, 20e6, 26 hours, 0.1e6);
+        _openHk();
+        credit.tick(agent, W_TCENT);
+        for (uint256 i = 1; i <= 6; ++i) {
+            vm.warp(block.timestamp + 300);
+            credit.tick(agent, W_TCENT);
+        }
+        credit.liquidate(agent, W_TCENT);
+        uint256 seized = credit.seized(W_TCENT);
+        // The desk revokes its USDG allowance: the 52-USDG bid is no longer payable, so taking it fades.
+        vm.prank(desk);
+        IERC20(USDG).approve(address(dc), 0);
+        uint256 r = credit.reserve();
+        vm.prank(DEPLOYER);
+        credit.realise(certId, seized);
+        assertEq(credit.seized(W_TCENT), seized, "shares came back");
+        assertEq(credit.reserve(), r + 1e6, "the desk's whole 1 USDG bond");
+        assertEq(uint8(dc.certOf(certId).status), uint8(IDepthCert.Status.FADED));
     }
 }

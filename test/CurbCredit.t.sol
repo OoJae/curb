@@ -14,6 +14,7 @@ import {MockWrapper4626} from "./mocks/MockWrapper4626.sol";
 import {MockClock} from "./mocks/MockClock.sol";
 import {MockScorecardPrice} from "./mocks/MockScorecardPrice.sol";
 import {MockDepthCert} from "./mocks/MockDepthCert.sol";
+import {DepthCert} from "../src/DepthCert.sol";
 
 /// @notice Minimal settable allowlist standing in for EligibilityRegistry (P2) in CurbCredit tests.
 contract AllowList is IEligibility {
@@ -1403,5 +1404,197 @@ contract CurbCreditSuffixTest is CreditBase {
         assertEq(r1, r2, "same return data");
         assertEq(s1, s2, "same state");
         assertTrue(l1 != bytes32(0));
+    }
+}
+
+/// @notice CurbCredit against P3's real DepthCert (not the mock): honoured depth from bonded certs naming CurbCredit
+///         prices ltvFor; short-lived and dishonourable certs drop out; `realise` fills and fades for real.
+contract CurbCreditRealDepthTest is Test {
+    MockERC20 usdg;
+    MockWrapper4626 wA;
+    MockClock clock;
+    MockScorecardPrice sc;
+    AllowList elig;
+    DepthCert depth;
+    CurbCredit credit;
+
+    address admin = makeAddr("admin");
+    address alice = makeAddr("alice"); // borrower (A)
+    address desk = makeAddr("desk"); // maker (K)
+    address eve = makeAddr("eve"); // never eligible
+    address funder = makeAddr("funder");
+
+    function setUp() public {
+        vm.warp(1_760_000_000);
+        usdg = new MockERC20("Global Dollar", "USDG", 6);
+        wA = new MockWrapper4626(address(0xA0), "Wrapped TCENTx", "wTCENTx");
+        clock = new MockClock();
+        sc = new MockScorecardPrice();
+        elig = new AllowList();
+        sc.setPrice(address(wA), 50e18);
+        clock.set(address(wA), IMarketClock.Regime.MARKET, 20_000_000);
+        depth = new DepthCert(IERC20(address(usdg)), IEligibility(address(elig)));
+        address[] memory list = new address[](1);
+        list[0] = address(wA);
+        credit = new CurbCredit(clock, sc, IDepthCert(address(depth)), elig, IERC20(address(usdg)), admin, list);
+
+        elig.set(alice, true);
+        elig.set(desk, true); // the demo maker must be eligible to post certs naming CurbCredit
+
+        usdg.mint(desk, 100_000e6);
+        vm.prank(desk);
+        usdg.approve(address(depth), type(uint256).max);
+        usdg.mint(eve, 100_000e6);
+        vm.prank(eve);
+        usdg.approve(address(depth), type(uint256).max);
+
+        usdg.mint(funder, 50_000e6);
+        vm.startPrank(funder);
+        usdg.approve(address(credit), type(uint256).max);
+        credit.fund(50_000e6);
+        vm.stopPrank();
+
+        wA.mint(alice, 1_000e18);
+        vm.prank(alice);
+        wA.approve(address(credit), type(uint256).max);
+    }
+
+    function _post(address maker, address beneficiary, uint128 size, uint128 bid, uint64 life)
+        internal
+        returns (uint256 id)
+    {
+        uint128 bond = uint128((MulDiv.mulDiv(size, bid, 1e18) * 1000 + 9999) / 1e4);
+        vm.prank(maker);
+        id = depth.post(address(wA), beneficiary, size, bid, uint64(block.timestamp) + life, bond);
+    }
+
+    function _deposit(uint256 s) internal {
+        vm.prank(alice);
+        credit.deposit(address(wA), s);
+    }
+
+    function _borrow(uint256 amt) internal returns (bool ok) {
+        vm.prank(alice);
+        ok = credit.borrow(address(wA), amt);
+    }
+
+    function test_real_certs_price_ltv() public {
+        _deposit(100e18);
+        vm.recordLogs();
+        assertFalse(_borrow(1e6));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs[0].topics[3], bytes32(CurbCredit.NoDepth.selector));
+
+        _post(desk, address(credit), 50e18, 40e6, 2 days);
+        // covered 50 of basis 100, bid 80% of price: 0.5 * 8000 = 4000 bps
+        assertEq(credit.ltvFor(address(wA)), 4000);
+        assertEq(credit.realisable(address(wA)), 2000e6);
+        assertEq(credit.limitOf(alice, address(wA)), 2000e6);
+        assertTrue(_borrow(2000e6));
+        assertEq(credit.totalPrincipal(address(wA)), credit.realisable(address(wA)));
+    }
+
+    function test_real_min_bid_across_certs_and_open_certs_do_not_count() public {
+        _deposit(100e18);
+        _post(desk, address(credit), 60e18, 40e6, 2 days);
+        _post(desk, address(credit), 60e18, 25e6, 2 days);
+        _post(eve, address(0), 500e18, 49e6, 2 days); // open cert: anyone may take it, so it is not CurbCredit's depth
+        (uint256 s,, uint128 minBid,) =
+            depth.honouredDepth(address(wA), address(credit), uint64(block.timestamp + 1 hours));
+        assertEq(s, 120e18);
+        assertEq(minBid, 25e6);
+        assertEq(credit.ltvFor(address(wA)), 5000); // covered 100/100 at 25/50
+        assertEq(credit.realisable(address(wA)), 2500e6);
+    }
+
+    function test_real_ineligible_maker_cannot_seed_the_book() public {
+        vm.expectRevert(DepthCert.IneligibleMaker.selector);
+        _post(eve, address(credit), 1e18, 1e6, 2 days);
+        assertEq(credit.ltvFor(address(wA)), 0);
+    }
+
+    function test_real_short_cert_drops_out_inside_an_hour() public {
+        _deposit(100e18);
+        _post(desk, address(credit), 200e18, 45e6, 90 minutes);
+        assertEq(credit.ltvFor(address(wA)), 6000);
+        assertTrue(_borrow(1000e6));
+        vm.warp(block.timestamp + 31 minutes); // 59 min of life left: below MIN_CERT_LIFE
+        assertEq(credit.ltvFor(address(wA)), 0);
+        credit.flagBreach(alice, address(wA));
+        assertTrue(credit.cureOf(alice, address(wA)).active);
+    }
+
+    function test_real_revoked_allowance_removes_depth_then_restoring_cures() public {
+        _deposit(100e18);
+        _post(desk, address(credit), 200e18, 45e6, 2 days);
+        assertTrue(_borrow(2000e6));
+        vm.prank(desk);
+        usdg.approve(address(depth), 0);
+        assertFalse(depth.isHonourable(desk));
+        assertEq(credit.ltvFor(address(wA)), 0, "an unpayable bid is no depth");
+        credit.flagBreach(alice, address(wA));
+
+        vm.prank(desk);
+        usdg.approve(address(depth), type(uint256).max);
+        vm.warp(block.timestamp + 300);
+        credit.tick(alice, address(wA));
+        assertFalse(credit.cureOf(alice, address(wA)).active, "depth back: healthy again");
+    }
+
+    /// alice at limit (3000 against 100 shares at $50, 200-share cert at 45), $40 breach, 30 open minutes.
+    function _liquidated() internal returns (uint256 id, uint256 seized) {
+        id = _post(desk, address(credit), 200e18, 45e6, 2 days);
+        _deposit(100e18);
+        assertTrue(_borrow(3000e6));
+        sc.setPrice(address(wA), 40e18);
+        credit.flagBreach(alice, address(wA));
+        for (uint256 i; i < 6; ++i) {
+            vm.warp(block.timestamp + 300);
+            credit.tick(alice, address(wA));
+        }
+        credit.liquidate(alice, address(wA));
+        seized = credit.seized(address(wA));
+        assertGt(seized, 75e18);
+    }
+
+    function test_real_realise_fill() public {
+        (uint256 id, uint256 seized) = _liquidated();
+        uint256 r = credit.reserve();
+        vm.expectEmit(true, false, false, true, address(credit));
+        emit CurbCredit.Realised(id, 20e18, true, 900e6);
+        vm.prank(admin);
+        credit.realise(id, 20e18);
+        assertEq(credit.seized(address(wA)), seized - 20e18);
+        assertEq(credit.reserve(), r + 900e6);
+        assertEq(usdg.balanceOf(address(credit)), credit.reserve());
+        assertEq(depth.claimableShares(desk, address(wA)), 20e18, "the maker bought the shares");
+        assertEq(depth.certOf(id).remainingShares, 180e18);
+        assertEq(wA.balanceOf(address(credit)), credit.totalCollateral(address(wA)) + credit.seized(address(wA)));
+        assertEq(wA.allowance(address(credit), address(depth)), 0);
+    }
+
+    function test_real_realise_fade_keeps_shares_and_takes_the_bond() public {
+        (uint256 id, uint256 seized) = _liquidated();
+        vm.prank(desk);
+        usdg.approve(address(depth), 0); // the maker walks away from the bid
+        uint256 r = credit.reserve();
+        vm.expectEmit(true, false, false, true, address(credit));
+        emit CurbCredit.Realised(id, 20e18, false, 900e6);
+        vm.prank(admin);
+        credit.realise(id, 20e18);
+        assertEq(credit.seized(address(wA)), seized, "shares returned");
+        assertEq(credit.reserve(), r + 900e6, "the whole bond");
+        assertEq(uint8(depth.certOf(id).status), uint8(IDepthCert.Status.FADED));
+        assertEq(wA.balanceOf(address(credit)), credit.totalCollateral(address(wA)) + credit.seized(address(wA)));
+    }
+
+    function test_real_realise_expired_cert_reverts_cleanly() public {
+        (uint256 id, uint256 seized) = _liquidated();
+        vm.warp(block.timestamp + 3 days);
+        uint64 expiry = depth.certOf(id).expiry;
+        vm.expectRevert(abi.encodeWithSelector(DepthCert.CertExpired.selector, id, expiry));
+        vm.prank(admin);
+        credit.realise(id, 1e18);
+        assertEq(credit.seized(address(wA)), seized);
     }
 }
