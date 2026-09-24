@@ -79,7 +79,59 @@ export default defineRailway(() => {
     },
   });
 
+  // curb-asp -- Curb's x402-paid API for the OKX AI marketplace (services/asp), at https://api.curb.markets.
+  // Deployed by upload like attestor-a: `railway up services/asp --path-as-root --service curb-asp`.
+  const aspData = volume("asp-data", {
+    alerts: { usage: { "100": {}, "80": {}, "95": {} } },
+    allowOnlineResize: true,
+    region: "sin",
+    sizeMB: 1024,
+  });
+  const curbAsp = service("curb-asp", {
+    replicas: { sin: 1 },
+    // /data holds receipts/, issuer/ (the evidence bytes each answer was computed from), index/ (the
+    // RegimeChanged backfill) and ledger/ (pending and settled payments).
+    volumeMounts: { "/data": aspData },
+    // Custom domain api.curb.markets is attached with `railway domain` (Railway configuration cannot
+    // register custom domains), fronted by a DNS-only CNAME in Cloudflare -- never proxied: a proxy may
+    // cache or rewrite a 402, and both OKX's validator and every x402 client depend on the exact status
+    // and headers.
+    healthcheck: "/healthz",
+    // /healthz goes ok after the first tick. The Broker's /supported is fired, not awaited, so a slow
+    // OKX cannot hold the first deploy's healthcheck.
+    healthcheckTimeout: 180,
+    deploy: {
+      restartPolicyType: "ALWAYS",
+      // One process per volume: the payment ledger and the receipts must never have two writers.
+      overlapSeconds: 0,
+      // SIGTERM drains paid requests in flight for up to 45 s (main.ts DRAIN_MS); this must exceed it.
+      drainingSeconds: 60,
+    },
+    env: {
+      HOST_ID: "asp",
+      CHAIN_ID: "196",
+      CLOCK: "0x160Dc415902971a7a9B5ade7f43005b36FE5B09b",
+      SCORECARD: "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f",
+      RPCS: "https://rpc.xlayer.tech,https://xlayer.drpc.org",
+      PUBLIC_URL: "https://api.curb.markets",
+      DATA_DIR: "/data",
+      PORT: "8080",
+      TZ: "UTC",
+      OKX_SYNC_SETTLE: "true",
+      // A settle outlasting this is an unknown outcome, resolved by the chain (pay/ledger.ts). 5000-120000.
+      OKX_SETTLE_TIMEOUT_MS: "30000",
+      // curb-revenue: receive-only, key only in an encrypted keystore on the team's Mac. Public, so a literal;
+      // listed in docs/WALLETS.md.
+      PAY_TO: "0x277cA91276A3801667B76C97Da3872Ccb6E96068",
+      // OKX Onchain OS API credentials. Set from ~/.foundry/curb-secrets/okx-api.env with
+      // `railway variables --set-from-stdin`, never typed into a command or committed. preserve() keeps them.
+      OKX_API_KEY: preserve(),
+      OKX_SECRET_KEY: preserve(),
+      OKX_PASSPHRASE: preserve(),
+    },
+  });
+
   return project("curb", {
-    resources: [w0Observer, w0ObserverVolume, attestorA, attestorAData],
+    resources: [w0Observer, w0ObserverVolume, attestorA, attestorAData, curbAsp, aspData],
   });
 });

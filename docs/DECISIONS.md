@@ -529,3 +529,24 @@ change a method. The next rows are the ~17½-hour overnight closure (cut 07:55Z,
 several days, the lunch closure will never be winnable under `mark/1`, and the method gains a
 cross-market term as `curb.scorecard.mark/2` — with old rows keeping the method that produced them,
 exactly as the attestor's derivation methods are versioned. **No row is ever re-marked.**
+
+### D-11 update, 24 Sept 2026 — fifteen rows, fifteen ties, and the overnight is silent too
+
+By 24 Sept 05:05Z the Scorecard held **15 settled rows: 0 wins, 15 ties, 0 losses.** Nine are lunch
+recesses and **six are the ~17½-hour overnight closures** (settleAfter 01:30Z) — the case D-11 named as
+the one where drift should appear if it appears anywhere. It did not. In every row the mark equals the
+last print exactly, because the pools did not trade while primary capacity was off.
+
+The reopens were not quiet. They moved **30 to 105 bp**: wXIAOx +105 bp (24 Sept lunch), −73 bp and
+−72 bp; wMEITx −64 bp and +30 bp; wTCENTx −53 bp and −32 bp. Real information arrives at every reopen, and
+none of it is in the pool beforehand.
+
+**So the contingency D-11 fixed in advance is now met.** `curb.scorecard.mark/1` cannot beat the last
+print on these assets, by construction: its only input is the wrapper's own pool, and that pool carries
+no information while the market is shut. Beating the baseline requires a signal from outside the pool —
+something that does trade while HKEX is shut (Hang Seng index futures in HKEX's after-hours session,
+US-listed ADRs and China ETFs during US hours, USD/CNH) — introduced as `curb.scorecard.mark/2`, with
+every existing row keeping the method that produced it. No row is ever re-marked.
+
+The public record says so already: `https://api.curb.markets/v1/accuracy-record` previews
+`{"settled": 15, "beatLastPrint": 0, "beatClosingVwap": 0}`. That is the honest number.

@@ -175,6 +175,38 @@ attached to any Curb transaction.** It goes inside `Sender.prepare()` before the
 simulation, after one mainnet `eth_call` confirms the target functions ignore trailing calldata.
 Attribution is visible on OKLink next to each transaction hash.
 
+## `curb-asp` — the paid API at `https://api.curb.markets`, 24 Sept 2026
+
+Railway service `curb-asp` (region `sin`, volume `asp-data` at `/data`), deployed by upload from
+`services/asp` with its own Dockerfile. Custom domain attached with `railway domain` (Railway's config
+file cannot register one) behind a **DNS-only** Cloudflare CNAME `api → i9sejppz.up.railway.app`, plus
+the TXT ownership record `_railway-verify.api`. Never proxied: a proxy may cache or rewrite a 402.
+
+Payments settle through OKX's own Broker with the team's Onchain OS API key; the three credentials were
+piped into Railway from `~/.foundry/curb-secrets/okx-api.env` and never typed into a command. Receives
+to the receive-only `curb-revenue` wallet `0x277cA91276A3801667B76C97Da3872Ccb6E96068`.
+
+Verified live from outside, 24 Sept 07:1xZ:
+
+| check | result |
+|---|---|
+| `/healthz` | `ok: true`, **`payments.ready: true`** (Broker handshake with the real key succeeded), cohort 6, Scorecard 15 rows, RegimeChanged index caught up (278 transitions since block 70,617,365) |
+| unpaid `GET /v1/closure-calendar` | **402**, x402 v2, `exact`, `eip155:196`, USDT0, `amount 10000` ($0.01), `payTo` curb-revenue, with a truthful preview (wTCENTx open; next closure 07:55Z → 01:30Z, 17.6 h) |
+| unpaid `/v1/accuracy-record`, `/v1/discount-curve` | **402**, `50000` ($0.05) and `100000` ($0.10) |
+| `/`, `/v1/assets`, `/.well-known/x402` | 200 |
+
+**Not yet done:** a paid call from an external wallet holding USDT0 (the end-to-end gate), and the OKX
+marketplace listing itself, which needs the `onchainos` CLI, an Agentic Wallet email login and an avatar.
+
+## Builder Code attribution — live on all three writers, 24 Sept 2026
+
+`DATA_SUFFIX` set on host A (Railway variable, then a code upload: one restart), host B and the keeper
+(`script/hostb/deploy.sh`, which validates the value on the Mac before copying anything). All three
+`/healthz` report `attribution.codes: ["dd7u50nckt5e729f"]`. Host A's first round after the deploy —
+[`0x5d3c92ab…605e`](https://www.oklink.com/xlayer/tx/0x5d3c92ab02abb2adbde73babc07a0eed739237f5cd36745c80ba6d123e45605e),
+block 71,462,192, 32 s after the deploy finished — carries the suffix; OKX's `ox` decodes its calldata to
+`{"codes":["dd7u50nckt5e729f"],"id":0}`, and host B's signed witness for it reads `reproduced: true`.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
