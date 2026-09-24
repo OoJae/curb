@@ -183,11 +183,16 @@
   margin-inline-end: var(--s-half);
 }
 
-/* A specimen is overprinted, as a banknote specimen is. */
+/* A specimen is stamped, as a banknote specimen is: beside the asset, never over the text. */
+.crt__assetrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
 .crt__specimen {
-  position: absolute;
-  top: calc(var(--s-10) + var(--s-1));
-  right: var(--s-3);
+  flex: none;
   padding: var(--s-half) var(--s-1);
   border: var(--rule-strong) solid var(--figure);
   border-radius: var(--radius);

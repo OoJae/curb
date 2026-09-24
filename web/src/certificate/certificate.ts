@@ -66,7 +66,7 @@ export function certificateHTML(o: CertificateOptions): SafeHTML {
       <span class="crt__serial">No.&nbsp;${o.serial ?? String(o.id)}</span>
     </header>
     <div class="crt__body">
-      <p class="crt__asset">${o.asset}</p>
+      <div class="crt__assetrow"><p class="crt__asset">${o.asset}</p>${o.specimen ? html`<span class="crt__specimen" aria-hidden="true">Specimen</span>` : ''}</div>
       <p class="crt__face">${o.face}</p>
       ${o.promise ? html`<p class="crt__promise">${o.promise}</p>` : ''}
     </div>
@@ -79,7 +79,6 @@ export function certificateHTML(o: CertificateOptions): SafeHTML {
       <span class="crt__seal" aria-hidden="true">${seal}</span>
       <span class="crt__fingerprint"><span class="crt__fp-label">Fingerprint</span> <code title="${seed}">${seed.slice(0, 10)}…${seed.slice(-6)}</code></span>
     </footer>
-    ${o.specimen ? html`<span class="crt__specimen" aria-hidden="true">Specimen</span>` : ''}
   </div>
 </article>`;
 }

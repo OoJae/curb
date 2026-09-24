@@ -69,7 +69,7 @@ export function mountLtvPlot(box: HTMLElement, range: HTMLInputElement, readout:
     const here = curve.here;
     const hereMark =
       here && priced()
-        ? `<g class="dp-svg__here" transform="translate(${x(Math.min(here.depthShares, xMax)).toFixed(1)} ${y(here.ltvBps).toFixed(1)})"><circle r="6"/><text x="${here.depthShares > xMax * 0.6 ? -10 : 10}" y="-10" text-anchor="${here.depthShares > xMax * 0.6 ? 'end' : 'start'}">you are here</text></g>`
+        ? `<g class="dp-svg__here" transform="translate(${x(Math.min(here.depthShares, xMax)).toFixed(1)} ${y(here.ltvBps).toFixed(1)})"><circle r="6"/><text x="${here.depthShares > xMax * 0.6 ? -10 : 10}" y="22" text-anchor="${here.depthShares > xMax * 0.6 ? 'end' : 'start'}">you are here</text></g>`
         : '';
     box.innerHTML = `<svg class="dp-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" focusable="false" aria-hidden="true">
       <line class="dp-svg__axis" x1="${PAD.l}" x2="${W - PAD.r}" y1="${y(0)}" y2="${y(0)}"/>
