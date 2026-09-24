@@ -8,7 +8,12 @@
  * Multicall3 instead, and every outgoing request takes a slot from ratelimit.ts (≤ 5 in any second,
  * shared with rpc-lite), so a page cannot trip the limit on its own.
  */
-import { createPublicClient, defineChain, fallback, http, type PublicClient } from "viem";
+import {
+  createClient, defineChain, fallback, http,
+  type Abi, type Client, type ContractFunctionArgs, type ContractFunctionName, type GetLogsParameters,
+  type Log, type MulticallParameters, type ReadContractParameters, type Transport, type WaitForTransactionReceiptParameters,
+} from "viem";
+import { getBlock, getBlockNumber, getLogs, multicall, readContract, simulateContract, waitForTransactionReceipt } from "viem/actions";
 import { CHAIN_ID, MULTICALL3, OKLINK, RPC_URLS } from "./addresses.ts";
 import { rpcSlot } from "./ratelimit.ts";
 
@@ -29,20 +34,46 @@ const limitedFetch: typeof fetch = async (input, init) => {
   return fetch(input, init);
 };
 
-let client: PublicClient | null = null;
+let base: Client<Transport, typeof xLayer> | null = null;
 
-export function publicClient(): PublicClient {
-  if (!client) {
-    client = createPublicClient({
+/** The bare viem client (no action bundle attached, so only the actions below are shipped). */
+export function baseClient(): Client<Transport, typeof xLayer> {
+  if (!base) {
+    base = createClient({
       chain: xLayer,
       batch: { multicall: { wait: 16 } },
       transport: fallback(
         RPC_URLS.map((url) => http(url, { batch: false, retryCount: 1, timeout: 10_000, fetchFn: limitedFetch })),
         { rank: false, retryCount: 1 },
       ),
-    }) as PublicClient;
+    });
   }
-  return client;
+  return base;
+}
+
+/**
+ * The public actions the site uses, bound to the bare client. `createPublicClient` would attach every
+ * public action viem has (~96 KB gz measured for a page reader); importing these from viem/actions
+ * tree-shakes to ~40 KB gz, inside the spec's 50 KB viem-chunk budget. Same call shapes as a PublicClient.
+ */
+export function publicClient() {
+  const c = baseClient();
+  return {
+    /** The latest block (the site never asks for another). */
+    getBlock: (_?: { blockTag?: "latest" }) => getBlock(c, { blockTag: "latest" }),
+    getBlockNumber: () => getBlockNumber(c, { cacheTime: 0 }),
+    readContract: <
+      const abi extends Abi | readonly unknown[],
+      functionName extends ContractFunctionName<abi, "pure" | "view">,
+      const args extends ContractFunctionArgs<abi, "pure" | "view", functionName>,
+    >(a: ReadContractParameters<abi, functionName, args>) => readContract(c, a),
+    multicall: <const contracts extends readonly unknown[], allowFailure extends boolean = true>(
+      a: MulticallParameters<contracts, allowFailure>,
+    ) => multicall(c, a),
+    getLogs: (a: GetLogsParameters<any, any, any>) => getLogs(c, a) as Promise<Log<bigint, number, false, any, true>[]>,
+    simulateContract: (a: any) => simulateContract(c, a) as Promise<{ result: unknown; request: any }>,
+    waitForTransactionReceipt: (a: WaitForTransactionReceiptParameters<typeof xLayer>) => waitForTransactionReceipt(c, a),
+  };
 }
 
 /** Fixed-point integer → float, for display only (18 dp shares/prices, 6 dp USDG). */

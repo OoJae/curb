@@ -18,7 +18,10 @@ import { knownIds, rememberId } from "./notes.ts";
 import { regimeName } from "./regime.ts";
 import { getPriceNow } from "./scorecard.ts";
 import type { Address, CertStatus, CertView, CreditPosition, DepthView, Hex, LtvCurve, LtvPoint, RegimeName } from "./types.ts";
-import { write, type WriteOutcome } from "./wallet.ts";
+import type { WriteOutcome, WriteRequest } from "./wallet.ts";
+
+/** The wallet path (viem wallet actions, EIP-6963) loads only when a visitor actually writes. */
+const write = async (req: WriteRequest): Promise<WriteOutcome> => (await import("./wallet.ts")).write(req);
 
 // --- published constants (spec) ----------------------------------------------------------------
 

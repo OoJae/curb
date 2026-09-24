@@ -5,9 +5,10 @@
  * is simulated is byte-for-byte what is sent.
  */
 import {
-  BaseError, ContractFunctionRevertedError, createWalletClient, custom,
-  type Abi, type EIP1193Provider, type TransactionReceipt, type WalletClient,
+  BaseError, ContractFunctionRevertedError, createClient, custom,
+  type Abi, type Account, type Client, type EIP1193Provider, type TransactionReceipt, type Transport,
 } from "viem";
+import { writeContract } from "viem/actions";
 import { CHAIN_ID_HEX, OKLINK, RPC_URLS, oklinkTx } from "./addresses.ts";
 import { publicClient, xLayer } from "./chain.ts";
 import { DATA_SUFFIX } from "./suffix.ts";
@@ -49,7 +50,7 @@ export function discoverWallets(onChange?: (w: WalletInfo[]) => void): WalletInf
   return sorted();
 }
 
-let active: { provider: EIP1193Provider; client: WalletClient; account: Address; info: WalletInfo | null } | null = null;
+let active: { provider: EIP1193Provider; client: Client<Transport, typeof xLayer, Account>; account: Address; info: WalletInfo | null } | null = null;
 
 export function connectedAccount(): Address | null {
   return active?.account ?? null;
@@ -103,7 +104,7 @@ export async function connect(uuidOrRdns?: string): Promise<Address> {
   const accounts = (await picked.provider.request({ method: "eth_requestAccounts" })) as Address[];
   if (!accounts?.[0]) throw new Error("The wallet returned no account.");
   await ensureChain(picked.provider);
-  const client = createWalletClient({ chain: xLayer, transport: custom(picked.provider), account: accounts[0] });
+  const client = createClient({ chain: xLayer, transport: custom(picked.provider), account: accounts[0] });
   active = { provider: picked.provider, client, account: accounts[0], info: picked.info };
   picked.provider.on?.("accountsChanged", (a: string[]) => {
     if (active) active.account = (a?.[0] as Address) ?? active.account;
@@ -151,7 +152,7 @@ export async function write(req: WriteRequest, onSent?: (hash: Hex) => void): Pr
   } catch (e) {
     throw new WriteError(describeError(e), revertName(e));
   }
-  const hash = (await active.client.writeContract({ ...request, account: active.account, chain: xLayer, dataSuffix: DATA_SUFFIX })) as Hex;
+  const hash = (await writeContract(active.client, { ...request, account: active.account, chain: xLayer, dataSuffix: DATA_SUFFIX })) as Hex;
   onSent?.(hash);
   const receipt = await pc.waitForTransactionReceipt({ hash, confirmations: 1 });
   return { hash, block: Number(receipt.blockNumber), status: receipt.status, oklinkTxUrl: oklinkTx(hash), receipt };

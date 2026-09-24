@@ -18,7 +18,10 @@ import { fixture, isMock } from "./mock.ts";
 import { nextReopenMs, venueFor } from "./schedule.ts";
 import { getPriceNow } from "./scorecard.ts";
 import type { Address, AuctionLot, LotStatus, NoteView, PointerEpoch } from "./types.ts";
-import { write, type WriteOutcome } from "./wallet.ts";
+import type { WriteOutcome, WriteRequest } from "./wallet.ts";
+
+/** The wallet path (viem wallet actions, EIP-6963) loads only when a visitor actually writes. */
+const write = async (req: WriteRequest): Promise<WriteOutcome> => (await import("./wallet.ts")).write(req);
 
 export const FALLBACK_AFTER_MS = 10 * 86_400_000;
 export const PRINT_DELAY_S = 300;
