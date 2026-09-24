@@ -1,0 +1,182 @@
+/* View transitions: the registry of view-transition names (only lane A edits this file) and the
+   "window" page transition from spec §3.
+
+   Cross-document (MPA) navigation:
+     - the masthead persists (view-transition-name: masthead) and the grain stays put (grain)
+     - the mark's amber arc steps 30° forward once (mark-arc)
+     - old page: opacity 0 / −12 px, 200 ms ease-in (curb exit)
+     - new page: +24 px → 0, 560 ms "curb" ease, after 60 ms
+     - a card title on / morphs into the page H1: give both `.vt-title-<page>`
+     - page intros wait for pagereveal + viewTransition.finished (shell.ready)
+   Live paper/ink flip: document.startViewTransition with html.vt-regime, a 1.2 s crossfade.
+   Reduced motion: no view-transition animation at all. */
+
+@view-transition {
+  navigation: auto;
+}
+
+/* ── Name registry. One element per name per document. ─────────────────────────────────────
+   masthead      .masthead (shell)
+   mark-arc      .masthead__mark .mark-tile__arc (shell)
+   grain         .grain (shell)
+   now-line      .vt-now-line: the home hero's now-line / any page's live strip
+   week-ring     .vt-week-ring: the ring canvas/poster (lane C)
+   certificate   .vt-certificate: the note certificate (lane E)
+   title-<page>  .vt-title-<page>: a card title on / and that page's H1 */
+.vt-now-line {
+  view-transition-name: now-line;
+}
+
+.vt-week-ring {
+  view-transition-name: week-ring;
+}
+
+.vt-certificate {
+  view-transition-name: certificate;
+}
+
+.vt-title-home {
+  view-transition-name: title-home;
+}
+
+.vt-title-clock {
+  view-transition-name: title-clock;
+}
+
+.vt-title-scorecard {
+  view-transition-name: title-scorecard;
+}
+
+.vt-title-api {
+  view-transition-name: title-api;
+}
+
+.vt-title-notes {
+  view-transition-name: title-notes;
+}
+
+.vt-title-depth {
+  view-transition-name: title-depth;
+}
+
+.vt-title-brand {
+  view-transition-name: title-brand;
+}
+
+.vt-title-404 {
+  view-transition-name: title-404;
+}
+
+/* ── "The window": page-to-page ─────────────────────────────────────────────────────────── */
+@keyframes curb-vt-out {
+  to {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes curb-vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@keyframes curb-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes curb-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes curb-vt-arc-step {
+  from {
+    transform: rotate(-30deg);
+  }
+}
+
+::view-transition-old(root) {
+  animation: curb-vt-out var(--dur-exit) var(--ease-exit) both;
+}
+
+::view-transition-new(root) {
+  animation: curb-vt-in 560ms var(--ease-curb) 60ms both;
+}
+
+/* The masthead and the grain do not move: no crossfade between identical snapshots. */
+::view-transition-group(masthead),
+::view-transition-group(grain) {
+  animation-duration: 0s;
+}
+
+::view-transition-old(masthead),
+::view-transition-old(grain) {
+  display: none;
+}
+
+::view-transition-new(masthead),
+::view-transition-new(grain) {
+  animation: none;
+}
+
+/* The amber arc steps 30° forward (clockwise = forward in time) into place. */
+::view-transition-old(mark-arc) {
+  display: none;
+}
+
+::view-transition-new(mark-arc) {
+  animation: curb-vt-arc-step 560ms var(--ease-curb) both;
+}
+
+::view-transition-group(mark-arc) {
+  animation-duration: 0s;
+}
+
+/* Title morphs (card title → page H1) and other named groups use the curb ease. */
+::view-transition-group(*) {
+  animation-timing-function: var(--ease-curb);
+  animation-duration: 560ms;
+}
+
+/* ── The live paper/ink flip: a slow crossfade of everything ───────────────────────────── */
+html.vt-regime::view-transition-group(*),
+html.vt-regime::view-transition-old(*),
+html.vt-regime::view-transition-new(*) {
+  animation-duration: var(--dur-flip);
+  animation-timing-function: ease-in-out;
+  animation-delay: 0s;
+}
+
+html.vt-regime::view-transition-old(root),
+html.vt-regime::view-transition-old(masthead),
+html.vt-regime::view-transition-old(grain) {
+  display: block;
+  animation-name: curb-fade-out;
+}
+
+html.vt-regime::view-transition-new(root),
+html.vt-regime::view-transition-new(masthead),
+html.vt-regime::view-transition-new(grain) {
+  animation-name: curb-fade-in;
+}
+
+html.vt-regime::view-transition-old(mark-arc) {
+  display: none;
+}
+
+html.vt-regime::view-transition-new(mark-arc) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

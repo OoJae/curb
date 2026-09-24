@@ -1,0 +1,153 @@
+/* Curb design tokens. The ONLY file allowed to hold raw hex colours or px font sizes
+   (scripts/lint-tokens.mjs enforces this). Spec: docs/specs/brand-site-video.md §1.
+
+   Regime modes live on <html data-regime="…">:
+     shut | unknown (default, 84% of the week) → Street ink ground, ivory figure
+     open (MarketClock MARKET && cap > 0)      → Certificate ivory ground, ink figure ("paper hours")
+   Inside either mode, .surface-ink / .surface-paper force a local ground (e.g. the ring's ink window). */
+
+:root {
+  /* ── The six colours ─────────────────────────────────────────────────────────────────────── */
+  --ink: #0F1720;        /* Street ink: ground when shut; figure in paper mode */
+  --ivory: #F4EFE6;      /* Certificate ivory: figure on ink; ground in paper mode (15.7:1) */
+  --streetlamp: #F5A524; /* trading while the exchange is shut. ONLY on ink (8.8:1); never on ivory (1.8:1) */
+  --slate: #8A96A3;      /* Window slate: secondary text on ink (6.0:1); forbidden on ivory */
+  --brass: #8A5A00;      /* Bell brass: Streetlamp's twin in paper mode: signal text, links, focus (5.2:1) */
+  --graphite: #5B6470;   /* secondary text in paper mode (5.2:1) */
+
+  /* ── Type ────────────────────────────────────────────────────────────────────────────────── */
+  --font-display: 'Bodoni Moda', 'Bodoni Moda fallback', 'Times New Roman', serif;
+  --font-text: 'Libre Franklin', 'Libre Franklin fallback', Arial, sans-serif;
+  --font-data: 'Martian Mono', 'Martian Mono fallback', 'Courier New', monospace;
+
+  --t-hero:    clamp(2.75rem,  1.429rem + 5.634vw, 6.5rem);    /* 44→104 Bodoni 400, lh .96, -0.02em */
+  --t-h1:      clamp(2.25rem,  1.458rem + 3.380vw, 4.5rem);    /* 36→72 */
+  --t-h2:      clamp(1.75rem,  1.310rem + 1.878vw, 3rem);      /* 28→48, lh 1.05 */
+  --t-numeral: clamp(3.5rem,   1.211rem + 9.765vw, 10rem);     /* 56→160 Bodoni, -0.03em, static only */
+  --t-lede:    clamp(1.125rem, 1.037rem + 0.376vw, 1.375rem);  /* 18→22 Franklin 400, lh 1.4 */
+  --t-body:    clamp(1rem,     0.978rem + 0.094vw, 1.0625rem); /* 16→17, lh 1.55 */
+  --t-small:   clamp(0.8125rem,0.791rem + 0.094vw, 0.875rem);  /* 13→14 */
+  --t-data:    clamp(0.75rem,  0.706rem + 0.188vw, 0.875rem);  /* 12→14 Martian 400, lh 1.4 */
+  --t-wordmark: 1.75rem;       /* 28: masthead wordmark, Bodoni opsz 96 wght 500 (the Bodoni floor) */
+
+  --lh-hero: 0.96;
+  --lh-h1: 1;
+  --lh-h2: 1.05;
+  --lh-lede: 1.4;
+  --lh-body: 1.55;
+  --lh-small: 1.45;
+  --lh-data: 1.4;
+  --track-hero: -0.02em;
+  --track-numeral: -0.03em;
+  --track-caps: 0.06em;        /* Franklin/Martian small caps labels only; Bodoni is never tracked */
+  --wdth-ledger: 87%;          /* Martian Mono in ledgers: condensed ticker tape */
+  --wdth-code: 100%;           /* Martian Mono for code */
+
+  /* ── Grid: 4 cols at 375, 8 at 768, 12 ≥1024; max 1440 ──────────────────────────────────── */
+  --cols: 4;
+  --max: 1440px;
+  --margin: clamp(20px, 5.2vw, 80px);
+  --gutter: clamp(12px, 1.8vw, 28px);
+  --baseline: 8px;
+
+  /* ── Spacing: 8 px baseline ──────────────────────────────────────────────────────────────── */
+  --s-half: 4px;
+  --s-1: 8px;
+  --s-1-5: 12px;
+  --s-2: 16px;
+  --s-3: 24px;
+  --s-4: 32px;
+  --s-5: 40px;
+  --s-6: 48px;
+  --s-8: 64px;
+  --s-10: 80px;
+  --s-12: 96px;
+  --s-16: 128px;
+  --s-20: 160px;
+  --section: clamp(64px, 4rem + 6vw, 160px);  /* vertical rhythm between page sections */
+
+  /* ── Shape ───────────────────────────────────────────────────────────────────────────────── */
+  --radius: 2px;               /* rules, not cards; no shadows anywhere */
+  --rule: 1px;
+  --rule-strong: 2px;
+  --touch: 44px;               /* minimum touch target */
+
+  /* ── Chrome ──────────────────────────────────────────────────────────────────────────────── */
+  --masthead-row: 52px;
+  --masthead-nav-row: 44px;
+  --masthead-h: calc(var(--masthead-row) + var(--masthead-nav-row));   /* 96: two rows < 768 */
+  --mark-size: 26px;           /* masthead mark (min 16) */
+  --mark-tile: 36px;           /* its ink tile (visible in paper hours) */
+  --glyph-size: 14px;          /* regime glyph in the chip */
+  --strip-h: 12px;             /* slot strip bar height */
+  --z-grain: 60;
+  --z-masthead: 40;
+  --z-popover: 50;
+  --z-skip: 70;
+
+  /* ── Motion (spec §1 Motion) ─────────────────────────────────────────────────────────────── */
+  --ease-curb: cubic-bezier(0.16, 1, 0.3, 1);   /* entrances; GSAP CustomEase "curb" */
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);   /* exits, 200 ms */
+  --dur-press: 90ms;
+  --dur-micro: 150ms;          /* 120–180 */
+  --dur-ui: 400ms;             /* 320–480 */
+  --dur-reveal: 900ms;
+  --dur-exit: 200ms;
+  --dur-digit: 280ms;
+  --dur-copied: 1200ms;
+  --dur-flip: 1200ms;          /* live paper/ink crossfade */
+  --dur-spin: 1600ms;          /* tx pending: one turn / 1.6 s, the only infinite animation */
+}
+
+@media (min-width: 768px) {
+  :root {
+    --cols: 8;
+    --masthead-h: 72px;        /* one row ≥ 768 */
+  }
+}
+@media (min-width: 1024px) {
+  :root { --cols: 12; }
+}
+
+/* ── Regime modes ───────────────────────────────────────────────────────────────────────────── */
+/* Semantic roles. Pages use these, not the raw six:
+   --ground / --figure   background / primary text
+   --muted               secondary text (slate on ink, graphite on paper)
+   --signal              signal text, links, active state (Streetlamp on ink, Bell brass on paper)
+   --focus               focus ring colour
+   --hairline            1 px rules (14% figure into ground)
+   --lamp                Streetlamp where it is legal (ink); Bell brass on paper. Use --streetlamp
+                         directly only inside .surface-ink. */
+:root,
+[data-regime='shut'],
+[data-regime='unknown'],
+.surface-ink {
+  --ground: var(--ink);
+  --figure: var(--ivory);
+  --muted: var(--slate);
+  --signal: var(--streetlamp);
+  --lamp: var(--streetlamp);
+  --focus: var(--streetlamp);
+  --signal-inverse: var(--brass);   /* accent on a --figure fill (an ivory button on ink) */
+  --hairline: color-mix(in oklab, var(--figure) 14%, var(--ground));
+  --hairline-strong: color-mix(in oklab, var(--figure) 32%, var(--ground));
+  --wash: color-mix(in oklab, var(--figure) 5%, var(--ground));
+  --grain-opacity: 0.04;
+  color-scheme: dark;
+}
+
+[data-regime='open'],
+.surface-paper {
+  --ground: var(--ivory);
+  --figure: var(--ink);
+  --muted: var(--graphite);
+  --signal: var(--brass);
+  --lamp: var(--brass);
+  --focus: var(--brass);
+  --signal-inverse: var(--streetlamp); /* accent on a --figure fill (an ink button on paper) */
+  --hairline: color-mix(in oklab, var(--figure) 14%, var(--ground));
+  --hairline-strong: color-mix(in oklab, var(--figure) 32%, var(--ground));
+  --wash: color-mix(in oklab, var(--figure) 5%, var(--ground));
+  --grain-opacity: 0.03;
+  color-scheme: light;
+}
