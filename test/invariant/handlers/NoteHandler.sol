@@ -269,7 +269,10 @@ contract NoteHandler is Test {
         if (id == 0) return;
         address seller = _holder(actorSeed, id);
         if (seller == address(0)) return;
-        amount = bound(amount, 1, note.balanceOf(seller, id));
+        // Mostly real-sized lots (>= 0.1 share, so they can be graded); one in eight may be dust, which
+        // realisedDiscountBps must refuse (worth < 1 USDG unit at the print).
+        uint256 bal = note.balanceOf(seller, id);
+        amount = amount % 8 == 0 || bal < 1e17 ? bound(amount, 1, bal) : bound(amount, 1e17, bal);
         start = bound(start, 1e6, 10_000e6);
         uint256 floor_ = start * bound(floorBps, 1, 10_000) / 10_000;
         if (floor_ == 0) floor_ = 1;
