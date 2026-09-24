@@ -46,8 +46,8 @@ export const CURB_CREDIT: Address | null = "0x23c778c88C3ABf0Ad750f703C5F04cB312
  * remembered in their own localStorage and merged in.
  */
 export const DEMO_IDS: { notes: number[]; lots: number[]; certs: number[]; borrowers: Address[] } = {
-  notes: [],
-  lots: [],
+  notes: [1],
+  lots: [1],
   certs: [],
   borrowers: [],
 };
