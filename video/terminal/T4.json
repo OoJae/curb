@@ -1,0 +1,21 @@
+{
+  "schema": "curb.video.terminal/1",
+  "id": "T4",
+  "title": "curb-verify",
+  "show": "node tools/curb-verify/src/cli.ts bundle https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json",
+  "command": "node tools/curb-verify/src/cli.ts bundle https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json",
+  "cwd": "..",
+  "startedAt": "2026-09-24T14:22:13.662Z",
+  "endedAt": "2026-09-24T14:22:16.593Z",
+  "durationMs": 2931,
+  "exitCode": 0,
+  "signal": null,
+  "output": "round bundle 0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141\n  source     https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json\n  root       0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141\n  kind       heartbeat\n  evaluated  2026-09-24T14:19:36Z\n  claims     6\n  REPRODUCED\n",
+  "chunks": [
+    {
+      "t": 2926,
+      "s": "round bundle 0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141\n  source     https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json\n  root       0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141\n  kind       heartbeat\n  evaluated  2026-09-24T14:19:36Z\n  claims     6\n  REPRODUCED\n",
+      "stream": "stdout"
+    }
+  ]
+}
