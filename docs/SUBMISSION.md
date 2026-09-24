@@ -51,12 +51,13 @@ https://github.com/OoJae/curb
 - MarketClock `0x160Dc415902971a7a9B5ade7f43005b36FE5B09b` (13 Sep, Sourcify exact_match)
 - Scorecard v2 `0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f` (21 Sep, Sourcify exact_match)
 - Scorecard v1, superseded and never used: `0x0527930187a879B3D8704a92734641679567EddD`
-- EligibilityRegistry ⟨address, 25 Sep⟩
-- ReopenPointer ⟨address, 25 Sep⟩
-- ReopenNote ⟨address, 25 Sep⟩
-- ClosedAuction ⟨address, 25 Sep⟩
-- DepthCert ⟨address, 25 Sep⟩
-- CurbCredit ⟨address, 25 Sep⟩
+- EligibilityRegistry (notes) `0xd7251b562eD07374ccD2436a7EfC0bA3A28ce938` (24 Sep, Sourcify exact_match)
+- ReopenPointer `0x85AB0FebdFa7201E65eA01bd3e4CC6F9c0Ac4471` (24 Sep, Sourcify exact_match)
+- ReopenNote (ERC-1155 CURB-RN) `0x7B2AcB0Db3316f7B8cf1B287796a2273871F011B` (24 Sep, Sourcify exact_match)
+- ClosedAuction `0xAc74864d69DdB940ADfDB39E69751759a32bb80D` (24 Sep, Sourcify exact_match)
+- EligibilityRegistry (makers) `0xbA1aB5027e826D564EA913b3f7acb95Fd651758E` (24 Sep, Sourcify exact_match)
+- DepthCert `0x702b1a988765f85162F4829175EF4232197e9C6D` (24 Sep, Sourcify exact_match)
+- CurbCredit `0x23c778c88C3ABf0Ad750f703C5F04cB3129ee339` (24 Sep, Sourcify exact_match)
 - Builder Code: `dd7u50nckt5e729f` (registry `0xd6c426f9c077358735622ae5a83468dc0510823b`)
 - Revenue wallet (x402 payTo): `0x277cA91276A3801667B76C97Da3872Ccb6E96068`
 
@@ -113,9 +114,18 @@ Dates are UTC.
 12. **First paid call, 24 Sep 11:56.** $0.01, team wallet to team (disclosed). Settlement tx `0xe8740458…4de7`,
     receipt `0xcee1ee75…817c`, commit `b70a75f`.
 13. **W3/W4 scaffold and specs, 24 Sep.** Commits `b70a75f` and `0995f72`.
-14. ⟨W3 deployed 25 Sep: addresses, txs, commit⟩
-15. ⟨W4 deployed 25 Sep: addresses, txs, commit⟩
-16. ⟨archive publisher / curb-verify `tx` / mark/2 / site: fill in whichever landed, with its hash⟩
+14. **W3 on mainnet, 24 Sep ~18:00.** ReopenPointer, ReopenNote, ClosedAuction and the note EligibilityRegistry,
+    blocks 71,503,708–71,503,723, all Sourcify exact_match. Commit `424f4bf`.
+15. **W4 on mainnet, 24 Sep ~19:15.** DepthCert, CurbCredit and the maker EligibilityRegistry, blocks
+    71,507,846–71,507,867, all Sourcify exact_match. Commit `e0b8ae7`.
+16. **`curb.scorecard.mark/2`, 24 Sep.** Marks move with markets that trade while Hong Kong is shut (Binance perp
+    and the US ADRs); mark/1's range closes at block 71,486,953 (D-13). Commits `c7e80b6` and `af68ee1`.
+17. **Archive publisher live, 24 Sep 20:32.** Host A, host B and the keeper each publish every new bundle and
+    witness statement to the locked R2 archive after its fsync; the history was backfilled after a check
+    against the chain. Commit `66d7b89`.
+18. **`curb-verify tx` and range verbs, 24 Sep.** Commit `08f2a11`.
+19. **Corporate actions feed and HONx replay, 24 Sep.** Commits `5761957` and `8715db2`.
+20. **curb.markets, 24 Sep.** The site, with the Week Ring and the live regime. Foundation commit `35b9854`.
 
 Full table with links: README, "Built during the 17–25 Sep build window".
 
