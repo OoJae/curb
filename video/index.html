@@ -2,7 +2,7 @@
 <html
   lang="en"
   data-composition-variables='[
-    {"id":"instruments","type":"enum","label":"Beat 7 variant","default":"B","options":[{"value":"A","label":"A · live on mainnet"},{"value":"B","label":"B · in build (specimens)"}]},
+    {"id":"instruments","type":"enum","label":"Beat 7 variant","default":"A","options":[{"value":"A","label":"A · live on mainnet"},{"value":"B","label":"B · in build (specimens)"}]},
     {"id":"captions","type":"boolean","label":"V4 caption rail","default":true}
   ]'
 >
@@ -88,7 +88,7 @@
       .slot.wide { left: 241px; top: 145px; width: 1438px; height: 808px; }
       .slot.split { left: 721px; top: 239px; width: 1102px; height: 619px; }
       .cam { position: absolute; inset: 0; }
-      #cam-O1 { transform-origin: 38% 58%; } #cam-O2 { transform-origin: 63% 30%; } #cam-O3 { transform-origin: 40% 30%; } #cam-O4 { transform-origin: 45% 60%; }
+      #cam-S06 { transform-origin: 70% 40%; } #cam-S07 { transform-origin: 72% 35%; } #cam-O1 { transform-origin: 38% 58%; } #cam-O2 { transform-origin: 63% 30%; } #cam-O3 { transform-origin: 40% 30%; } #cam-O4 { transform-origin: 45% 60%; }
       .cam video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
       /* placeholders: the frame is real, the footage is not yet */
@@ -394,14 +394,16 @@
       <!-- ═══ BEAT 7 · Instruments (152–178) — variant A (live) / B (in build) ════════════ -->
       <div id="pl-S06" class="clip plate wide v-A" data-s="152" data-d="13.3" data-start="152" data-duration="13.3" data-track-index="1">
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">curb.markets/notes</span></div>
-          <div class="win-body"><div class="ph"><div class="id">PENDING: S06</div><div class="what">/notes: the Reopen Note certificate (guilloche, tilt) and its falling-price auction clock.</div><div class="when">after the contracts land on mainnet</div></div></div></div>
-        <div class="win-cap">curb.markets/notes · (pending)</div>
+          <div class="win-body"></div></div>
+        <div class="win-cap">curb.markets/notes · ReopenNote 0x7B2A…011B · note 1, lot 1 cleared at 5.5951 USDG · team wallets · captured Thu 24 Sep</div>
       </div>
+      <div class="slot wide v-A" id="sl-S06"><div class="cam" id="cam-S06" data-layout-allow-overflow><video id="v-S06" data-s="152" data-d="13.3" data-start="152" data-duration="13.3" data-media-start="14.5" data-track-index="0" src="media/clips/S06.mp4" muted playsinline></video></div></div>
       <div id="pl-S07" class="clip plate wide v-A" data-s="165" data-d="13" data-start="165" data-duration="13" data-track-index="1">
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">curb.markets/depth</span></div>
-          <div class="win-body"><div class="ph"><div class="id">PENDING: S07</div><div class="what">/depth: bonded depth moves the LTV; drag the depth handle; "you are here".</div><div class="when">after the contracts land on mainnet</div></div></div></div>
-        <div class="win-cap">curb.markets/depth · (pending)</div>
+          <div class="win-body"></div></div>
+        <div class="win-cap">curb.markets/depth · CurbCredit 0x23c7…e339 · ltvFor read from chain · team wallets</div>
       </div>
+      <div class="slot wide v-A" id="sl-S07"><div class="cam" id="cam-S07" data-layout-allow-overflow><video id="v-S07" data-s="165" data-d="13" data-start="165" data-duration="13" data-media-start="14.5" data-track-index="0" src="media/clips/S07.mp4" muted playsinline></video></div></div>
 
       <div id="sc-cert" class="clip v-B" data-s="152" data-d="13.3" data-start="152" data-duration="13.3" data-track-index="1">
         <div class="ledger callout"><div class="rule"></div>
@@ -504,7 +506,7 @@
       const EXIT = bezier(0.7, 0, 0.84, 0);
 
       const vars = (window.__hyperframes && window.__hyperframes.getVariables && window.__hyperframes.getVariables()) || {};
-      const VARIANT = vars.instruments === "A" ? "A" : "B";
+      const VARIANT = vars.instruments === "B" ? "B" : "A";
       const CAPTIONS = vars.captions !== false;
       const $ = (s) => document.querySelector(s);
       const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -818,7 +820,9 @@
       /* ── BEAT 7 ── */
       if (VARIANT === "A") {
         plateIn("pl-S06", 152, false);
+        push("#cam-S06", 152, 165.3, { s: 1.0 }, { s: 1.05 });
         plateIn("pl-S07", 165);
+        push("#cam-S07", 165, 178, { s: 1.0 }, { s: 1.05 });
       } else {
         fadeIn("#sc-cert .ledger", 152.1, 0.48, CURB);
         rise("#sc-cert .say .rv > span", 152.2);

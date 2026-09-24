@@ -220,13 +220,17 @@ export async function S07(ctx) {
   const t = await sitePage(s, site(ctx, "/depth"), /LTV|depth/i);
   ok(s.id, "honest label when not live", !/specimen/i.test(t) || /in build/i.test(t));
   ok(s.id, "live contracts read (not the specimen)", await waitLive(s, "[data-dp-status]"));
+  // Dwell on the live number and the plot before touching anything, so the edit has room either side.
+  await s.moveToSel("[data-dp-ltv-now]").catch(() => {}); await s.hold(2200);
+  await s.moveToSel("[data-dp-svg], [data-dp-plot]").catch(() => {}); await s.hold(2400);
+  await s.still("S07-ltv");
   const handle = s.page.locator("[data-handle], .dp-handle, [role=slider]").first();
   if (await handle.count()) {
     const b = await s.moveTo(handle);
     await s.page.mouse.down(); await s.move(b.x + 260, b.y + b.height / 2, 60); await s.page.mouse.up();
   }
-  await s.hold(1800);
-  await s.still("S07-ltv");
+  await s.hold(2500);
+  await s.still("S07-ltv-dragged");
   return { path: await s.finish() };
 }
 
