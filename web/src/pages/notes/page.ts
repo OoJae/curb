@@ -114,46 +114,50 @@ async function load(): Promise<State> {
 
 let stopTilt: (() => void) | null = null;
 
-function noteCertificate(n: NoteView | null): SafeHTML {
+/**
+ * The note as a certificate. `null` draws the same card with dashes (the first paint, before any read,
+ * and the "nothing minted yet" state), so the real card replaces it without moving the page.
+ */
+function noteCertificate(n: NoteView | null, loaded = true): SafeHTML {
   const now = Date.now();
-  if (!n) {
-    return certificateHTML({
-      kind: 'note', id: 0, title: 'Curb Reopen Note', asset: 'No note yet', face: 'Nothing minted',
-      promise: 'The first demo note is minted while Hong Kong is shut, after the contracts are deployed.',
-      fields: [{ label: 'Wrapper shares', value: '—' }, { label: 'Underlying at mint', value: '—' }, { label: 'Multiplier nonce', value: '—' }, { label: 'Epoch at mint', value: '—' }, { label: 'Minted', value: '—' }, { label: 'Issuer', value: '—' }],
-      vt: true,
-    });
-  }
-  const promise = n.reopened
-    ? html`Reopen witnessed: the pointer is at epoch ${n.epochNow}. <strong>Redeemable now</strong> for exactly ${fmtShares(n.shares)} ${n.symbol}.`
-    : html`Settles at the verified reopen, expected <strong>${n.expectedReopenMs ? hktDate(n.expectedReopenMs) : 'at the next reopen'}</strong> by the published schedule. The pointer’s witnessed epoch decides, not the timetable.`;
-  const underlying = Number(BigInt(n.underlyingAtMintRaw)) / 1e18;
+  const dash = '—';
+  const DATE_DASH = '— — —, —:— HKT';
+  const promise = !n
+    ? loaded
+      ? html`No note has been minted yet. The first demo note is minted while Hong Kong is shut, after the contracts are deployed.`
+      : html`Settles at the verified reopen, expected <strong>${DATE_DASH}</strong> by the published schedule. The pointer’s witnessed epoch decides, not the timetable.`
+    : n.reopened
+      ? html`Reopen witnessed: the pointer is at epoch ${n.epochNow}. <strong>Redeemable now</strong> for exactly ${fmtShares(n.shares)} ${n.symbol}, share for share.`
+      : html`Settles at the verified reopen, expected <strong>${n.expectedReopenMs ? hktDate(n.expectedReopenMs) : 'at the next reopen'}</strong> by the published schedule. The pointer’s witnessed epoch decides, not the timetable.`;
+  const underlying = n ? Number(BigInt(n.underlyingAtMintRaw)) / 1e18 : 0;
+  const team = n ? TEAM[n.issuer.toLowerCase()] : undefined;
   return certificateHTML({
     kind: 'note',
-    id: n.id,
+    id: n?.id ?? 0,
+    ...(n ? {} : { serial: '—', label: 'Curb Reopen Note, not yet read' }),
     title: 'Curb Reopen Note',
-    asset: n.symbol,
-    face: `${fmtShares(n.shares)} wrapper shares, delivered share for share`,
+    asset: n?.symbol ?? dash,
+    face: `${n ? fmtShares(n.shares) : dash} wrapper shares, delivered share for share`,
     promise,
-    specimen: n.specimen,
+    specimen: n?.specimen ?? false,
     vt: true,
     fields: [
-      { label: 'Wrapper shares', value: fmtShares(n.shares), note: `${n.wrapperSharesRaw} units; one unit is one wei of a share` },
-      { label: 'Underlying at mint', value: fmtShares(underlying), note: 'Provenance only: the wrapper absorbs splits and dividends' },
-      { label: 'Multiplier nonce', value: String(n.multiplierNonce) },
-      { label: 'Epoch at mint', value: String(n.epochAtMint), note: `Unlocks when the pointer passes epoch ${n.epochAtMint}` },
-      { label: 'Minted', value: html`${blockLinkHTML(n.mintedBlock)} <span class="crt__gloss">${hktDate(n.mintedAtMs)}</span>` },
-      { label: 'Issuer', value: whoHTML(n.issuer, TEAM) },
-      { label: 'Fallback', value: hktDate(n.fallbackAtMs), note: n.fallbackAtMs > now ? 'Redeemable then even if no reopen is ever witnessed' : 'Passed: redeemable by fallback' },
+      { label: 'Wrapper shares', value: n ? fmtShares(n.shares) : dash, note: 'One unit of the note is one wei of a share' },
+      { label: 'Underlying at mint', value: n ? fmtShares(underlying) : dash, note: 'Provenance only: the wrapper absorbs splits and dividends' },
+      { label: 'Multiplier nonce', value: n ? String(n.multiplierNonce) : dash },
+      { label: 'Epoch at mint', value: n ? String(n.epochAtMint) : dash, note: `Unlocks when the pointer passes this epoch` },
+      { label: 'Minted', value: n ? blockLinkHTML(n.mintedBlock) : dash, note: n ? hktDate(n.mintedAtMs) : DATE_DASH },
+      { label: 'Issuer', value: n ? addressLinkHTML(n.issuer) : dash, note: team ? `${team.replace('team: ', 'Team wallet: ')}` : 'Can cancel only while holding every unit' },
+      { label: 'Fallback', value: n ? hktDate(n.fallbackAtMs) : DATE_DASH, note: !n || n.fallbackAtMs > now ? 'Redeemable then even if no reopen is witnessed' : 'Passed: redeemable by fallback' },
     ],
   });
 }
 
-function drawCertificate(n: NoteView | null): void {
+function drawCertificate(n: NoteView | null, loaded = true): void {
   const slot = $('[data-nt-cert]');
   if (!slot) return;
   stopTilt?.();
-  render(slot, noteCertificate(n));
+  render(slot, noteCertificate(n, loaded));
   const card = slot.querySelector<HTMLElement>('.crt');
   if (card) stopTilt = enableTilt(card, 6);
 }
@@ -603,6 +607,7 @@ async function refresh(): Promise<void> {
   fillDefaults(state);
 }
 
+drawCertificate(null, false); // first paint: the same card with dashes, so the data lands without a shift
 drawProvenance();
 wireFlow();
 void refresh();

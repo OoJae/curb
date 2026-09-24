@@ -23,7 +23,30 @@
             <p class="nt-status" data-nt-status><span class="tag tag--specimen">Specimen · in build</span></p>
             <p class="t-small muted nt-disclose">Demo counterparties are team wallets: curb-desk sells, the Agentic Wallet buys. No third party has traded a note.</p>
           </div>
-          <div class="col-instrument nt-hero__cert" data-nt-cert aria-live="off"></div>
+          <div class="col-instrument nt-hero__cert" data-nt-cert aria-live="off">
+            <!-- First paint: the certificate with dashes (mirrors certificate.ts), so the data lands without a layout shift. -->
+            <article class="crt vt-certificate" data-kind="note" aria-label="Curb Reopen Note, not yet read">
+              <div class="crt__card surface-paper">
+                <div class="crt__engraving" aria-hidden="true"></div>
+                <header class="crt__head"><span class="crt__title">Curb Reopen Note</span><span class="crt__serial">No.&nbsp;—</span></header>
+                <div class="crt__body">
+                  <p class="crt__asset">—</p>
+                  <p class="crt__face">— wrapper shares, delivered share for share</p>
+                  <p class="crt__promise">Settles at the verified reopen, expected <strong>— — —, —:— HKT</strong> by the published schedule. The pointer’s witnessed epoch decides, not the timetable.</p>
+                </div>
+                <dl class="crt__fields">
+                  <div class="crt__field"><dt>Wrapper shares</dt><dd>—<span class="crt__gloss">One unit of the note is one wei of a share</span></dd></div>
+                  <div class="crt__field"><dt>Underlying at mint</dt><dd>—<span class="crt__gloss">Provenance only: the wrapper absorbs splits and dividends</span></dd></div>
+                  <div class="crt__field"><dt>Multiplier nonce</dt><dd>—</dd></div>
+                  <div class="crt__field"><dt>Epoch at mint</dt><dd>—<span class="crt__gloss">Unlocks when the pointer passes this epoch</span></dd></div>
+                  <div class="crt__field"><dt>Minted</dt><dd>—<span class="crt__gloss">— — —, —:— HKT</span></dd></div>
+                  <div class="crt__field"><dt>Issuer</dt><dd>—<span class="crt__gloss">Can cancel only while holding every unit</span></dd></div>
+                  <div class="crt__field"><dt>Fallback</dt><dd>— — —, —:— HKT<span class="crt__gloss">Redeemable then even if no reopen is witnessed</span></dd></div>
+                </dl>
+                <footer class="crt__foot"><span class="crt__seal" aria-hidden="true"></span><span class="crt__fingerprint"><span class="crt__fp-label">Fingerprint</span> <code>0x290decd9…e3e563</code></span></footer>
+              </div>
+            </article>
+          </div>
         </div>
       </section>
 
@@ -51,7 +74,7 @@
                 <div><dt>Floor</dt><dd data-nt-floor>—</dd></div>
                 <div><dt>Against the reference</dt><dd data-nt-disc>—</dd></div>
                 <div><dt>Ends</dt><dd data-nt-ends>—</dd></div>
-                <div><dt>Ends in</dt><dd data-nt-countdown>—</dd></div>
+                <div><dt>Ends in</dt><dd><span data-nt-countdown>—</span></dd></div>
                 <div><dt>Status</dt><dd data-nt-lotstatus>—</dd></div>
               </dl>
               <p class="visually-hidden" data-nt-chart-text></p>

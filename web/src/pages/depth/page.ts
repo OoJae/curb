@@ -129,11 +129,13 @@ function drawStats(d: DepthView): void {
   );
 }
 
-function certCard(c: CertView | undefined): SafeHTML {
+function certCard(c: CertView | undefined, loaded = true): SafeHTML {
   if (!c) {
+    const dash = '—';
     return certificateHTML({
-      kind: 'cert', id: 0, title: 'Curb Depth Certificate', asset: asset.symbol, face: 'No cert in the book yet',
-      promise: 'The first demo cert is posted by curb-desk after DepthCert is deployed.', fields: [{ label: 'Maker', value: '—' }, { label: 'Bid', value: '—' }, { label: 'Bond', value: '—' }],
+      kind: 'cert', id: 0, title: 'Curb Depth Certificate', asset: asset.symbol, face: `${dash} shares at ${dash} USDG a share`,
+      promise: loaded ? 'No cert is in this book yet. The first demo cert is posted by curb-desk after DepthCert is deployed.' : html`Firm until <strong>— — —, —:— HKT</strong>. If the maker can’t pay when it is hit, the bond goes to the trader in the same transaction.`,
+      fields: ['Maker', 'Reserved for', 'Shares left', 'Notional left', 'Bond', 'Posted', 'Status', 'Maker can pay'].map((label) => ({ label, value: dash, ...(label === 'Bond' ? { note: 'At least 10% of the notional, rounded up' } : {}) })),
     });
   }
   // The demo plan's cert names CurbCredit; its specimen carries 0x0 only because CurbCredit has no address yet.
@@ -494,6 +496,7 @@ async function refresh(): Promise<void> {
   fillDefaults(state);
 }
 
+render($('[data-dp-cert]')!, certCard(undefined, false)); // first paint: the same card with dashes
 drawReasons();
 drawRefusalExample();
 drawProvenance();

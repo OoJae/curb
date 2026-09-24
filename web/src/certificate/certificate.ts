@@ -43,6 +43,8 @@ export interface CertificateOptions {
   vt?: boolean;
   /** accessible name for the card (default: `${title} No. ${id}, ${asset}`) */
   label?: string;
+  /** the serial as printed (default: the id); "—" for a placeholder card */
+  serial?: string;
 }
 
 /** The 32-byte seed for a certificate's rosette. */
@@ -61,7 +63,7 @@ export function certificateHTML(o: CertificateOptions): SafeHTML {
     <div class="crt__engraving" aria-hidden="true">${rosette}</div>
     <header class="crt__head">
       <span class="crt__title">${o.title}</span>
-      <span class="crt__serial">No.&nbsp;${String(o.id)}</span>
+      <span class="crt__serial">No.&nbsp;${o.serial ?? String(o.id)}</span>
     </header>
     <div class="crt__body">
       <p class="crt__asset">${o.asset}</p>
