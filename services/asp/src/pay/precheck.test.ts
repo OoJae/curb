@@ -89,6 +89,23 @@ test("a payment exactly as the SDK's client signs it passes, with no chain read"
   assert.equal(await run(await strangerSigned(p, { from: STRANGER.address, validAfter: 0, validBefore: Math.floor(T0 / 1000) + 300 }), REQUIREMENTS), null);
 });
 
+test("the first real paid call passes untouched: the OKX Agentic Wallet's authorization, exactly as the Broker settled it", async () => {
+  // transferWithAuthorization in tx 0xe8740458…1b4de7 (X Layer block 71,481,945, 24 Sep 2026 11:56:21Z), decoded
+  // with cast on 25 Sep 2026. The wallet signed it through `onchainos payment pay`, not the SDK's client.
+  const settledS = 1790250981;
+  const authorization = {
+    from: "0x055BA8ACd60A2287b2D01cb3BF237e4424357105", to: PAY_TO, value: "10000", validAfter: "0", validBefore: "1790251274",
+    nonce: "0x222d1fa7f43c28badc640a28d5bf103f290d0d43bd48c740c7516b261c28ba4e",
+  };
+  const signature = "0xde83dbd31a95ed175c6a6dc7f80b54700512307fde97ee811ef34c3f8708ef3449022b9af0208753827154eb031803478e738052bd615f1e0c697751fde616321c";
+  const p: PaymentPayload = { x402Version: 2, resource: { url: "https://api.curb.markets/v1/closure-calendar", description: "", mimeType: "application/json" }, accepted: REQUIREMENTS, payload: { authorization, signature } };
+  const { run, lookups } = precheck({ now: () => settledS * 1000 });
+  assert.equal(await run(p, REQUIREMENTS), null);
+  assert.deepEqual(lookups, [], "its signature recovers to `from` (the account's own key, EIP-7702 code or not): no chain read");
+  // The same authorization once its validBefore has passed is dead, and refused as such.
+  assert.equal((await precheck({ now: () => 1790251274 * 1000 }).run(p, REQUIREMENTS))?.reason, PRECHECK_REASONS.validBefore);
+});
+
 test("each field that cannot succeed is refused with its own reason, before any chain read", async () => {
   const { run, lookups } = precheck();
   const p = await sdkPayload();
