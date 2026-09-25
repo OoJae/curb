@@ -29,8 +29,7 @@ DepthCert `0x702b1a988765f85162F4829175EF4232197e9C6D`.
 The `curb` MCP server has every tool below, free and read-only:
 
 ```bash
-claude mcp add --transport http curb https://curb-mcp-production.up.railway.app/mcp
-# (https://mcp.curb.markets/mcp once its DNS record is in)
+claude mcp add --transport http curb https://mcp.curb.markets/mcp
 ```
 
 Without MCP, read the contract directly (examples at the end).

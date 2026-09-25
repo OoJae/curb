@@ -72,7 +72,7 @@ https://github.com/OoJae/curb
 - OKX AI marketplace: agent **#13869** "Curb", https://www.okx.ai/agents/13869 (listed 25 Sep 2026: "Listed — eligible for task recommendations"), three A2MCP services: Closure Calendar
   $0.01, Reopen Price Accuracy Record $0.05, Closure Discount by Duration $0.10.
 - MCP server for AI agents (free, read-only, six tools over Streamable HTTP):
-  https://curb-mcp-production.up.railway.app/mcp (`mcp.curb.markets` once its DNS is in). Any agent can ask whether a
+  https://mcp.curb.markets/mcp. Any agent can ask whether a
   tokenized stock's home market is open, when it reopens, how Curb's marks were graded, and what LTV CurbCredit
   lends at; `curb_paid_services` hands it the exact onchainos command for the paid x402 routes. Agent skill:
   https://github.com/OoJae/curb/blob/main/skills/curb/SKILL.md
