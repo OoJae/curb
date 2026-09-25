@@ -268,7 +268,7 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
 - **Third-party code.** forge-std (vendored), ethers, @openzeppelin/merkle-tree, canonicalize, and OKX's
   `@okxweb3/x402-core` and `x402-evm`.
 - **No token, no fundraising.** MarketClock use is free. Curb's only revenue is the per-call API.
-- **Team:** OoJae (solo).
+- **Team:** Team Azura (solo: OoJae).
 
 ---
 
