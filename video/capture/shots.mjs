@@ -223,14 +223,14 @@ export async function S07(ctx) {
   // Dwell on the live number and the plot before touching anything, so the edit has room either side.
   await s.moveToSel("[data-dp-ltv-now]").catch(() => {}); await s.hold(2200);
   await s.moveToSel("[data-dp-svg], [data-dp-plot]").catch(() => {}); await s.hold(2400);
-  await s.still("S07-ltv");
+  await s.still(clipId(ctx, "S07") + "-ltv");
   const handle = s.page.locator("[data-handle], .dp-handle, [role=slider]").first();
   if (await handle.count()) {
     const b = await s.moveTo(handle);
     await s.page.mouse.down(); await s.move(b.x + 260, b.y + b.height / 2, 60); await s.page.mouse.up();
   }
   await s.hold(2500);
-  await s.still("S07-ltv-dragged");
+  await s.still(clipId(ctx, "S07") + "-ltv-dragged");
   return { path: await s.finish() };
 }
 

@@ -66,6 +66,15 @@ async function rpc(url, method, params) {
   return j.result;
 }
 
+/** The chain head, retried across both public RPCs; null (not a crash) if neither answers. */
+async function headNow() {
+  for (let i = 0; i < 6; i++) {
+    try { return parseInt(await rpc(i % 2 ? "https://xlayer.drpc.org" : RPC, "eth_blockNumber", []), 16); }
+    catch (e) { log(`  head read failed (${String(e.message).slice(0, 80)}); retrying`); await sleep(3000); }
+  }
+  return null;
+}
+
 /** stateOf(wTCENTx) via cast: [regime, cap, nextTransitionAt, observedAt, nonce, halted]. */
 function stateOf() {
   const out = execFileSync("cast", ["call", ADDR.clock, "stateOf(address)((uint8,uint128,uint64,uint64,uint32,bool))", ADDR.wTCENTx, "--rpc-url", RPC], { encoding: "utf8" });
@@ -149,9 +158,9 @@ await shot("S03");
 if (!DRY) await untilUtc(at("04:49:30"), "phase 2a (04:49:30Z, the commit)");
 log("PHASE 2a · the commit");
 {
-  const head = parseInt(await rpc(RPC, "eth_blockNumber", []), 16);
+  const head = await headNow();
   const s04 = shot("S04", { phase: "commit", until: DRY ? new Date(Date.now() + 20000).toISOString() : at("04:53:30") });
-  const ev = await waitEvent("commit", DRY ? 0 : head - 60, DRY ? Date.now() : Date.parse(at("04:55:00")));
+  const ev = await waitEvent("commit", DRY || head === null ? 0 : head - 60, DRY ? Date.now() : Date.parse(at("04:55:00")));
   await s04;
   if (ev) {
     log(`  ClosureCommitted: tx ${ev.tx} · block ${ev.block} · inputRoot ${ev.inputRoot}`);
@@ -172,9 +181,9 @@ log("PHASE 2a · the commit");
 if (!DRY) await untilUtc(at("05:04:30"), "phase 2b (05:04:30Z, the settle)");
 log("PHASE 2b · the settle");
 {
-  const head = parseInt(await rpc(RPC, "eth_blockNumber", []), 16);
+  const head = await headNow();
   const s04 = shot("S04", { phase: "settle", until: DRY ? new Date(Date.now() + 20000).toISOString() : at("05:08:00") });
-  const ev = await waitEvent("settle", DRY ? 0 : head - 60, DRY ? Date.now() : Date.parse(at("05:10:00")));
+  const ev = await waitEvent("settle", DRY || head === null ? 0 : head - 60, DRY ? Date.now() : Date.parse(at("05:10:00")));
   await s04;
   if (ev) {
     log(`  ClosureSettled: tx ${ev.tx} · block ${ev.block}`);
