@@ -276,8 +276,8 @@ const verifyNote = $('[data-sc-verify-note]');
 
 function verifyCommand(): string {
   const r = view?.rows.find((x) => x.id === verifyId);
-  if (!r) return 'npx -y curb-verify tx <commit transaction>';
-  return r.commitTx ? `npx -y curb-verify tx ${r.commitTx}` : 'npx -y curb-verify tx <commit transaction>';
+  if (!r) return 'npx -y github:OoJae/curb tx <commit transaction>';
+  return r.commitTx ? `npx -y github:OoJae/curb tx ${r.commitTx}` : 'npx -y github:OoJae/curb tx <commit transaction>';
 }
 
 function renderVerifyOptions(): void {

@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Scorecard · Curb</title>
     <meta name="description" content="The graded record of every reopen mark, including no wins.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Curb">
+    <meta property="og:url" content="https://curb.markets/scorecard">
+    <meta property="og:title" content="The Scorecard: every reopen mark, graded on chain · Curb">
+    <meta property="og:description" content="The graded record of every reopen mark, including no wins.">
+    <meta property="og:image" content="https://curb.markets/og/scorecard.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="The Curb Scorecard: reopen marks committed before the reopen and graded by the contract after it">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://curb.markets/og/scorecard.png">
   </head>
   <body data-page="scorecard">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
@@ -131,7 +142,7 @@
             <option>Reading rows…</option>
           </select>
           <div class="sc-cmd surface-ink">
-            <pre class="sc-cmd__code"><code data-sc-verify-cmd>npx -y curb-verify tx &lt;commit transaction&gt;</code></pre>
+            <pre class="sc-cmd__code"><code data-sc-verify-cmd>npx -y github:OoJae/curb tx &lt;commit transaction&gt;</code></pre>
             <button class="copy sc-cmd__copy" type="button" data-sc-copy-verify><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
           </div>
           <p class="t-small muted" data-sc-verify-note>&nbsp;</p>

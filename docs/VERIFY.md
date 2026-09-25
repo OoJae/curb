@@ -18,11 +18,12 @@ checks the result against what the transaction actually wrote.
 Take any Curb transaction hash from OKLink:
 
 ```sh
-npx -y curb-verify tx 0x8e87d0f08af4025a742c377dce985449b3b131b3a61e64b0bb793b822fcd47e1
+npx -y github:OoJae/curb tx 0x8e87d0f08af4025a742c377dce985449b3b131b3a61e64b0bb793b822fcd47e1
 ```
 
 This needs Node 22.18 or newer (`node --version`). There is nothing else to install and no key or
-account. That hash is the first round MarketClock ever received. The output:
+account. `github:OoJae/curb` installs the verifier straight from Curb's own repository. The name `curb-verify` on
+the npm registry is **not** Curb's yet: do not run a bare `npx curb-verify` until this line says it is. That hash is the first round MarketClock ever received. The output:
 
 ```
 (hashes shortened here; the tool prints them in full)
@@ -42,10 +43,10 @@ shows the second kind of finding. A convenience label outside the Merkle tree is
 says so without calling the round wrong. A committed Scorecard mark works the same way:
 
 ```sh
-npx -y curb-verify tx 0x1c839166a27d48e30a51da725b07e3b57bd00a6cc173395838e15d4b6481294e
+npx -y github:OoJae/curb tx 0x1c839166a27d48e30a51da725b07e3b57bd00a6cc173395838e15d4b6481294e
 ```
 
-To see the tool reject something, run `npx -y curb-verify selftest`. It verifies two real mainnet
+To see the tool reject something, run `npx -y github:OoJae/curb selftest`. It verifies two real mainnet
 rounds that ship inside the package, then tampers with one byte of each and shows the check failing.
 It needs no network.
 
@@ -64,10 +65,10 @@ It needs no network.
 ## Other commands
 
 ```sh
-npx -y curb-verify range 70617365..70620000     # every Curb write in a block range; "..latest" works
-npx -y curb-verify bundle <inputRoot|url|path>  # a bundle on its own, offline, without the chain side
-npx -y curb-verify witness <inputRoot|url|path> # recover the signer of host B's witness statement
-npx -y curb-verify tx <hash> --json             # one JSON object per item, for scripts
+npx -y github:OoJae/curb range 70617365..70620000     # every Curb write in a block range; "..latest" works
+npx -y github:OoJae/curb bundle <inputRoot|url|path>  # a bundle on its own, offline, without the chain side
+npx -y github:OoJae/curb witness <inputRoot|url|path> # recover the signer of host B's witness statement
+npx -y github:OoJae/curb tx <hash> --json             # one JSON object per item, for scripts
 ```
 
 - `--archive <base>` (repeatable) sets where evidence comes from, tried in order. The default is

@@ -130,7 +130,8 @@ while :; do
   elif [[ "$c" != "0" && "$o" == "false" ]]; then
     log "capacity back (regime $r, cap $c): observe"
     if send "$POINTER" "observe(address)" "$WRAPPER"; then
-      e="$(epoch_of)"
+      e="$(epoch_of || echo 0)"
+      [[ "$e" == "0" ]] && { sleep 3; e="$(epoch_of || echo 0)"; }
       if [[ "$(is_open)" == "true" && "$e" != "0" ]]; then
         print_epoch "$e" || true
         [[ $ONCE -eq 1 ]] && exit 0

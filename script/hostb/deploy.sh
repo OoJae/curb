@@ -58,6 +58,12 @@ DATA_SUFFIX="$(node --experimental-strip-types --input-type=module -e '
   console.log(value);
 ' "$REPO/services/attestor/src/tx/sender.ts" "$DATA_SUFFIX" "$BUILDER_CODE")"
 
+# keeper.env is rewritten on every run. Since 21 Sep the keeper is live on Scorecard v2, so a run without both
+# variables would quietly demote it to a shadow keeper with no Scorecard and stop the marks. Say them out loud:
+#   KEEPER_MODE=live SCORECARD=0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f bash script/hostb/deploy.sh
+: "${KEEPER_MODE:?set KEEPER_MODE (live since 21 Sep; shadow only on purpose)}"
+if [[ "$KEEPER_MODE" == "live" ]]; then : "${SCORECARD:?set SCORECARD (Scorecard v2 0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f)}"; fi
+
 echo "==> sync source to $HOST"
 rsync -a --delete --exclude node_modules --exclude 'src/fixtures' --exclude '*.test.ts' \
   "$REPO/services/attestor/" "$HOST:/tmp/curb-src-attestor/"
