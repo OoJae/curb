@@ -390,6 +390,19 @@ buyer paid 38 bp more than the reopen was worth. Tencent reopened lower (HKEX op
 The seller, holding the stock, would have done 38 bp worse by waiting. A backup `recordPrint` from D at +310 s
 reverted on chain (`0xba096762…4333`, AlreadyPrinted): poke's print had landed first, as designed.
 
+### W3 cycle 2 — Friday lunch recess, 25 Sept (HK shut 03:55Z → 05:00Z)
+
+| step | who | tx | block |
+|---|---|---|---|
+| approve 0.1 wTCENTx to ReopenNote | K | `0xb57566e6dc13c5f1580588d5c5530d1f7ebb024b116d9ad7ffa881f120614544` | 71,539,879 |
+| mint note 2 (0.1 wTCENTx escrowed), 04:02Z | K | `0x646922f0331dc7a63f1a05aa06edd7a7713bc64ada8ef7ddad439279f5e9bf94` | 71,539,903 |
+| list lot 2: 5.57 → 5.40 USDG over 20 min, ends at MarketClock's 05:00:00Z cutoff | K | `0x97ff93d190438978ade1cccb5cf67eb7db9f4bee0900e12ff71fe6b5329d8455` | 71,539,949 |
+| approve exactly 5.57 USDG to ClosedAuction | A | `0x116f41c80dfd711105df6f7a8c0312559277ef8f8342962476a0c45df2d79dd5` | |
+| bid: lot 2 sold to A at **5.529059 USDG** at 04:07:54Z (12:07 HKT, mid-recess), priceNow at listing 55.7362 | A | `0x3a92efa702207705c0d8a8e041232f34b59bd39e6cb015ee1b543e878c467c31` | |
+
+Run by `script/w3/cycle2b.sh` (hardened after the pre-flight audit: ids found on chain, the listing retried through
+the cutoff refresh, A's effects checked on chain). The redeem and the grade follow the 05:00Z reopen.
+
 ### W4 — before the reopen, 24 Sept ~21:30Z (HK shut)
 
 | step | who | tx | block |
