@@ -92,7 +92,7 @@ then read the `proxy-shape` log lines.
 ```bash
 curl -s https://mcp.curb.markets/ >/dev/null
 curl -s -H 'X-Forwarded-For: 192.0.2.1' https://mcp.curb.markets/ >/dev/null
-railway logs --service curb-mcp | grep proxy-shape
+railway logs --service curb-mcp --lines 500 | grep proxy-shape   # --lines: without it, logs streams and never exits
 ```
 
 Plain `xffEntries 1` with forged `2` (Railway appends) or `1` (Railway replaces) means `TRUST_PROXY_HOPS=1` is right.
