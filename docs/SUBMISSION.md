@@ -170,8 +170,10 @@ https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md, section "Live demo 
 - The fade: the deployer posts cert 2 naming A, then revokes its USDG allowance; A takes it and the contract proves the
   fade in the same transaction, `Faded(reason ALLOWANCE)`, bond 0.2 USDG to A, A's shares returned (block 71,545,313):
   https://www.oklink.com/xlayer/tx/0x6dd0bd29ebc5335ec8a68a4e9799c5d4c7fe5edf4dd6d954ca3d4b14aeebf470
-- Appended when it lands: at the 07:55Z cut the LTV cap falls to 30% with no transaction, `flagBreach` starts the
-  cure clock, and the clock stays frozen while Hong Kong is shut.
+- At the 07:55Z cut `ltvFor` fell from 60% to 30% with no transaction; A's 1.4 USDG loan was over its new 0.835 USDG
+  limit. `flagBreach` at 07:56:43Z started the cure clock, which counts only open-market time, so it is frozen at 0
+  until Hong Kong reopens on Monday, and nobody can liquidate in between (block 71,553,967):
+  https://www.oklink.com/xlayer/tx/0xd598c4fb42ed4883df6067968758ef30b8e955641b15f325888e605700de2e57
 
 **The first rows under the new mark method (25 Sep 01:30Z reopen): three losses.** Curb's `curb.scorecard.mark/2`
 called Tencent, Xiaomi and Meituan up; HKEX opened all three down. The contract graded all three as losses against

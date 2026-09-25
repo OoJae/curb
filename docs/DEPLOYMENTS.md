@@ -440,8 +440,19 @@ the cutoff refresh, A's effects checked on chain), with the redeem by `script/w3
 | `take(2, 0.03e18, A)` → **`Faded(id 2, taker A, maker D, shares 0.03, costOwed 1.56 USDG, bondSlashed 0.2 USDG, reason ALLOWANCE)`**: the maker's leg failed, the whole bond went to A (USDG 3.107630 → 3.307630) and A's shares came straight back (0.268390 wTCENTx before and after) | A | `0x6dd0bd29ebc5335ec8a68a4e9799c5d4c7fe5edf4dd6d954ca3d4b14aeebf470` | 71,545,313 |
 
 The same borrow was refused with `Refusal(NoDepth)` at 21:30Z the night before (above). What changed between them is
-one bonded bid. At the 07:55Z cut the regime cap drops to 30% with no transaction at all; `script/w4/friday2.sh` then
-flags the breach and the cure clock freezes while Hong Kong is shut.
+one bonded bid.
+
+**The 07:55Z cut, with no transaction:** at 07:56:26Z `ltvFor(wTCENTx)` read **3,000** (the shut cap, 30%), regime
+CLOSED, cap 0. A's position: debt 1.400021 USDG (5% APR accrued), limit 0.835312 USDG, so it is in breach by the
+contract's own views.
+
+| step | who | tx | block |
+|---|---|---|---|
+| `flagBreach(A, wTCENTx)` at 07:56:43Z → cure clock active, `lastOpen = false`, `openSecondsUsed = 0`, price at breach 55.6875 | K | `0xd598c4fb42ed4883df6067968758ef30b8e955641b15f325888e605700de2e57` | 71,553,967 |
+
+The cure clock is **frozen**: it counts only witnessed open-market time, so it stays at 0 of 1,800 seconds until Hong
+Kong reopens (Mon 28 Sept 01:30Z), and nobody can liquidate A in between. `liquidate` needs 30 open minutes and an
+open market; a `tick` while shut leaves `openSecondsUsed` at 0.
 
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 
