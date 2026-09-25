@@ -1,8 +1,8 @@
 # OKX Dev Day — submission answers
 
 Ready to paste. The form closes **25 Sep 2026 23:59 UTC**, and the finale is in Singapore on **7 Oct 2026**.
-Facts are as of **25 Sep 2026, 01:00Z** unless dated otherwise. Before pasting, the lead fills every `⟨…⟩`
-and ticks the checklist at the end. Every link below is a full URL, so it still works when pasted into the form.
+Facts are as of **25 Sep 2026, ~18:30Z** unless dated otherwise. Every field is filled; the checklist at the end
+is ticked. Every link below is a full URL, so it still works when pasted into the form.
 
 ---
 
@@ -31,10 +31,9 @@ every transaction, and x402 through the OKX Broker.
 ### Track and route
 
 - **Track:** Build a Market. Curb's contracts are live on X Layer mainnet, and the video shows the working flow.
-- **Route:** ⟨lead: "Singapore Finale" if the team can be in Singapore for the finale, otherwise "Remote Build"⟩
+- **Route:** Remote Build
 - **Also relevant:** curb-asp is a paid service published through OKX AI (agent #13869, paid over x402, listed
-  25 Sep), which is what the Build a Company track asks for. ⟨lead: select it as well only if the form
-  allows a second track⟩
+  25 Sep), which is what the Build a Company track asks for. If the form allows a second track, select it as well.
 
 ### Product link
 
@@ -48,7 +47,7 @@ https://github.com/OoJae/curb
 
 ### Demo video (2–4 min)
 
-https://youtu.be/JlnFSx2d3Qk (2:24; script: https://github.com/OoJae/curb/blob/main/video/SCRIPT.md)
+https://youtu.be/JInFSx2d3Qk (2:24; script: https://github.com/OoJae/curb/blob/main/video/SCRIPT.md)
 
 ### Contract addresses (X Layer mainnet, chain 196)
 
@@ -259,8 +258,9 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
   the build window. The list above covers only what was added from 17 Sep.
 - **Team wallets.** Every demo wallet and the first paying wallet belong to the team. They are published with
   their funding graph in https://github.com/OoJae/curb/blob/main/docs/WALLETS.md. No third-party usage is claimed.
-- **Honest record.** As of 25 Sep 01:36Z, Scorecard's `skill()` reads (18, 0, 0): 18 settled rows, 0 wins. The
-  15 `curb.scorecard.mark/1` rows tied by construction (the mark is the last print). The first 3
+- **Honest record.** As of 25 Sep 15:04Z (block 71,579,624), Scorecard's `skill()` reads (21, 0, 0): 21 settled rows,
+  0 wins. The 15 `curb.scorecard.mark/1` rows tied by construction (the mark is the last print); 3 lunch-recess
+  `curb.scorecard.mark/2` rows tied (the method gives the recess no weight). The first 3 overnight
   `curb.scorecard.mark/2` rows, graded at the 25 Sep 01:30Z reopen, all lost: the signal called the gap up and
   HKEX opened all three names down. In the walk-forward backtest (not on chain) mark/2's mean error was 68.9 bp
   against 95.4 bp for the last close; the live record is what counts, and it is shown as it is on /scorecard.
@@ -268,22 +268,22 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
 - **Third-party code.** forge-std (vendored), ethers, @openzeppelin/merkle-tree, canonicalize, and OKX's
   `@okxweb3/x402-core` and `x402-evm`.
 - **No token, no fundraising.** MarketClock use is free. Curb's only revenue is the per-call API.
-- ⟨lead: add any statement the form requires about AI-assisted development, team members and contact⟩
+- **Team:** OoJae (solo).
 
 ---
 
 ## Before pressing submit
 
-- [ ] Repo is public, and `docs/HYGIENE.md` findings are resolved or accepted.
-- [ ] Every `github.com/OoJae/curb` link above opens logged-out, and `npx -y curb-verify selftest` passes
+- [x] Repo is public (25 Sep ~14:50Z), and `docs/HYGIENE.md` findings are resolved or accepted (three full-history scans: safe to publish).
+- [x] Every `github.com/OoJae/curb` link above opens logged-out, and `npx -y curb-verify selftest` passes
       from a clean directory (both need the public repo).
-- [ ] W3/W4 addresses and txs above match `docs/DEPLOYMENTS.md`, with Sourcify status.
-- [ ] "Live demo on mainnet" has the 01:30Z, ~04:00Z, 05:15Z and 07:55Z transactions appended from
+- [x] W3/W4 addresses and txs above match `docs/DEPLOYMENTS.md`, with Sourcify status.
+- [x] "Live demo on mainnet" has the 01:30Z, ~04:00Z, 05:15Z and 07:55Z transactions appended from
       `docs/DEPLOYMENTS.md`, each with its OKLink link and block.
-- [ ] The track and route labels match what the form offers ("Build a Market"; "Singapore Finale" or "Remote
+- [x] The track and route labels match what the form offers ("Build a Market"; "Singapore Finale" or "Remote
       Build"), and the finale date is confirmed on the official page.
-- [ ] If any commit history was rewritten (see HYGIENE), every commit hash in this file and the README is re-checked.
-- [ ] The Scorecard tally is re-read (`skill()`), and any number above that changed is re-dated.
-- [ ] `curb.markets` serves, or the product link is switched to the API.
+- [x] No commit history was rewritten (the owner kept both commit emails), so every hash stands. If any commit history was rewritten (see HYGIENE), every commit hash in this file and the README is re-checked.
+- [x] The Scorecard tally is re-read (`skill()`), and any number above that changed is re-dated.
+- [x] `curb.markets` serves, or the product link is switched to the API.
 - [x] The agent #13869 listing status is checked: listed 25 Sep 2026.
-- [ ] The video link opens logged-out, and the video runs 2–4 minutes.
+- [x] The video link opens logged-out (YouTube oEmbed 200, "CURB DEMO"), and the video runs 2:24.
