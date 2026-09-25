@@ -60,8 +60,9 @@ returns at the first period with a non-zero cap (a Hong Kong lunch cut runs 11:5
 
 ## Other tools
 
-- `curb_scorecard`: Curb's graded record. `skill()` counts strict wins against the last print and the closing
-  VWAP; a tie is not a win. Quote the numbers the tool returns with their block, never a remembered figure.
+- `curb_scorecard`: Curb's graded record. `skill()` counts strict wins against the last print and the pre-close
+  price (the 15-minute closing VWAP, or the last pool price when nothing traded); a tie is not a win. Quote the
+  numbers the tool returns with their block, never a remembered figure.
 - `curb_credit`: CurbCredit's LTV for a wrapper (60% cap while open, 30% while shut, and never more than the
   lowest bonded DepthCert bid would pay), with the reason when it is 0. wSHEINx is not collateral there.
 - `curb_corporate_actions`: the issuer's corporate actions. A wrapper's share price already contains every

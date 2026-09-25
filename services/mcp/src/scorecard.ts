@@ -2,8 +2,9 @@
  * curb_scorecard: Curb's graded record, read from Scorecard v2 at one pinned block.
  *
  * `skill()` is the contract's own running tally, incremented inside settle(): settled rows, and STRICT wins
- * against the last print and against the closing VWAP. A tie is not a win. The recent rows come from the
- * public getters (closureCount, closureIds, commitments, settlements), newest first, the same reads
+ * against the last print and against the pre-close price (the contract's `closingVwap`: the 15-minute closing
+ * VWAP, or the last pool price when nothing traded, as README.md says). A tie is not a win. The recent rows
+ * come from the public getters (closureCount, closureIds, commitments, settlements), newest first, the same reads
  * services/asp/src/index/scorecard.ts makes. Every read in one answer is pinned to the same block hash, so
  * the tally and the rows describe one chain state.
  *
@@ -140,20 +141,27 @@ export function decodeRow(index: number, id: string, c: CallResult, s: CallResul
 const COMMITTED_TOPIC = scorecardAbi.getEvent("ClosureCommitted")!.topicHash;
 /** At most this many eth_getLogs per call, three at a time; a row not looked up yet shows commitTx null. */
 const MAX_TX_LOOKUPS = 20;
+/**
+ * No new lookup starts after this long, so a slow RPC cannot push the answer toward the tool deadline (a
+ * lookup is ~1 s on drpc; one can take 12 s when both endpoints time out). What is left is looked up next call.
+ */
+const TX_LOOKUP_BUDGET_MS = 6_000;
 
 /**
  * The transaction that committed each row, so an agent can hand it straight to curb-verify. The getters do not
  * carry it, so it is found from ClosureCommitted in the row's own committedBlock (one block: well inside the
  * public RPCs' 100-block log range). A commit is final, so each answer is kept for the life of the process in
- * `known`; a failed or empty lookup is not kept and is retried on a later call.
+ * `known`; a failed or empty lookup is not kept and is retried on a later call, as is a row the time budget
+ * did not reach.
  */
-export async function findCommitTxs(chain: ChainReader, rows: ScorecardRowView[], known: Map<string, string>): Promise<void> {
+export async function findCommitTxs(chain: ChainReader, rows: ScorecardRowView[], known: Map<string, string>, budgetMs = TX_LOOKUP_BUDGET_MS): Promise<void> {
   const todo = rows.filter((r) => !known.has(r.id)).slice(0, MAX_TX_LOOKUPS);
   if (!chain.logs || todo.length === 0) return;
   const logs = chain.logs.bind(chain);
+  const stopAt = Date.now() + budgetMs;
   let next = 0;
   const worker = async () => {
-    while (next < todo.length) {
+    while (next < todo.length && Date.now() < stopAt) {
       const r = todo[next++];
       try {
         const found = await logs({ address: CONTRACTS.scorecard, topics: [COMMITTED_TOPIC, r.id], fromBlock: r.committedBlock, toBlock: r.committedBlock });
@@ -163,6 +171,21 @@ export async function findCommitTxs(chain: ChainReader, rows: ScorecardRowView[]
     }
   };
   await Promise.all([worker(), worker(), worker()]);
+}
+
+function summaryOf(block: number, count: number, skill: { settled: number; beatLastPrint: number; beatClosingVwap: number }, shown: number): string {
+  const notWins = skill.settled - skill.beatLastPrint;
+  return (
+    `Scorecard v2 at block ${block}: ${count} marks committed, ${skill.settled} settled. Curb's mark beat the last print in ` +
+    `${skill.beatLastPrint} and the pre-close price (closingVwap) in ${skill.beatClosingVwap} (strict wins; ${notWins} of the settled rows did not beat the last print). ` +
+    `${shown ? `Newest ${shown} rows below.` : "No rows yet."}`
+  );
+}
+
+/** The newest `limit` rows of an answer read with a larger limit, as if it had been read with `limit`. Never mutates `r`. */
+export function limitScorecard(r: ScorecardResult, limit: number): ScorecardResult {
+  const rows = r.rows.slice(0, limit);
+  return { ...r, rows, summary: summaryOf(r.asOf.block, r.closureCount, r.skill, rows.length) };
 }
 
 export async function readScorecard(chain: ChainReader, limit = DEFAULT_ROWS, commitTxs?: Map<string, string>): Promise<ScorecardResult> {
@@ -188,12 +211,8 @@ export async function readScorecard(chain: ChainReader, limit = DEFAULT_ROWS, co
     for (const r of rows) r.commitTx = commitTxs.get(r.id) ?? null;
   }
 
-  const notWins = skill.settled - skill.beatLastPrint;
   return {
-    summary:
-      `Scorecard v2 at block ${block.number}: ${count} marks committed, ${skill.settled} settled. Curb's mark beat the last print in ` +
-      `${skill.beatLastPrint} and the closing VWAP in ${skill.beatClosingVwap} (strict wins; ${notWins} of the settled rows did not beat the last print). ` +
-      `${rows.length ? `Newest ${rows.length} rows below.` : "No rows yet."}`,
+    summary: summaryOf(block.number, count, skill, rows.length),
     asOf: asOfBlock(block, chain.rpcs),
     source: { chainId: CHAIN_ID, scorecard: sc, reads: "skill(), closureCount(), closureIds(i), commitments(id), settlements(id)" },
     skill: { ...skill, note: "skill() counts strict wins only: equal error is a tie, and a tie is not a win" },

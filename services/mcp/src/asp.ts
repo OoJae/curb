@@ -74,6 +74,12 @@ export async function readCorporateActions(fetchImpl: JsonFetch, a: Asset, limit
   };
 }
 
+/** The newest `limit` versions of an answer read with a larger limit. The summary does not depend on it. Never mutates `r`. */
+export function limitVersions(r: CorporateActionsResult, limit: number): CorporateActionsResult {
+  const versions = Array.isArray(r.feed.versions) ? r.feed.versions.slice(0, limit) : [];
+  return { ...r, versionsShown: versions.length, feed: { ...r.feed, versions } };
+}
+
 // ---------------------------------------------------------------------------------------------
 // paid services
 // ---------------------------------------------------------------------------------------------

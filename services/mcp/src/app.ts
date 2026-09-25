@@ -9,7 +9,8 @@
  *
  * Every response carries CORS headers, so a browser-based MCP client or a page can call it. Every route except
  * /healthz (which Railway's healthcheck polls) takes a token from the caller's rate-limit bucket first, and a
- * refusal is 429 with Retry-After (a JSON-RPC error body on /mcp, so an MCP client can show it).
+ * refusal is 429 with Retry-After (a JSON-RPC error body on /mcp, so an MCP client can show it). A JSON-RPC
+ * batch takes one token per message, so a batch (the SDK accepts up to 100) cannot multiply a client's rate.
  *
  * Nothing here is secret and nothing needs a key: the service reads public RPCs, the issuer's public API and
  * curb-asp's free routes. Error strings name RPC endpoints by origin only (sources/chain.ts endpointLabel).
@@ -167,12 +168,7 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
       }
     }
     const take = d.limiter.take(ip);
-    if (!take.ok) {
-      d.state.rateLimited++;
-      const headers = { "retry-after": String(take.retryAfterS) };
-      if (path === "/mcp") return send(res, 429, jsonRpcError(-32000, `rate limited: retry after ${take.retryAfterS} s`), headers);
-      return send(res, 429, { error: "rate-limited", retryAfterS: take.retryAfterS }, headers);
-    }
+    if (!take.ok) return refuse(res, path, take.retryAfterS);
 
     if (path === "/") {
       if (method !== "GET" && method !== "HEAD") return send(res, 405, { error: "method-not-allowed" }, { allow: "GET, OPTIONS" });
@@ -182,15 +178,29 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
       if (method !== "POST") {
         return send(res, 405, jsonRpcError(-32000, "Method not allowed: this server is stateless; send JSON-RPC by POST."), { allow: "POST, OPTIONS" });
       }
-      return mcp(req, res);
+      return mcp(req, res, ip);
     }
     return send(res, 404, { error: "not-found", see: "/" });
   }
 
-  async function mcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  function refuse(res: ServerResponse, path: string, retryAfterS: number): void {
+    d.state.rateLimited++;
+    const headers = { "retry-after": String(retryAfterS) };
+    if (path === "/mcp") return send(res, 429, jsonRpcError(-32000, `rate limited: retry after ${retryAfterS} s`), headers);
+    return send(res, 429, { error: "rate-limited", retryAfterS }, headers);
+  }
+
+  async function mcp(req: IncomingMessage, res: ServerResponse, ip: string): Promise<void> {
     d.state.mcpRequests++;
     const body = await readJson(req, MAX_BODY_BYTES);
     if (!body.ok) return send(res, body.status, jsonRpcError(body.code, body.message));
+    // The request's own token was taken in handle(); each further message in a batch takes one more. The loop
+    // stops at the first refusal, so even a batch of thousands of empty messages costs at most `burst` steps.
+    const extra = Array.isArray(body.value) ? body.value.length - 1 : 0;
+    for (let i = 0; i < extra; i++) {
+      const t = d.limiter.take(ip);
+      if (!t.ok) return refuse(res, "/mcp", t.retryAfterS);
+    }
     // CORS on the transport's own responses: headers set here survive its writeHead.
     for (const [k, v] of Object.entries(CORS_HEADERS)) res.setHeader(k, v);
     res.setHeader("x-content-type-options", "nosniff");

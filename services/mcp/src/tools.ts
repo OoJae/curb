@@ -18,10 +18,11 @@ import { ASSETS, requireAsset } from "./assets.ts";
 import { readRegimes } from "./clock.ts";
 import { nextReopen } from "./nextReopen.ts";
 import type { NextReopenDeps } from "./nextReopen.ts";
-import { readScorecard, DEFAULT_ROWS, MAX_ROWS } from "./scorecard.ts";
+import { readScorecard, limitScorecard, DEFAULT_ROWS, MAX_ROWS } from "./scorecard.ts";
+import type { ScorecardResult } from "./scorecard.ts";
 import { readCredit } from "./credit.ts";
-import { readCorporateActions, readPaidServices, DEFAULT_VERSIONS, MAX_VERSIONS } from "./asp.ts";
-import type { JsonFetch } from "./asp.ts";
+import { readCorporateActions, readPaidServices, limitVersions, DEFAULT_VERSIONS, MAX_VERSIONS } from "./asp.ts";
+import type { CorporateActionsResult, JsonFetch } from "./asp.ts";
 import { TtlCache } from "./cache.ts";
 import type { Log } from "./log.ts";
 
@@ -52,6 +53,12 @@ export interface ToolSpec {
   /** Seconds an identical answer is shared for. Every answer names the block or time it was read at. */
   cacheS: number;
   run(deps: ToolDeps, args: Record<string, unknown>): Promise<object>;
+  /**
+   * For a tool with a `limit`: `run` reads the most any call may ask for, the cache shares that one read
+   * across every limit, and this cuts it down per call. Without it, each limit would be its own cache key and
+   * its own set of upstream reads (50 for the scorecard, 100 per symbol for corporate actions).
+   */
+  view?(value: object, args: Record<string, unknown>): object;
 }
 
 export const TOOLS: readonly ToolSpec[] = [
@@ -87,12 +94,14 @@ export const TOOLS: readonly ToolSpec[] = [
     title: "Curb's graded record",
     description:
       "Curb's accuracy record from its Scorecard v2 contract on X Layer: skill() (settled rows, and strict wins of Curb's " +
-      "reopen mark against the last print and against the closing VWAP; a tie is not a win) and the most recent rows, newest " +
+      "reopen mark against the last print and against the pre-close price, the contract's closingVwap: the 15-minute closing " +
+      "VWAP, or the last pool price when nothing traded; a tie is not a win) and the most recent rows, newest " +
       "first, each with its mark, both baselines, the reopen price the contract read from the pool itself, and the errors in " +
       "basis points, plus the commit transaction to check with curb-verify. Every value is read at one block.",
     inputSchema: { limit: z.number().int().min(1).max(MAX_ROWS).optional().describe(`Rows to return, newest first. 1-${MAX_ROWS}, default ${DEFAULT_ROWS}.`) },
     cacheS: 15,
-    run: async (d, a) => readScorecard(d.chain, a.limit === undefined ? DEFAULT_ROWS : Number(a.limit), d.commitTxs),
+    run: async (d) => readScorecard(d.chain, MAX_ROWS, d.commitTxs),
+    view: (v, a) => limitScorecard(v as ScorecardResult, a.limit === undefined ? DEFAULT_ROWS : Number(a.limit)),
   },
   {
     name: "curb_credit",
@@ -118,7 +127,8 @@ export const TOOLS: readonly ToolSpec[] = [
       limit: z.number().int().min(1).max(MAX_VERSIONS).optional().describe(`Versions to return, newest first. 1-${MAX_VERSIONS}, default ${DEFAULT_VERSIONS}.`),
     },
     cacheS: 60,
-    run: async (d, a) => readCorporateActions(d.fetchJson, requireAsset(String(a.symbol)), a.limit === undefined ? DEFAULT_VERSIONS : Number(a.limit), d.now),
+    run: async (d, a) => readCorporateActions(d.fetchJson, requireAsset(String(a.symbol)), MAX_VERSIONS, d.now),
+    view: (v, a) => limitVersions(v as CorporateActionsResult, a.limit === undefined ? DEFAULT_VERSIONS : Number(a.limit)),
   },
   {
     name: "curb_paid_services",
@@ -150,10 +160,13 @@ export function makeCaches(now: () => number): Map<string, TtlCache<object>> {
   return new Map(TOOLS.map((t) => [t.name, new TtlCache<object>(t.cacheS * 1000, now)]));
 }
 
-/** Cache key: the resolved asset, never the caller's spelling, so "TCENTx" and "wtcentx" share an answer. */
-function cacheKey(args: Record<string, unknown>): string {
+/**
+ * Cache key: the resolved asset, never the caller's spelling, so "TCENTx" and "wtcentx" share an answer; and
+ * never the limit of a tool that has a `view`, so every limit shares one read.
+ */
+function cacheKey(t: ToolSpec, args: Record<string, unknown>): string {
   const sym = typeof args.symbol === "string" ? requireAsset(args.symbol).symbol : "*";
-  return `${sym}|${args.limit ?? ""}`;
+  return t.view ? sym : `${sym}|${args.limit ?? ""}`;
 }
 
 export function buildServer(deps: ToolDeps, caches: Map<string, TtlCache<object>>): McpServer {
@@ -163,8 +176,9 @@ export function buildServer(deps: ToolDeps, caches: Map<string, TtlCache<object>
       instructions:
         "Curb reports whether a tokenized stock's home market is open (MarketClock), when it reopens, and how Curb's reopen " +
         "marks were graded on chain (Scorecard), for six xStock wrappers on X Layer. Before trading, lending against or " +
-        "liquidating one of them, call curb_regime: a SHUT or UNKNOWN status means creation and redemption are off and the " +
-        "pool price is not held to the underlying share. Every answer names the block or time it was read at.",
+        "liquidating one of them, call curb_regime: SHUT means creation and redemption are off and the pool price is not " +
+        "held to the underlying share, and UNKNOWN means MarketClock cannot vouch either way, so treat it as SHUT. Every " +
+        "answer names the block or time it was read at.",
     },
   );
   const timeoutMs = deps.toolTimeoutMs ?? 20_000;
@@ -175,8 +189,9 @@ export function buildServer(deps: ToolDeps, caches: Map<string, TtlCache<object>
       async (args: Record<string, unknown>) => {
         const started = Date.now();
         try {
-          const key = cacheKey(args);
-          const value = await withDeadline(caches.get(t.name)!.get(key, () => t.run(deps, args)), timeoutMs, t.name);
+          const key = cacheKey(t, args);
+          const shared = await withDeadline(caches.get(t.name)!.get(key, () => t.run(deps, args)), timeoutMs, t.name);
+          const value = t.view ? t.view(shared, args) : shared;
           deps.log("tool", { tool: t.name, key, ms: Date.now() - started });
           return toolResult(value);
         } catch (e) {

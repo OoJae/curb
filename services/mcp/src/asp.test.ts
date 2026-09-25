@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readCorporateActions, readPaidServices, CURB_REVENUE, USDT0 } from "./asp.ts";
+import { readCorporateActions, readPaidServices, limitVersions, CURB_REVENUE, MAX_VERSIONS, USDT0 } from "./asp.ts";
 import type { JsonFetch } from "./asp.ts";
 import { requireAsset } from "./assets.ts";
 
@@ -28,6 +28,14 @@ test("corporate actions: the issuer ticker is sent, never the caller's spelling,
   assert.equal(r.asOf, "2026-09-25T01:17:54.329Z");
   assert.equal(r.source.upstream, "https://api.xstocks.fi/x");
   assert.match(r.summary, /^wAAPLx \(AAPLx\): 5 corporate-action events, 5 versions kept by curb-asp; newest: CashDividend effective 2026-05-01/);
+});
+
+test("corporate actions: limitVersions cuts a larger read to exactly what a read at that limit returns", async () => {
+  const url = "https://api.curb.markets/v1/corporate-actions?symbol=AAPLx";
+  const f = jsonFetch({ [url]: { status: 200, body: { symbol: "AAPLx", asOfMs: 1_790_299_074_329, events: 5, versions: [5, 4, 3, 2, 1].map(version) } } });
+  const full = await readCorporateActions(f, requireAsset("AAPLx"), MAX_VERSIONS, () => 0);
+  for (const n of [1, 2, 5, 20]) assert.deepEqual(limitVersions(full, n), await readCorporateActions(f, requireAsset("AAPLx"), n, () => 0), `limit ${n}`);
+  assert.equal((full.feed.versions as unknown[]).length, 5, "the shared read is not mutated");
 });
 
 test("corporate actions: an asp failure is an error, not an empty history", async () => {

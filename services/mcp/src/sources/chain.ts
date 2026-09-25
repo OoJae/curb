@@ -8,6 +8,9 @@
  *   - Only the read path: no attestation, log-scan or raw-token helpers.
  *   - `ChainReader` wraps pin + multicall and shares one head across concurrent tool calls for HEAD_TTL_MS,
  *     so a burst of calls costs one head read, not one per call per endpoint.
+ *   - RPCS order is a preference. `pinLatest` pins the first-listed endpoint whose head is within
+ *     MAX_LAG_BLOCKS of the best, not the highest head, and `multicallAt` asks the pinned endpoint first; so
+ *     with the defaults the eth_calls go to drpc, and rpc.xlayer.tech sees only head reads and fallbacks.
  *
  * Every tool answer comes from ONE aggregate3 call (or a short sequence of them) pinned by block hash
  * (EIP-1898), so every number in it describes the same chain state, and `asOf` names that block. A failed
@@ -89,7 +92,11 @@ function describe(e: unknown): string {
   return `${e.name}: ${e.message}${cause ? ` (${cause.code ?? cause.message})` : ""}`;
 }
 
-/** The best head across all RPCs, rejecting any endpoint lagging more than MAX_LAG_BLOCKS. */
+/**
+ * A head from the first-listed RPC that is within MAX_LAG_BLOCKS of the best head any RPC returned. Every
+ * endpoint is asked, so a lagging one is never pinned, but among the current ones the order of `rpcs` decides
+ * (see the header): an answer can be up to MAX_LAG_BLOCKS older than the best head, and it names its block.
+ */
 export async function pinLatest(rpcs = DEFAULT_RPCS, attempts = 2): Promise<PinnedBlock> {
   const reasons: string[] = [];
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -102,7 +109,7 @@ export async function pinLatest(rpcs = DEFAULT_RPCS, attempts = 2): Promise<Pinn
     const ok = heads.flatMap((h) => (h.status === "fulfilled" ? [h.value] : []));
     if (ok.length) {
       const best = Math.max(...ok.map((h) => h.number));
-      const pick = ok.filter((h) => best - h.number <= MAX_LAG_BLOCKS).sort((a, b) => b.number - a.number)[0];
+      const pick = ok.filter((h) => best - h.number <= MAX_LAG_BLOCKS).sort((a, b) => rpcs.indexOf(a.url) - rpcs.indexOf(b.url))[0];
       return { number: pick.number, hash: pick.hash, timestamp: pick.timestamp, rpc: pick.url };
     }
     heads.forEach((h, i) => {

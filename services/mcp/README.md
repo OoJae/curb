@@ -24,9 +24,9 @@ claude mcp add --transport http curb https://mcp.curb.markets/mcp
 addresses, in any case. Anything else is refused with the list, before any upstream read.
 
 Every chain answer comes from one block (a head read, then Multicall3 `aggregate3` pinned by block hash) and says
-which: `asOf.block`, `asOf.blockHash`, `asOf.time`. Identical calls share an answer for a few seconds (5 s for the
-regime and the reopen, 15 s for the scorecard, 10 s for credit, 60 s for corporate actions, 300 s for the paid
-terms), so a burst costs one set of upstream reads.
+which: `asOf.block`, `asOf.blockHash`, `asOf.time`. Calls for the same asset share an answer for a few seconds (5 s
+for the regime and the reopen, 15 s for the scorecard, 10 s for credit, 60 s for corporate actions, 300 s for the
+paid terms), whatever `limit` they ask for, so a burst costs one set of upstream reads per asset.
 
 Why `curb_next_reopen` computes rather than proxies: the free preview at api.curb.markets carries the next closure
 that has not started yet, not the end of the one in progress, and MarketClock's `nextTransitionAt` is the next
@@ -56,7 +56,7 @@ curl -s -X POST localhost:8080/mcp -H 'content-type: application/json' -H 'accep
 |---|---|---|
 | `PORT` | 8080 | |
 | `PUBLIC_URL` | `https://mcp.curb.markets` | used in `GET /` only; must be https except on localhost |
-| `RPCS` | `https://xlayer.drpc.org,https://rpc.xlayer.tech` | https only; heads are raced and a node more than 5 blocks behind is ignored |
+| `RPCS` | `https://xlayer.drpc.org,https://rpc.xlayer.tech` | https only, in order of preference: every endpoint is asked for a head, and the first listed within 5 blocks of the best answers the calls (so the defaults keep eth_calls off rpc.xlayer.tech, which the attestor, keeper and asp use) |
 | `TRUST_PROXY_HOPS` | 0 (the Dockerfile sets 1) | which `X-Forwarded-For` entry, from the right, is the client. 0 uses the socket address |
 | `RATE_BURST`, `RATE_PER_MIN` | 60, 120 | per client IP; `/healthz` is exempt. A refusal is 429 with `Retry-After` |
 | `TOOL_TIMEOUT_MS` | 20000 | a tool that waits longer on an upstream answers "timed out" |

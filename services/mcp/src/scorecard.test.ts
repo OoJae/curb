@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { keccak256, toUtf8Bytes, parseUnits } from "ethers";
-import { readScorecard, statusAt, SETTLE_DELAY_S, SETTLE_WINDOW_S } from "./scorecard.ts";
+import { readScorecard, limitScorecard, findCommitTxs, statusAt, MAX_ROWS, SETTLE_DELAY_S, SETTLE_WINDOW_S } from "./scorecard.ts";
 import { CONTRACTS, requireAsset } from "./assets.ts";
 import { BLOCK, fakeChain } from "./fixtures/fakeChain.ts";
 import type { LogFilter } from "./sources/chain.ts";
@@ -60,7 +60,7 @@ test("skill() is reported as the contract returns it, and the rows come newest f
   assert.deepEqual({ settled: r.skill.settled, beatLastPrint: r.skill.beatLastPrint, beatClosingVwap: r.skill.beatClosingVwap }, { settled: 2, beatLastPrint: 1, beatClosingVwap: 0 });
   assert.equal(r.closureCount, 3);
   assert.deepEqual(r.rows.map((x) => x.index), [2, 1, 0]);
-  assert.equal(r.summary, `Scorecard v2 at block ${BLOCK.number}: 3 marks committed, 2 settled. Curb's mark beat the last print in 1 and the closing VWAP in 0 (strict wins; 1 of the settled rows did not beat the last print). Newest 3 rows below.`);
+  assert.equal(r.summary, `Scorecard v2 at block ${BLOCK.number}: 3 marks committed, 2 settled. Curb's mark beat the last print in 1 and the pre-close price (closingVwap) in 0 (strict wins; 1 of the settled rows did not beat the last print). Newest 3 rows below.`);
 
   const [pending, win, tie] = r.rows;
   assert.equal(pending.status, "awaiting-reopen");
@@ -85,6 +85,15 @@ test("limit keeps the newest rows only, and an empty record says so", async () =
   assert.match(empty.summary, /No rows yet\.$/);
 });
 
+test("limitScorecard cuts a larger read to exactly what a read at that limit returns, without touching the original", async () => {
+  const full = await readScorecard(scorecardChain(ROWS, [2, 1, 0]), MAX_ROWS);
+  for (const n of [1, 2, 3, 10]) {
+    assert.deepEqual(limitScorecard(full, n), await readScorecard(scorecardChain(ROWS, [2, 1, 0]), n), `limit ${n}`);
+  }
+  assert.equal(full.rows.length, 3);
+  assert.match(limitScorecard(full, 1).summary, /Newest 1 rows below\.$/);
+});
+
 test("each row's commit transaction is found once from ClosureCommitted in its own block, then remembered", async () => {
   const lookups: LogFilter[] = [];
   const chain = scorecardChain(ROWS, [2, 1, 0], (f) => {
@@ -98,6 +107,23 @@ test("each row's commit transaction is found once from ClosureCommitted in its o
   assert.ok(r.rows.every((x) => x.commitTx === "0x" + "cd".repeat(32)));
   await readScorecard(chain, 10, known);
   assert.equal(lookups.length, 3, "a commit is final, so it is never looked up twice");
+});
+
+test("commit lookups stop starting once the time budget is spent, and the rest are found on a later call", async () => {
+  let lookups = 0;
+  const slow = scorecardChain(ROWS, [2, 1, 0], (f) => {
+    lookups++;
+    const until = Date.now() + 40;
+    while (Date.now() < until) { /* a slow RPC */ }
+    return [{ transactionHash: "0x" + "cd".repeat(32), blockNumber: "0x1", topics: [String(f.topics[0]), String(f.topics[1])], data: "0x" }];
+  });
+  const { rows } = await readScorecard(slow, 10);
+  const known = new Map<string, string>();
+  await findCommitTxs(slow, rows, known, 20);
+  assert.ok(known.size >= 1 && known.size < rows.length, `some but not all found within the budget, got ${known.size}`);
+  await findCommitTxs(slow, rows, known, 10_000);
+  assert.equal(known.size, rows.length);
+  assert.equal(lookups, rows.length, "no row is looked up twice");
 });
 
 test("a failed getter fails the answer instead of inventing a row", async () => {

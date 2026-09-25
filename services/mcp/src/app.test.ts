@@ -10,15 +10,16 @@ import { TimelineCache } from "./closureCalendar.ts";
 import { IssuerCache } from "./issuer.ts";
 import { ASSETS, CONTRACTS } from "./assets.ts";
 import { silentLog } from "./log.ts";
+import type { JsonFetch } from "./asp.ts";
 import { BLOCK, clockAnswer, fakeChain } from "./fixtures/fakeChain.ts";
 
 /** The whole HTTP surface against an in-memory chain: nothing here touches the network. */
-function start(opts: { burst?: number } = {}) {
+function start(opts: { burst?: number; fetchJson?: JsonFetch } = {}) {
   const chain = fakeChain(clockAnswer(Object.fromEntries(ASSETS.map((a) => [a.wrapper, { regime: 1, cap: 0n }])), CONTRACTS.marketClock));
   const noNetwork = async () => { throw new Error("no network in this test"); };
   const deps: AppDeps = {
     tools: {
-      chain, issuer: new IssuerCache(noNetwork), timelines: new TimelineCache(), fetchJson: noNetwork,
+      chain, issuer: new IssuerCache(noNetwork), timelines: new TimelineCache(), fetchJson: opts.fetchJson ?? noNetwork,
       commitTxs: new Map(), now: Date.now, log: silentLog, toolTimeoutMs: 5_000,
     },
     caches: makeCaches(Date.now),
@@ -141,6 +142,26 @@ test("identical calls within a tool's cache window share one set of chain reads"
   assert.equal(chain.calls - before, 1, "three spellings of one asset, one aggregate3");
 });
 
+test("calls for one asset share one upstream read whatever `limit` they ask for, and each gets its own cut", async () => {
+  const seen: string[] = [];
+  const versions = [5, 4, 3, 2, 1].map((n) => ({ eventId: `e${n}`, version: 1, caType: "CashDividend", effectiveTimeUtc: `2026-0${n}-01T00:00:00.000Z`, status: "Initial" }));
+  const fetchJson: JsonFetch = async (url) => {
+    seen.push(url);
+    return { ok: true, status: 200, json: async () => ({ symbol: "AAPLx", events: 5, versions }) };
+  };
+  const s = start({ fetchJson });
+  await s.ready;
+  const shown: number[] = [];
+  for (const [i, limit] of [1, 3, 2, 100].entries()) {
+    const r = await (await rpc(s.base(), "tools/call", { name: "curb_corporate_actions", arguments: { symbol: "wAAPLx", limit } }, i + 1)).json() as { result: { structuredContent: { versionsShown: number; versionsTotal: number; feed: { versions: unknown[] } } } };
+    assert.equal(r.result.structuredContent.versionsTotal, 5);
+    assert.equal(r.result.structuredContent.feed.versions.length, r.result.structuredContent.versionsShown);
+    shown.push(r.result.structuredContent.versionsShown);
+  }
+  assert.deepEqual(shown, [1, 3, 2, 5]);
+  assert.deepEqual(seen, ["https://api.curb.markets/v1/corporate-actions?symbol=AAPLx"], "four limits, one read");
+});
+
 test("the rate limit refuses with 429 and Retry-After, as a JSON-RPC error on /mcp; /healthz is exempt", async () => {
   const s = start({ burst: 2 });
   await s.ready;
@@ -155,6 +176,34 @@ test("the rate limit refuses with 429 and Retry-After, as a JSON-RPC error on /m
   assert.equal((await fetch(`${s.base()}/`)).status, 429);
   assert.equal((await fetch(`${s.base()}/healthz`)).status, 200);
   assert.equal(s.deps.state.rateLimited, 2);
+});
+
+test("a JSON-RPC batch takes one token per message, so it cannot multiply a client's rate", async () => {
+  const s = start({ burst: 5 });
+  await s.ready;
+  const batch = (n: number) => fetch(`${s.base()}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify(Array.from({ length: n }, (_, i) => ({ jsonrpc: "2.0", id: i + 1, method: "tools/list", params: {} }))),
+  });
+  const three = await batch(3);
+  assert.equal(three.status, 200);
+  assert.equal((await three.json() as unknown[]).length, 3);
+  // Two tokens left: a batch of three is refused whole, and the refusal is a JSON-RPC error.
+  const refused = await batch(3);
+  assert.equal(refused.status, 429);
+  assert.equal((await refused.json() as { jsonrpc: string }).jsonrpc, "2.0");
+  assert.equal(s.deps.state.rateLimited, 1);
+  // A batch far larger than the bucket (20,000 messages in 60 KB, under the body cap) stops at the first refusal.
+  const t = start({ burst: 5 });
+  await t.ready;
+  const flood = await fetch(`${t.base()}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: `[${Array(20_000).fill("{}").join(",")}]`,
+  });
+  assert.equal(flood.status, 429);
+  assert.equal(t.deps.state.rateLimited, 1);
 });
 
 test("an oversized body is refused before it is parsed", async () => {
