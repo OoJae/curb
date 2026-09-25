@@ -355,6 +355,16 @@ verified with a PoC, then fixed and regression-tested.
 Tests on main at deploy: **301/301**, plus fork suites against live mainnet state and the invariant runs
 recorded in `artifacts/w5/`.
 
+## MarketClockStatus — a Chainlink-style status adapter over MarketClock, 25 Sept 2026 08:12Z
+
+**`0xD5EEeD33117c7B2B39EF1Dad7e0eeEDe6b9836d9`**, Sourcify `exact_match`, deployed by D in tx
+`0xe778bcc28c587aad06b0e2877084b5e1e263ebd23543eed0cd922c1f333af5e3` (block 71,554,818), `script/DeployStatus.s.sol`.
+No admin, no storage beyond the immutable clock address, no funds. `marketStatus(wrapper)` answers in Chainlink
+Data Streams v11 codes from MarketClock's fail-closed views (`regime()`, `primaryCapNow()`, blackout, halt); never
+from `stateOf()`. Read back right after deploy (HK shut, US extended hours): wTCENTx, wXIAOx, wMEITx, wSHEINx → 5;
+wNVDAx, wAAPLx → 3; `clock()` = MarketClock. It carries no Builder Code: a deployment is initcode, and the adapter has
+no write function to carry one later. 330 unit tests and a 3-test mainnet fork suite passed before deploy.
+
 ## Live demo on mainnet — team wallets only, 24–25 Sept 2026
 
 Every counterparty below is a Curb team wallet (K = curb-desk `0xe1df…9A3E`, a Foundry keystore; A = the team's

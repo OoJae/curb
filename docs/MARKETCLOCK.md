@@ -119,10 +119,11 @@ contract Pool is MarketClockGuarded(IMarketClock(MarketClockGuard.XLAYER_MARKET_
 **Off-chain, or from code written for Chainlink Data Streams: `MarketClockStatus`**
 (`src/adapters/MarketClockStatus.sol`). `marketStatus(wrapper)` returns a `uint32` in the numbering of the
 `marketStatus` field of Chainlink's RWA Advanced (v11) report. It is not a Chainlink product and reads no
-Chainlink feed. Not yet deployed (25 Sep 2026); `script/DeployStatus.s.sol` deploys it.
+Chainlink feed. Deployed 25 Sep 2026 at [`0xD5EEeD33117c7B2B39EF1Dad7e0eeEDe6b9836d9`](https://www.oklink.com/xlayer/address/0xD5EEeD33117c7B2B39EF1Dad7e0eeEDe6b9836d9)
+(Sourcify `exact_match`; no admin, no storage but the clock address, no funds).
 
 ```bash
-cast call <MarketClockStatus> "marketStatus(address)(uint32)" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E \
+cast call 0xD5EEeD33117c7B2B39EF1Dad7e0eeEDe6b9836d9 "marketStatus(address)(uint32)" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E \
   --rpc-url https://rpc.xlayer.tech
 ```
 

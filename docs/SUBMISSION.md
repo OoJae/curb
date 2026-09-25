@@ -62,6 +62,7 @@ https://github.com/OoJae/curb
 - EligibilityRegistry (makers) `0xbA1aB5027e826D564EA913b3f7acb95Fd651758E` (24 Sep, Sourcify exact_match)
 - DepthCert `0x702b1a988765f85162F4829175EF4232197e9C6D` (24 Sep, Sourcify exact_match)
 - CurbCredit `0x23c778c88C3ABf0Ad750f703C5F04cB3129ee339` (24 Sep, Sourcify exact_match)
+- MarketClockStatus (Chainlink-style `marketStatus` adapter over MarketClock) `0xD5EEeD33117c7B2B39EF1Dad7e0eeEDe6b9836d9` (25 Sep, Sourcify exact_match)
 - Builder Code: `dd7u50nckt5e729f` (registry `0xd6c426f9c077358735622ae5a83468dc0510823b`)
 - Revenue wallet (x402 payTo): `0x277cA91276A3801667B76C97Da3872Ccb6E96068`
 
