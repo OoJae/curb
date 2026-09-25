@@ -89,7 +89,7 @@
       .slot.split { left: 721px; top: 239px; width: 1102px; height: 619px; }
       .cam { position: absolute; inset: 0; }
       #cam-S01 { transform-origin: 58% 48%; } #cam-S03 { transform-origin: 34% 42%; } #cam-S04c { transform-origin: 44% 48%; } #cam-S04s { transform-origin: 40% 50%; } #cam-S09 { transform-origin: 55% 50%; }
-      #cam-S06 { transform-origin: 70% 40%; } #cam-S07 { transform-origin: 72% 35%; } #cam-O1 { transform-origin: 38% 58%; } #cam-O2 { transform-origin: 63% 30%; } #cam-O3 { transform-origin: 51% 94%; } #cam-O4 { transform-origin: 45% 60%; }
+      #cam-M1 { transform-origin: 45% 55%; } #cam-S06 { transform-origin: 70% 40%; } #cam-S07 { transform-origin: 72% 35%; } #cam-O1 { transform-origin: 38% 58%; } #cam-O2 { transform-origin: 63% 30%; } #cam-O3 { transform-origin: 51% 94%; } #cam-O4 { transform-origin: 45% 60%; }
       .cam video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
       /* placeholders: the frame is real, the footage is not yet */
@@ -355,12 +355,13 @@
       <div id="pl-M1" class="clip plate split" data-s="116" data-d="6.8" data-start="116" data-duration="6.8" data-track-index="1">
         <div class="ledger callout"><div class="rule"></div>
           <div class="rv"><span class="num">#13869</span></div>
-          <div class="lbl">Curb on OKX's AI marketplace: three paid services over x402. Registered; the listing is under review.</div>
+          <div class="lbl">Curb on OKX's AI marketplace: three paid services over x402. Listed 25 Sep 2026.</div>
           <div class="meta">Closure Calendar <b>$0.01</b> · Accuracy Record <b>$0.05</b> · Discount Curve <b>$0.10</b></div></div>
-        <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">OKX AI marketplace · agent #13869</span></div>
-          <div class="win-body"><div class="ph"><div class="id">PENDING: M1</div><div class="what">The marketplace page for agent #13869, in the user's logged-in browser.</div><div class="when">any time · CURB_M1_URL</div></div></div></div>
-        <div class="win-cap">OKX AI marketplace · registered 24 Sep 2026 · under review (pending capture)</div>
+        <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">www.okx.ai/agents/13869</span></div>
+          <div class="win-body"></div></div>
+        <div class="win-cap">okx.ai/agents/13869 · registered 24 Sep 2026 · listed 25 Sep · captured Fri 25 Sep 14:25Z</div>
       </div>
+      <div class="slot split" id="sl-M1"><div class="cam" id="cam-M1" data-layout-allow-overflow><video id="v-M1" data-s="116" data-d="6.8" data-start="116" data-duration="6.8" data-media-start="2.4" data-track-index="0" src="media/clips/M1.mp4" muted playsinline></video></div></div>
 
       <div id="pl-T2" class="clip plate wide" data-s="122.5" data-d="7.3" data-start="122.5" data-duration="7.3" data-track-index="1">
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url" data-term-title="T2">curl</span></div>
@@ -826,6 +827,7 @@
 
       /* ── BEAT 6 ── */
       plateIn("pl-M1", 116, false);
+      push("#cam-M1", 116, 122.8, { s: 1.0 }, { s: 1.04 });
       rise("#pl-M1 .num", 116.3);
       plateIn("pl-T2", 122.5);
       terminal("T2", "T2", 122.5, 129.8, { highlight: ["HTTP/2 402", "payment-required:"] });

@@ -56,7 +56,7 @@ at least one `curb.scorecard.mark/2` row has settled (see below). If none has, s
 like every other" instead of "its first rows".*
 
 **6 · Agents pay** (grid 1:56–2:32 · read ≈ 30 s) — *Picture: marketplace #13869; the 402; onchainos paying; the receipt.*
-> Agents can buy all of this. Curb is registered on OKX's AI marketplace, with three paid services over
+> Agents can buy all of this. Curb is listed on OKX's AI marketplace, with three paid services over
 > x-four-oh-two. ⏸ Ask without paying, and you get a price and a free preview. ⏸ Pay one cent from an
 > OKX Agentic Wallet, and you get the answer and a receipt tied to the exact bytes. ⏸ This one is our
 > own wallet paying us: it proves the rail, not demand.
