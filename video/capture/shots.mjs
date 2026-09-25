@@ -178,6 +178,20 @@ export async function S04(ctx) {
   return { path: await s.finish() };
 }
 
+/** S04o · /scorecard after the first mark/2 overnight rows settled: the ledger's newest rows, then the Benchmarks. */
+export async function S04o(ctx) {
+  const s = await newSession(clipId(ctx, "S04o"), { headless: !ctx.headed });
+  await sitePage(s, site(ctx, "/scorecard"), /graded|tie/i);
+  await s.hold(9000); // the ledger resolves rows at 3 RPC reads a second
+  const y = async (h) => s.page.evaluate((txt) => { const el = [...document.querySelectorAll("h2")].find((e) => e.textContent.trim().startsWith(txt)); return el ? el.getBoundingClientRect().top + window.scrollY - 60 : null; }, h);
+  const ledger = await y("The ledger");
+  if (ledger != null) { await s.scrollTo(ledger, 1800); await s.hold(2500); await s.move(W * 0.5, H * 0.45, 40); await s.hold(2500); await s.still("S04o-ledger"); }
+  const bench = await y("Benchmarks");
+  if (bench != null) { await s.scrollTo(bench, 2200); await s.hold(3000); await s.still("S04o-benchmarks"); }
+  await s.expectText("mark/2 rows on the page", /mark\/2/i);
+  return { path: await s.finish() };
+}
+
 /** S05 · /api: "ask without paying" animates 402 → free preview + price. */
 export async function S05(ctx) {
   const s = await newSession(clipId(ctx, "S05"), { headless: !ctx.headed });
@@ -480,4 +494,4 @@ export async function HZ(ctx) {
   return { record: r, healthz: j };
 }
 
-export const SHOTS = { S01, S02, S03, S04, S05, S06, S07, S08, S09, O1, O2, O3, O4, O5, O6, M1, T1, T2, T3q, T3r, T3, T4, T4s, T5, T6, HZ };
+export const SHOTS = { S01, S02, S03, S04, S04o, S05, S06, S07, S08, S09, O1, O2, O3, O4, O5, O6, M1, T1, T2, T3q, T3r, T3, T4, T4s, T5, T6, HZ };
