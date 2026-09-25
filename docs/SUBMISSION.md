@@ -48,7 +48,7 @@ https://github.com/OoJae/curb
 
 ### Demo video (2–4 min)
 
-⟨video link⟩ (target length 3:12; script: https://github.com/OoJae/curb/blob/main/video/SCRIPT.md)
+https://youtu.be/JlnFSx2d3Qk (2:24; script: https://github.com/OoJae/curb/blob/main/video/SCRIPT.md)
 
 ### Contract addresses (X Layer mainnet, chain 196)
 
