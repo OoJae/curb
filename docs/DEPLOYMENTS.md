@@ -429,6 +429,16 @@ the cutoff refresh, A's effects checked on chain), with the redeem by `script/w3
 | → `ltvFor(wTCENTx)` **0 → 6,000 bps (60%, the open cap) in that one transaction**; `ltvEffective` 6,000 | — | | |
 | `borrow(wTCENTx, 1.4 USDG)` → `Borrowed(1,400,000, debt 1,400,000, ltv 6,000)` | A | `0x438c26de55074b10ccce9b45341203a071e21482d91d3257ccc5e291d78fd0a4` | 71,544,372 |
 
+**The proved fade, 25 Sept ~05:30Z** (maker D, never K, so the credit line's depth is untouched: `ltvFor` stayed 6,000):
+
+| step | who | tx | block |
+|---|---|---|---|
+| maker-approve USDG to DepthCert | D | `0x20f87f9d82891e146511f2239e224c27d74b48e3123f9d2cc0ae7133bd9243ab` | |
+| `post` cert 2: 0.03 wTCENTx at 52 USDG a share, beneficiary A (only A may take), bond 0.2 USDG, 26 h | D | `0x70e2a3f07d824f8115ae162c8c872d86d73f45c7b46f54694630edb172aaef37` | |
+| `approve(DepthCert, 0)`: the maker walks away from its bid | D | `0x1a87f9cc17201ce79185911acf9b7f9d67756622a97aff6532ab7c2190ca2117` | |
+| approve exactly 0.03 wTCENTx to DepthCert | A | `0xd0d352cf54eac16175a47e2034dc68d048ea76797953b969a2cffc327a8738ce` | |
+| `take(2, 0.03e18, A)` → **`Faded(id 2, taker A, maker D, shares 0.03, costOwed 1.56 USDG, bondSlashed 0.2 USDG, reason ALLOWANCE)`**: the maker's leg failed, the whole bond went to A (USDG 3.107630 → 3.307630) and A's shares came straight back (0.268390 wTCENTx before and after) | A | `0x6dd0bd29ebc5335ec8a68a4e9799c5d4c7fe5edf4dd6d954ca3d4b14aeebf470` | 71,545,313 |
+
 The same borrow was refused with `Refusal(NoDepth)` at 21:30Z the night before (above). What changed between them is
 one bonded bid. At the 07:55Z cut the regime cap drops to 30% with no transaction at all; `script/w4/friday2.sh` then
 flags the breach and the cure clock freezes while Hong Kong is shut.
