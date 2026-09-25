@@ -1,7 +1,10 @@
 # LP outreach: targets, message, and what we are honestly asking
 
-**Status: READY FOR APPROVAL. Nothing has been sent.** Nothing goes out until the user approves the exact text
-and the exact recipients below. Three more conditions must also hold:
+**Status: APPROVED by the user 24 Sept ~22:30Z (Variant C). Not yet sent.** The five messages below passed an
+adversarial re-verification on 24–25 Sept and a live send-time guard at 01:16Z on 25 Sept. They are sent with
+`bash script/outreach/send.sh`, which re-checks every recipient immediately before its send; the automated
+session was not permitted to send third-party messages, so the user runs it. Earlier rule, kept: nothing goes out
+until the user approves the exact text and the exact recipients below. Three more conditions must also hold:
 
 1. `curb.markets` serves a real page. Sending people to a dead URL is worse than not sending.
 2. For variant C only: `DepthCert` is deployed and Sourcify-verified, and its address is filled in from
@@ -41,23 +44,25 @@ is genuinely third-party, and that is the property the whole outreach exists to 
 ### Targets, verified on chain
 
 Ranked by position count and by whether they hold Hong Kong names. Those are the assets whose primary market is
-shut 141 h 20 m of every 168. Position counts and nonces are as of 21 Sept.
+shut 141 h 20 m of every 168. Position counts and nonces are as of 21 Sept; the **status** column is the full
+position walk of 24 Sept 23:36Z (block 71,523,963), and four of the nine have since left every wrapper pool.
 
-| # | address | positions | nonce | pools | why |
-|---|---|---|---|---|---|
-| 1 | `0x12C41Db9BbC678b5707EEb81cE814fa23421C34d` | 659 | 6,815 | wTCENTx, wMEITx, wNVDAx | **First contact.** The only LP with live positions in two HK pools at once, and the only one seen calling the position manager directly rather than through the router, so it runs its own tooling. |
-| 2 | `0x7be689c6732D2d0ac194f2D019aB56ea63b97241` | 1,798 | 12,780 | wMEITx | Largest position count in the cohort by a wide margin. |
-| 3 | `0xb5240c4b1408A293F5aF3341E29Fcee67f5C7018` | 993 | 5,869 | wAAPLx | Largest LP in the book with the worst measured impact per dollar (D-3). |
-| 4 | `0x9c9dD25D94bC9f965B22E1c888e1d4510C9a4BF4` | 744 | 6,083 | wMEITx | |
-| 5 | `0x18A0E936bAC7fbc873E330587738259e6BF64aeE` | 526 | 5,842 | wSHEINx | Largest mover in the most concentrated asset in the cohort (99.08% of supply in its pool, measured 21 Sept). |
-| 6 | `0x01b554D75b9d2aA1C97592B3EAA44498d7033b29` | 246 | 1,488 | wSHEINx | |
-| 7 | `0x7e349f84732Ee499a464d118d32635cBaFdfd189` | 235 | 1,860 | wSHEINx, wMEITx | Cross-HK. |
-| 8 | `0x1Bb84BcF9852A63e2b95C660e4b6C1098Cc1236d` | 125 | 472 | wTCENTx | The demo asset. |
-| 9 | `0x1294394faCc6B4EEe808AeF886ee13eA590F8608` | 6 | 95 | wXIAOx | Holds the single largest *live* position found in any of the six pools. A small operator making a big bet. |
+| # | address | positions | nonce | pools (21 Sept) | why | status, 24 Sept (block 71,523,963) |
+|---|---|---|---|---|---|---|
+| 1 | `0x12C41Db9BbC678b5707EEb81cE814fa23421C34d` | 659 | 6,815 | wTCENTx, wMEITx, wNVDAx | **First contact.** The only LP with live positions in two HK pools at once, and the only one seen calling the position manager directly rather than through the router, so it runs its own tooling. | live: wTCENTx 46637 and wMEITx 46639 in range. (Its 46637 mint went through a helper contract 0x9025…7926, so the "calls the position manager directly" note no longer holds.) **Send, wTCENTx.** |
+| 2 | `0x7be689c6732D2d0ac194f2D019aB56ea63b97241` | 1,798 | 12,780 | wMEITx | Largest position count in the cohort by a wide margin. | exited every wrapper pool (all 1,800 positions walked). Dropped. |
+| 3 | `0xb5240c4b1408A293F5aF3341E29Fcee67f5C7018` | 993 | 5,869 | wAAPLx | Largest LP in the book with the worst measured impact per dollar (D-3). | exited wAAPLx; live in wTCENTx 38240 and wXIAOx 39012 (in range), wMEITx and wSHEINx out of range. **Send, wTCENTx** (replaces row 5). |
+| 4 | `0x9c9dD25D94bC9f965B22E1c888e1d4510C9a4BF4` | 744 | 6,083 | wMEITx | | exited (780 walked, none live). Dropped. |
+| 5 | `0x18A0E936bAC7fbc873E330587738259e6BF64aeE` | 526 | 5,842 | wSHEINx | Largest mover in the most concentrated asset in the cohort (99.08% of supply in its pool, measured 21 Sept). | exited every wrapper pool (541 walked). Dropped. |
+| 6 | `0x01b554D75b9d2aA1C97592B3EAA44498d7033b29` | 246 | 1,488 | wSHEINx | | exited every wrapper pool (327 walked; nonce 1,939, still active elsewhere). Dropped. |
+| 7 | `0x7e349f84732Ee499a464d118d32635cBaFdfd189` | 235 | 1,860 | wSHEINx, wMEITx | Cross-HK. | exited wSHEINx; live wMEITx 46622 in range (the largest wMEITx position among these rows). **Send, wMEITx** (replaces row 2). |
+| 8 | `0x1Bb84BcF9852A63e2b95C660e4b6C1098Cc1236d` | 125 | 472 | wTCENTx | The demo asset. | live: wTCENTx 44883 and wMEITx 42876 in range. **Send, wTCENTx.** |
+| 9 | `0x1294394faCc6B4EEe808AeF886ee13eA590F8608` | 6 | 95 | wXIAOx | Holds the single largest *live* position found in any of the six pools. A small operator making a big bet. | live: wXIAOx 37071 in range, 22.6% of the pool's in-range liquidity (the cross-pool "largest" claim was not re-verified). **Send, wXIAOx.** |
 
 **Send to five, not fifty.** Five specific, well-chosen messages read as research. Fifty read as spam, and the
-record is public forever. **Recommended first five: rows 1, 2, 5, 8 and 9.** Together they cover all four Hong
-Kong names and both ends of the operator-size range.
+record is public forever. **Recommended first five (re-verified 25 Sept): rows 1, 3, 7, 8 and 9**, covering wTCENTx, wMEITx and wXIAOx and
+both ends of the operator-size range. Rows 2 and 5, the original picks, have left every wrapper pool. No live LP
+in this table still holds an in-range wSHEINx position, so wSHEINx is not messaged.
 
 Two notes for choosing the asset named in each message:
 
@@ -79,8 +84,9 @@ Two notes for choosing the asset named in each message:
 
 ## The message
 
-Sent as a zero-value transaction carrying UTF-8 calldata. Each message is at most ~240 bytes, costs ~3,200 gas
-(about $0.0001), and stays permanently readable in OKLink's input-data view.
+Sent as a zero-value transaction carrying UTF-8 calldata. Each message is at most 240 bytes, costs about 30,500
+gas (the EIP-7623 calldata floor; about 6.4e-7 OKB at 0.021 gwei, far under $0.0001), and stays permanently
+readable in OKLink's input-data view.
 
 **From the deployer `0x78a5955b433988198bccA2E8bdC671444798f809`**, which is already published as a Curb
 wallet. The lead logs every sent message in `docs/WALLETS.md` beside the admin transactions. Outreach that hid
@@ -112,16 +118,19 @@ As drafted, A is 238 bytes, B about 220, and C 229 with a real address.
 
 ## What we are honestly asking for
 
-**DepthCert is designed and being deployed on 25 Sept.** It is not live as this is written, and variants A and B
-say "deploying", not "live". The spec is `docs/specs/W3W4-contracts.md`, and the cuts are in D-12. Overstating
-it to a desk that can read the chain is the fastest way to lose the only counterparty that matters.
+**DepthCert is live since 24 Sept** at `0x702b1a988765f85162F4829175EF4232197e9C6D` (Sourcify `exact_match`), so
+Variant C is the one sent; variants A and B are kept only as the record of what was drafted. The spec is
+`docs/specs/W3W4-contracts.md`, and the cuts are in D-12. Overstating it to a desk that can read the chain is the
+fastest way to lose the only counterparty that matters.
 
-What a maker could do once it is live:
+What a maker can do now (checked against the deployed code and on a mainnet fork, 25 Sept):
 
 - **Post** a one-sided firm bid: `post(wrapper, beneficiary, sizeShares, bidPx, expiry, bond)`, with bidPx in
   USDG per whole wrapper share. The bond must be at least 10% of the bid's notional. The cert lives between 10
-  minutes and 30 days. Naming `CurbCredit` as beneficiary makes the bid count toward that asset's `ltvFor`.
-  Only bids with at least an hour left count.
+  minutes and 30 days. An **open** cert (beneficiary 0) is permissionless: any maker, any wrapper, anyone may take
+  it. A cert **naming `CurbCredit`** counts toward that asset's `ltvFor`, but only makers on the maker allowlist
+  (`0xbA1a…758E`) may post one, so an outside desk is added there first (one admin transaction, after it agrees).
+  CurbCredit counts a cert only while it outlives its horizon (open: 1 h + 30 min; shut: 73 h or more + 30 min).
 - **What it risks.** If a taker delivers shares and the maker's USDG does not arrive (allowance revoked,
   balance short, or the transfer fails), the cert is marked FADED in the same transaction and **the whole bond
   goes to the taker**. A taker can never cause a fade, because the taker's shares are pulled first.
