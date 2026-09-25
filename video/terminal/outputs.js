@@ -4,33 +4,33 @@ window.CURB_TERM = {
   "id": "HZ",
   "title": "curl",
   "show": "curl -s https://attestor-a-production.up.railway.app/healthz",
-  "startedAt": "2026-09-24T14:22:11.700Z",
-  "endedAt": "2026-09-24T14:22:13.660Z",
+  "startedAt": "2026-09-25T03:55:16.223Z",
+  "endedAt": "2026-09-25T03:55:17.806Z",
   "exitCode": 0,
-  "output": "{\"ok\":true,\"lastTickOkMs\":1790259725706,\"isAttestor\":true,\"mode\":\"live\",\"address\":\"0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4\",\"attribution\":{\"on\":true,\"dataSuffix\":\"0x6464377535306e636b74356537323966100080218021802180218021802180218021\",\"codes\":[\"dd7u50nckt5e729f\"]},\"balanceWei\":\"68766925982753284\",\"lastRound\":{\"root\":\"0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141\",\"kind\":\"heartbeat\",\"tx\":\"0x215ec5a483ded96a7c69259e6f534a3f8971678635d8e8333f6ee3c6f1b95ca7\",\"atMs\":1790259576623}}",
+  "output": "{\"ok\":true,\"lastTickOkMs\":1790308514092,\"isAttestor\":true,\"mode\":\"live\",\"address\":\"0x842e9eeE514C419183Ca79D4cb0dc30ad29fEeC4\",\"attribution\":{\"on\":true,\"dataSuffix\":\"0x6464377535306e636b74356537323966100080218021802180218021802180218021\",\"codes\":[\"dd7u50nckt5e729f\"]},\"balanceWei\":\"67944341366753284\",\"lastRound\":{\"root\":\"0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7\",\"kind\":\"diff\",\"tx\":\"0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff\",\"atMs\":1790308504461},\"archive\":{\"enabled\":true,\"bucket\":\"curb-archive\",\"queued\":0,\"parked\":0,\"published\":85,\"alreadyPresent\":0,\"failed\":0,\"lastPublished\":{\"key\":\"rounds/0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7.json\",\"atMs\":1790308504854},\"lastError\":null}}",
   "chunks": [
    [
-    1957,
-    505
+    1578,
+    761
    ]
   ],
-  "source": "terminal/HZ.json"
+  "source": "terminal/live/HZ.json"
  },
  "T1": {
   "id": "T1",
   "title": "cast",
   "show": "cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b \"stateOf(address)((uint8,uint128,uint64,uint64,uint32,bool))\" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech",
-  "startedAt": "2026-09-24T13:55:27.037Z",
-  "endedAt": "2026-09-24T13:55:32.322Z",
+  "startedAt": "2026-09-25T03:55:17.810Z",
+  "endedAt": "2026-09-25T03:55:22.606Z",
   "exitCode": 0,
-  "output": "(1, 0, 1790298000 [1.79e9], 1790257926 [1.79e9], 0, false)\n",
+  "output": "(1, 0, 1790308800 [1.79e9], 1790308506 [1.79e9], 0, false)\n",
   "chunks": [
    [
-    5281,
+    4791,
     59
    ]
   ],
-  "source": "terminal/T1.json"
+  "source": "terminal/live/T1.json"
  },
  "T2": {
   "id": "T2",
@@ -83,18 +83,18 @@ window.CURB_TERM = {
  "T4": {
   "id": "T4",
   "title": "curb-verify",
-  "show": "node tools/curb-verify/src/cli.ts bundle https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json",
-  "startedAt": "2026-09-24T14:22:13.662Z",
-  "endedAt": "2026-09-24T14:22:16.593Z",
+  "show": "node tools/curb-verify/src/cli.ts bundle https://attestor-a-production.up.railway.app/rounds/0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7.json",
+  "startedAt": "2026-09-25T03:55:25.180Z",
+  "endedAt": "2026-09-25T03:55:27.882Z",
   "exitCode": 0,
-  "output": "round bundle 0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141\n  source     https://attestor-a-production.up.railway.app/rounds/0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141.json\n  root       0x2464e2f2948c4935d13f39c3a330603e192284f0dd05d0c32d5be93c2eb4c141\n  kind       heartbeat\n  evaluated  2026-09-24T14:19:36Z\n  claims     6\n  REPRODUCED\n",
+  "output": "round bundle 0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7\n  source     https://attestor-a-production.up.railway.app/rounds/0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7.json\n  root       0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7\n  kind       diff\n  evaluated  2026-09-25T03:55:04Z\n  claims     6\n  REPRODUCED\n",
   "chunks": [
    [
-    2926,
-    382
+    2690,
+    377
    ]
   ],
-  "source": "terminal/T4.json"
+  "source": "terminal/live/T4.json"
  },
  "T4s": {
   "id": "T4s",
@@ -119,30 +119,50 @@ window.CURB_TERM = {
  "T5": {
   "id": "T5",
   "title": "node",
-  "show": "node decode-8021.mjs 0x215ec5a483ded96a7c69259e6f534a3f8971678635d8e8333f6ee3c6f1b95ca7",
-  "startedAt": "2026-09-24T14:22:16.595Z",
-  "endedAt": "2026-09-24T14:22:19.537Z",
+  "show": "node decode-8021.mjs 0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff",
+  "startedAt": "2026-09-25T03:55:22.608Z",
+  "endedAt": "2026-09-25T03:55:25.179Z",
   "exitCode": 0,
-  "output": "tx        0x215ec5a483ded96a7c69259e6f534a3f8971678635d8e8333f6ee3c6f1b95ca7\nblock     71,490,542  status 1\nfrom      0x842e9eee514c419183ca79d4cb0dc30ad29feec4\nto        0x160dc415902971a7a9b5ade7f43005b36fe5b09b\nselector  0xe42c6251\ncalldata  1,350 bytes; the last 34 are the attribution suffix\ntail      …6464377535306e636b74356537323966100080218021802180218021802180218021\n\n  codes   6464377535306e636b74356537323966   \"dd7u50nckt5e729f\"\n  length  10                                 16 bytes\n  schema  00                                 schema 0\n  marker  80218021802180218021802180218021   ERC-8021\n\nox        Attribution.fromData → {\"codes\":[\"dd7u50nckt5e729f\"],\"id\":0}\nresult    Builder Code dd7u50nckt5e729f attached\n",
+  "output": "tx        0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff\nblock     71,539,470  status 1\nfrom      0x842e9eee514c419183ca79d4cb0dc30ad29feec4\nto        0x160dc415902971a7a9b5ade7f43005b36fe5b09b\nselector  0xe42c6251\ncalldata  1,350 bytes; the last 34 are the attribution suffix\ntail      …6464377535306e636b74356537323966100080218021802180218021802180218021\n\n  codes   6464377535306e636b74356537323966   \"dd7u50nckt5e729f\"\n  length  10                                 16 bytes\n  schema  00                                 schema 0\n  marker  80218021802180218021802180218021   ERC-8021\n\nox        Attribution.fromData → {\"codes\":[\"dd7u50nckt5e729f\"],\"id\":0}\nresult    Builder Code dd7u50nckt5e729f attached\n",
   "chunks": [
    [
-    2924,
+    2519,
     77
    ],
    [
-    2936,
+    2566,
     31
    ],
    [
-    2936,
-    334
+    2566,
+    127
    ],
    [
-    2936,
-    283
+    2566,
+    62
+   ],
+   [
+    2566,
+    80
+   ],
+   [
+    2566,
+    1
+   ],
+   [
+    2566,
+    64
+   ],
+   [
+    2566,
+    54
+   ],
+   [
+    2566,
+    229
    ]
   ],
-  "source": "terminal/T5.json"
+  "source": "terminal/live/T5.json"
  },
  "T6": {
   "id": "T6",
@@ -159,5 +179,21 @@ window.CURB_TERM = {
    ]
   ],
   "source": "terminal/T6.json"
+ },
+ "T4m": {
+  "id": "T4m",
+  "title": "curb-verify",
+  "show": "node tools/curb-verify/src/cli.ts bundle 0xafa10cb0fb2c3b88889378f5a87d3da1ec4ab7f8b2bd40708ea391ce1c77f1a5 --archive https://archive.curb.markets",
+  "startedAt": "2026-09-25T04:54:17.955Z",
+  "endedAt": "2026-09-25T04:54:21.210Z",
+  "exitCode": 0,
+  "output": "mark bundle 0xafa10cb0fb2c3b88889378f5a87d3da1ec4ab7f8b2bd40708ea391ce1c77f1a5\n  source     https://archive.curb.markets/marks/0xafa10cb0fb2c3b88889378f5a87d3da1ec4ab7f8b2bd40708ea391ce1c77f1a5.json\n  root       0xafa10cb0fb2c3b88889378f5a87d3da1ec4ab7f8b2bd40708ea391ce1c77f1a5\n  scorecard  0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f\n  evaluated  2026-09-25T04:50:27Z\n  marks      1\n  REPRODUCED\n",
+  "chunks": [
+   [
+    3251,
+    397
+   ]
+  ],
+  "source": "terminal/live/T4m.json"
  }
 };
