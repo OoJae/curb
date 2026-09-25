@@ -300,12 +300,15 @@ Curb never holds or moves the raw rebasing token. If you compare a wrapper price
 
 ## Honest limits
 
-- **The record is all ties so far.** As of 25 Sep 00:56Z, `skill()` read (15, 0, 0): 15 settled rows, 0 wins,
-  15 ties, 0 losses. Read it live with `skill()`. The pools did not trade while primary capacity was off, so
-  `curb.scorecard.mark/1`, whose only input is the pool, equals the last print by construction. The reopens were
-  not quiet: they moved 30 to 105 bp. The fix is `curb.scorecard.mark/2`, which adds a signal that trades
-  while Hong Kong is shut ([D-11](docs/DECISIONS.md), D-13). Old rows keep the method that produced them, and no
-  row is ever re-marked.
+- **The record has no wins yet.** Read it live with `skill()`. The 15 rows before block 71,486,953 used
+  `curb.scorecard.mark/1`, whose only input is the pool: the mark *is* the last print, so every one tied by
+  construction. The reopens were not quiet: they moved 0 to 105 bp. The fix is `curb.scorecard.mark/2`, which adds
+  a signal that trades while Hong Kong is shut ([D-13](docs/DECISIONS.md)). Its first three rows (25 Sep 01:30Z
+  reopen) **all lost**: the signal called Tencent, Xiaomi and Meituan up and HKEX opened all three down, so as of
+  25 Sep 01:36Z `skill()` reads (18, 0, 0). Old rows keep the method that produced them, and no row is ever
+  re-marked. Two more things the record shows: the pools **do** trade while primary capacity is off (15, 63 and
+  141 swaps in the 22–24 Sep lunch recesses, most of them on wXIAOx), and five minutes after a reopen, when the
+  Scorecard reads it, a pool can lag the real market (wTCENTx's pool −13 bp against 0700.HK −114 bp on 25 Sep).
 - **Every demo counterparty is a team wallet, and says so.** The first paid call (24 Sep, $0.01) was the team's
   Agentic Wallet paying the team's revenue wallet. It proves the payment rail, not demand. The W3/W4 demos run
   only between team wallets (curb-desk, the Agentic Wallet, the deployer). Every address and its funding path is
