@@ -22,3 +22,9 @@ node_modules
 .claude/
 web/node_modules
 web/dist
+
+# Secret env files used by the deploy scripts (values never enter the repo)
+*.env
+!.env.example
+*.secret.env
+*.r2.env

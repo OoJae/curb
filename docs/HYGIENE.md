@@ -21,7 +21,7 @@ housekeeping items.
 
 | id | severity | finding | where |
 |---|---|---|---|
-| H-1 | **medium** | Commit metadata exposes a second personal email address | author and committer of every commit from `474e820` onward |
+| H-1 | resolved | Commit metadata exposes a second personal email address (**kept by the owner's decision, 25 Sept**) | author and committer of every commit from `474e820` onward |
 | H-2 | low | Absolute local paths reveal the macOS username and names of unrelated local projects | `docs/specs/brand-site-video.md` (`b70a75f`); `artifacts/w0/local/stopgap.log` line 1 (`cc03fa7`); `artifacts/w5/invariants-note.txt` (`a25aa2d`) |
 | H-3 | info | `.gitignore` misses secret-file names the deploy scripts actually use | `.gitignore` |
 | H-4 | info | Test fixtures and vendored code that any secret scanner will flag, all public or fake | see list |
@@ -156,7 +156,7 @@ Run from a checkout of the final `main`:
 
 ```bash
 git log -p --all --no-color --format='COMMIT %H %an <%ae> %s' --output=/tmp/curb-logp.txt
-grep -n -i -E 'f8728dba|hc-ping|kdfparams|ciphertext|BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_|sk-[A-Za-z0-9_-]{20,}' /tmp/curb-logp.txt
+grep -n -i -E '<first 8 chars of the OKX API key>|hc-ping|kdfparams|ciphertext|BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|ghp_|sk-[A-Za-z0-9_-]{20,}' /tmp/curb-logp.txt
 grep -o -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' /tmp/curb-logp.txt | sort | uniq -c
 git log --all --format='%h %an <%ae> | %cn <%ce>' | sort -k2 | uniq -c -f1
 git cat-file --batch-check='%(objecttype) %(objectsize) %(objectname)' --batch-all-objects | sort -k2 -n | tail

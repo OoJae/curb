@@ -271,7 +271,7 @@ Transcode (proven in past projects): `ffmpeg -y -v error -i in.webm -c:v libx264
 
 Aligning the user's Clipchamp VO: one continuous take, ~1 s silence between beats, flubs cut; export; `ffmpeg -vn -ac 1 -ar 48000
 -af loudnorm=I=-16:TP=-1.5 media/vo.wav`; `npx hyperframes transcribe media/vo.wav --json`; `align-beats.mjs` (copy from
-`/Users/oluwademilade/Desktop/Hookathon/videos/hindsight-demo/`) with the 8 anchors → `beats.json` (each anchor ≥3/N words);
+`an earlier HyperFrames project of the team (Hindsight)`) with the 8 anchors → `beats.json` (each anchor ≥3/N words);
 `retime.mjs --durations … --dry` then real, `SCRIPTED=[0,14,40,52,84,116,152,178,192]`; `check`; render.
 
 HyperFrames structure (`curb/video/`): `BRIEF.md` (general-video, 1920×1080, 30 fps, 192 s target); `design.md` (same 6 colours,
@@ -280,5 +280,5 @@ ink "window" frame, 2 px radius, caption "curb.markets/clock · captured 25 Sep 
 clock + corner mark whose arc ticks 30° per beat; V4 optional caption rail; A1 VO (`<audio id="vo">`); A2 optional sparse music bed
 ~−28 LUFS (drop if nothing suitable in 20 min). Transitions: cuts and 300 ms crossfades only; the film's single orchestrated moment
 is the site's own unroll. Mix −14 LUFS integrated, −1 dBTP; H.264 CRF 18. Reuse: BlastRadius
-`/Users/oluwademilade/Desktop/blastradius-video/capture-lib.mjs` (visible cursor, per-clip text assertions), Hindsight
+`an earlier capture library of the team (capture-lib.mjs)` (visible cursor, per-clip text assertions), Hindsight
 `align-beats.mjs` + `retime.mjs`, Ripcord `SCRIPT.md` format. Pin hyperframes (0.8.40) in package.json.

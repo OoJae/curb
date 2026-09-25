@@ -1,0 +1,8 @@
+14:22:36Z outreach: row 1 0x12C41Db9BbC678b5707EEb81cE814fa23421C34d: token 46637 live (liq 6180742554010214, tick -236084 in [-236860,-236030)), 229 bytes, wTCENTx
+14:22:39Z outreach:   SENT row 1: tx 0x72c40545155323601e8fb9b757a3d0e456a5eceff46569320cf94bda0c08352b status 1 block 71577123
+14:22:46Z outreach: row 3 0xb5240c4b1408A293F5aF3341E29Fcee67f5C7018: token 38240 live (liq 330526385659842, tick -236084 in [-236440,-235630)), 229 bytes, wTCENTx
+14:22:51Z outreach:   SENT row 3: tx 0x9882f1745f7f9bfd6c0fcf28843621d3e6ad3d415d9623cc34c2a27f413d2d43 status 1 block 71577135
+14:22:57Z outreach: row 7 DROPPED: token 46622 has no liquidity
+14:23:04Z outreach: row 8 0x1Bb84BcF9852A63e2b95C660e4b6C1098Cc1236d: token 44883 live (liq 698835381981530, tick -236084 in [-237010,-234880)), 229 bytes, wTCENTx
+14:23:11Z outreach:   SENT row 8: tx 0xad83bcc0b1c62a37c473d6759b2a4394e7687c6fda87947dee525426f051f3a0 status 1 block 71577153
+14:23:17Z outreach: row 9 DROPPED: token 37071 out of range (tick -264305 vs [-264160,-263260))

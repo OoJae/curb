@@ -1,0 +1,51 @@
+uploading to bucket curb-archive at https://e38cb9baf5a71676deda49343e9d53d3.r2.cloudflarestorage.com
+rounds: scanned 50/454 windows (last done: 70715365..70717364)
+rounds: scanned 100/454 windows (last done: 70815365..70817364)
+rounds: scanned 150/454 windows (last done: 70915365..70917364)
+rounds: scanned 200/454 windows (last done: 71017365..71019364)
+rounds: scanned 250/454 windows (last done: 71115365..71117364)
+rounds: scanned 300/454 windows (last done: 71215365..71217364)
+rounds: scanned 350/454 windows (last done: 71315365..71317364)
+rounds: scanned 400/454 windows (last done: 71415365..71417364)
+rounds: scanned 450/454 windows (last done: 71515365..71517364)
+rounds: scanned 454/454 windows (last done: 71521365..71523364)
+marks: scanned 50/146 windows (last done: 71329806..71331805)
+marks: scanned 100/146 windows (last done: 71429806..71431805)
+marks: scanned 146/146 windows (last done: 71521806..71523410)
+found 2844 MarketClock rounds in 70617365..71523410 and 15 Scorecard marks in 71231806..71523410
+rounds: 100/2844
+rounds: 200/2844
+rounds: 300/2844
+rounds: 400/2844
+rounds: 500/2844
+rounds: 600/2844
+rounds: 700/2844
+rounds: 800/2844
+rounds: 900/2844
+rounds: 1000/2844
+rounds: 1100/2844
+rounds: 1200/2844
+rounds: 1300/2844
+rounds: 1400/2844
+rounds: 1500/2844
+rounds: 1600/2844
+rounds: 1700/2844
+rounds: 1800/2844
+rounds: 1900/2844
+rounds: 2000/2844
+rounds: 2100/2844
+rounds: 2200/2844
+rounds: 2300/2844
+rounds: 2400/2844
+rounds: 2500/2844
+rounds: 2600/2844
+rounds: 2700/2844
+rounds: 2800/2844
+rounds: 2844/2844
+marks: 15/15
+PUT-FAILED      index   index/rounds.ndjson
+                Error: timed out after 30000ms
+rounds: 2844  present 2839, uploaded 5
+marks: 15  present 15
+witnesss: 5624  present 5604, uploaded 20
+indexs: 3  put-failed 1, uploaded 2

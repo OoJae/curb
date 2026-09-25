@@ -1,0 +1,102 @@
+uploading to bucket curb-archive at https://e38cb9baf5a71676deda49343e9d53d3.r2.cloudflarestorage.com
+rounds: scanned 50/448 windows (last done: 70717365..70719364)
+rounds: scanned 100/448 windows (last done: 70815365..70817364)
+rounds: scanned 150/448 windows (last done: 70913365..70915364)
+rounds: scanned 200/448 windows (last done: 71015365..71017364)
+rounds: scanned 250/448 windows (last done: 71115365..71117364)
+rounds: scanned 300/448 windows (last done: 71215365..71217364)
+rounds: scanned 350/448 windows (last done: 71315365..71317364)
+rounds: scanned 400/448 windows (last done: 71415365..71417364)
+rounds: scanned 448/448 windows (last done: 71511365..71513324)
+marks: scanned 50/141 windows (last done: 71329806..71331805)
+marks: scanned 100/141 windows (last done: 71427806..71429805)
+marks: scanned 141/141 windows (last done: 71511806..71513324)
+found 2813 MarketClock rounds in 70617365..71513324 and 15 Scorecard marks in 71231806..71513324
+rounds: 100/2813
+rounds: 200/2813
+rounds: 300/2813
+rounds: 400/2813
+rounds: 500/2813
+rounds: 600/2813
+rounds: 700/2813
+rounds: 800/2813
+rounds: 900/2813
+rounds: 1000/2813
+rounds: 1100/2813
+rounds: 1200/2813
+rounds: 1300/2813
+rounds: 1400/2813
+rounds: 1500/2813
+rounds: 1600/2813
+rounds: 1700/2813
+rounds: 1800/2813
+rounds: 1900/2813
+rounds: 2000/2813
+rounds: 2100/2813
+rounds: 2200/2813
+rounds: 2300/2813
+rounds: 2400/2813
+rounds: 2500/2813
+rounds: 2600/2813
+rounds: 2700/2813
+rounds: 2800/2813
+rounds: 2813/2813
+marks: 15/15
+UNAVAILABLE     round   rounds/0xe3b72b74826170accaa189b9def5d2dffa98659ea4bde8838ac2e0314972e8c3.json  tx 0xb4c61b9ede569c42115a781a7ae69054bed3e8dc9037ec58fedcd4ee42837b3b
+                no archive served rounds/0xe3b72b74826170accaa189b9def5d2dffa98659ea4bde8838ac2e0314972e8c3.json (https://attestor-a-production.up.railway.app/rounds/0xe3b72b74826170accaa189b9def5d2dffa98659ea4bde8838ac2e0314972e8c3.json: The operation was aborted due to timeout)
+PUT-FAILED      round   rounds/0xa89d4d1e5fd0cf8f3c562623312d4f63dd92145e9bde59d77dfcf7d195bd1a18.json  tx 0x15ea809e12b1af8d64804b98f40ed32b406dbd5d45570fac0e2ea3ba7df911d3
+                HTTP 409 ObjectLockedByBucketPolicy: The object is locked by the bucket policy.
+PUT-FAILED      round   rounds/0x7b431d574533d2bb88dadf9f93bcd2751a9029175c72ccc9aded21aa06cce830.json  tx 0x20c7053f49544aeebd9055f9be7c42b3c1a3c24892ebe4c85997558d1256e228
+                HTTP 409 ObjectLockedByBucketPolicy: The object is locked by the bucket policy.
+UNAVAILABLE     round   rounds/0x3312b9340c84afb174691f89d0af16ab717da1cadfe488332cec0dc666b10ff1.json  tx 0x1f83e8db1a8b23996df89951460c356ad2667a4a9b698ee0e44fd24f34f06747
+                no archive served rounds/0x3312b9340c84afb174691f89d0af16ab717da1cadfe488332cec0dc666b10ff1.json (https://attestor-a-production.up.railway.app/rounds/0x3312b9340c84afb174691f89d0af16ab717da1cadfe488332cec0dc666b10ff1.json: The operation was aborted due to timeout)
+UNAVAILABLE     round   rounds/0xc0401b143e3ec632d323764c58dc4085f06ae3c100b50c84f548867660364f47.json  tx 0x66d45ad178fee4115ad8c73604310a7aac0bf8979903b7b95359e73507bdfd3c
+                no archive served rounds/0xc0401b143e3ec632d323764c58dc4085f06ae3c100b50c84f548867660364f47.json (https://attestor-a-production.up.railway.app/rounds/0xc0401b143e3ec632d323764c58dc4085f06ae3c100b50c84f548867660364f47.json: The operation was aborted due to timeout)
+UNAVAILABLE     round   rounds/0x373b21d992946906f92a60b7b8bb16d2c9c4506f832e63cf52eddddc0a76a885.json  tx 0x85ce3cc2f6fc459bfa909021d94282c713333bc34ddbc7bb12c995a11e181fd5
+                no archive served rounds/0x373b21d992946906f92a60b7b8bb16d2c9c4506f832e63cf52eddddc0a76a885.json (https://attestor-a-production.up.railway.app/rounds/0x373b21d992946906f92a60b7b8bb16d2c9c4506f832e63cf52eddddc0a76a885.json: The operation was aborted due to timeout)
+UNAVAILABLE     round   rounds/0xf13a92649d4d4f3cda8683ca28895cda88e7cf6c4bccda5c708b5725162e888b.json  tx 0x249f2fbe092077e6ab216de2059c6a82a21e9b57f4857dd6a8ec3f011abebc9e
+                no archive served rounds/0xf13a92649d4d4f3cda8683ca28895cda88e7cf6c4bccda5c708b5725162e888b.json (https://attestor-a-production.up.railway.app/rounds/0xf13a92649d4d4f3cda8683ca28895cda88e7cf6c4bccda5c708b5725162e888b.json: The operation was aborted due to timeout)
+PUT-FAILED      witness witness/tx/0xec69765f19a1cc360e41cb493f3daf4f75d646df41c71d741551f304cc374e13.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xec861c49b80332b186bb40d1cd433437379f9ecbaf37ebf5c019c31a6bbd5bcf.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xec8e00cfac9fa7d4de899dad359043a0f9e5c60634c99025f148bbc46ee61c39.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xec93c531e14d48dd75f711f56e90f989da9c01d4647a20f0839400863302b322.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xecd00ed45be18bc65f5c93c41413b9a2317bcb371b5029da91d3352bbb7622fe.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xecfbd8664bd72a1c8b546d30541139b6e6f977a9e659fb2e3970ff4358abc5d0.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed03a9099a80b3d496c552b64c68e3b4be40f9993f0cf038946b018728936255.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed331f8f658734e22acaa0b5ebe9be53aa814a88978b99ca5f4f5f18aeaee23b.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed3705727b35e11e976e38c0aaf600581a0cffee512e543f1abe606129d73bcc.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed38374e8ca84e5e9c3b05851dc3f47bb9c24a8fc2a44569a3c833df7d0b4970.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed42b9d4f5fc4158242d2c7629d77c6813c6278402236aad9ec13df627d6903a.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed6c7c6faa8c6e8198e127804b8eafed90644940779b76c6705a0260d7f9d81f.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed742a2d0dcbe76e8d7c341722af7ba496931ae304593cf13a3802bfd1e5da80.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed8f931204f0e60f69ed576e6c208d888abbe7eddc723365df5e0bdec9f1764a.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xed98016883110fcb2bb5ec0a9cf7d73335eeaef265b1a30d2ff06a3f4a57f2d9.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xeda80d8f22ae10c4719833923b8ba12da01b05e133a81be232661f454f9e62c6.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xedd1e02869d47548f17b2b6e09350bbec734adde421e980a2b961a5852857792.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xedf5f7c707f330e9f2720c309d929a17209c801a838c7526cc0fb64a6a6bd81e.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xedf7070d54f3f88a6a0f31b0b360dcd50ad965a8ffd85d19a233a350ac584afc.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+PUT-FAILED      witness witness/tx/0xee046b1053faf03ed4570e0cb9945d4e9f653ebcddd5bedd4138448a39373fff.json
+                TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)
+rounds: 2813  uploaded 2804, unavailable 5, put-failed 2, present 2
+marks: 15  uploaded 15
+witnesss: 5624  uploaded 5604, put-failed 20
+indexs: 3  uploaded 3

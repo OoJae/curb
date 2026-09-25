@@ -1,0 +1,32 @@
+21:55:59Z cycle2: waiting 21871 s for 2026-09-25T04:00:30Z
+00:36:12Z cycle2b: waiting 12318 s for 2026-09-25T04:01:30Z
+04:01:44Z cycle2b: clock regime 1, cap 0, K wTCENTx 100000000000000000
+sending approve(address,uint256) to 0x41333Df9E7639188BBfca5522dC4844398Af9f9E as curb-desk
+blockNumber          71539879
+gasUsed              54219
+status               1 (success)
+transactionHash      0xb57566e6dc13c5f1580588d5c5530d1f7ebb024b116d9ad7ffa881f120614544
+sending mint(address,uint128,address) to 0x7B2AcB0Db3316f7B8cf1B287796a2273871F011B as curb-desk
+blockNumber          71539903
+gasUsed              344131
+status               1 (success)
+transactionHash      0x646922f0331dc7a63f1a05aa06edd7a7713bc64ada8ef7ddad439279f5e9bf94
+04:02:34Z cycle2b: note 2 minted to K: 100000000000000000 units
+04:02:38Z cycle2b: priceNow 55736236132689297604 -> start 5570000, floor 5400000 USDG units, decay 1200s
+cutoff: MarketClock nextTransitionAt for 0x41333Df9E7639188BBfca5522dC4844398Af9f9E = 1790312400 (2026-09-25T05:00:00Z)
+sending list(uint256,uint128,uint128,uint128,uint32,uint64) to 0xAc74864d69DdB940ADfDB39E69751759a32bb80D as curb-desk
+blockNumber          71539949
+gasUsed              285280
+status               1 (success)
+transactionHash      0x97ff93d190438978ade1cccb5cf67eb7db9f4bee0900e12ff71fe6b5329d8455
+04:03:20Z cycle2b: lot 2 listed: seller 0xe1df35Af172E41D5A387D7e1b54A5Ab18b539A3E, note 2, amount 100000000000000000, status 1, ends 1790312400
+04:07:29Z cycle2b: A approve 5570000: ok 0x116f41c80dfd711105df6f7a8c0312559277ef8f8342962476a0c45df2d79dd5
+04:07:53Z cycle2b: A bid (clock 5529767, max 5570000) attempt 1: ok 0x3a92efa702207705c0d8a8e041232f34b59bd39e6cb015ee1b543e878c467c31
+04:08:09Z cycle2b: lot 2 SOLD to A at 5529059 USDG units (at 1790309274)
+04:08:09Z cycle2b: handing over to redeem2.sh (note 2, lot 2)
+04:08:14Z redeem2: note 2, lot 2: A holds 100000000000000000 units; waiting for the reopen
+05:00:48Z redeem2: redeemable (the pointer has witnessed the reopen)
+05:00:56Z redeem2: redeem attempt 1: ok 0x483a3a01bc3046808199be8d2fbb954574216676a2641af94e8383f979468f05
+05:01:22Z redeem2: redeemed: A note balance 0, A wTCENTx 268389998311519054, pointer epoch 2
+05:01:22Z redeem2: waiting for the reopen print, then realisedDiscountBps(2)
+05:05:56Z redeem2: realisedDiscountBps(2) = 80

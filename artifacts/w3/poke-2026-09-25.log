@@ -1,0 +1,26 @@
+19:26:14Z poke: watching 0x41333Df9E7639188BBfca5522dC4844398Af9f9E on pointer 0x85AB0FebdFa7201E65eA01bd3e4CC6F9c0Ac4471 as curb-desk (every 5s)
+00:02:46Z poke: watching 0x41333Df9E7639188BBfca5522dC4844398Af9f9E on pointer 0x85AB0FebdFa7201E65eA01bd3e4CC6F9c0Ac4471 as curb-desk (every 5s)
+01:30:53Z poke: epoch 1 was opened by another caller and is unprinted
+01:30:58Z poke: epoch 1 opened at 1790299832; recordPrint at 1790300135 (sleeping 277 s)
+blockNumber          71531111
+gasUsed              89016
+status               1 (success)
+transactionHash      0xce7b9189f3cf83ffbeb79f52096869aa3ded77e489f18f84d0a8674914b9fb66
+01:35:54Z poke: epoch 1 print: 55735725924243243801
+03:55:28Z poke: market shut (regime 1): observe to witness it
+blockNumber          71539499
+gasUsed              43108
+status               1 (success)
+transactionHash      0x403f222c7ccdfe50c8ef2a8d9be7208e0c4c4fb54f7f0b9f14da941f6203589a
+05:00:49Z poke: epoch 2 was opened by another caller and is unprinted
+05:00:54Z poke: epoch 2 opened at 1790312431; recordPrint at 1790312734 (sleeping 280 s)
+blockNumber          71543710
+gasUsed              89016
+status               1 (success)
+transactionHash      0x988f3e9b9bf913b425447b92994cdb64c104db01635d98661b3c78bd97eaaa95
+05:05:52Z poke: epoch 2 print: 55737473344316380423
+07:55:12Z poke: market shut (regime 4): observe to witness it
+blockNumber          71553883
+gasUsed              43108
+status               1 (success)
+transactionHash      0x27f0d220031875fe7f4a6c83db345ff2ba67037208a4aff8b96a7081075d93fe

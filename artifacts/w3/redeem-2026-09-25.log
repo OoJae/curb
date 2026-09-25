@@ -1,0 +1,7 @@
+20:52:56Z redeem: waiting for note 1 to become redeemable (A holds 100000000000000000)
+00:32:19Z redeem2: note 1, lot 1: A holds 100000000000000000 units; waiting for the reopen
+01:30:59Z redeem2: redeemable (the pointer has witnessed the reopen)
+01:31:08Z redeem2: redeem attempt 1: ok 0xd102eca8ef75190302419edf008ecbb9117a71c67e9978a4179473d9be29e383
+01:31:34Z redeem2: redeemed: A note balance 0, A wTCENTx 168389998311519054, pointer epoch 1
+01:31:34Z redeem2: waiting for the reopen print, then realisedDiscountBps(1)
+01:36:10Z redeem2: realisedDiscountBps(1) = -38

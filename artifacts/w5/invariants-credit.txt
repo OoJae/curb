@@ -21,12 +21,12 @@ Properties (assertion messages in the test):
   8. ltvEffective = ltvFor * min(1, notional(dS, minBid) / totalPrincipal): <= ltvFor, pro rata, unscaled when covered
 
 ---- forge output ----
-2026-09-24T18:53:56.751623Z ERROR foundry_compilers_artifacts_solc::sources: error="/Users/oluwademilade/Desktop/Okx Dev Day/curb/.claude/worktrees/agent-aeaff6d75591893ad/test/scratch/ReviewPoC.t.sol": No such file or directory (os error 2)
+2026-09-24T18:53:56.751623Z ERROR foundry_compilers_artifacts_solc::sources: error=".claude/worktrees/agent-aeaff6d75591893ad/test/scratch/ReviewPoC.t.sol": No such file or directory (os error 2)
 
 Ran 1 test for test/invariant/CreditInvariant.t.sol:CreditHandlerCoverageTest
 [PASS] test_handler_reaches_every_state() (gas: 27648172)
 Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 16.14ms (11.08ms CPU time)
-Warning: Failure from "/Users/oluwademilade/Desktop/Okx Dev Day/curb/.claude/worktrees/agent-aeaff6d75591893ad/cache/invariant/failures/CreditInvariantTest/invariants/invariant_no_cross_position_breach" file was ignored because invariant test settings have changed: added target contracts: test/invariant/handlers/CreditHandler.sol:CreditHandler, removed target contracts: test/invariant/handlers/CreditHandler.sol:CreditHandler, target selectors changed
+Warning: Failure from ".claude/worktrees/agent-aeaff6d75591893ad/cache/invariant/failures/CreditInvariantTest/invariants/invariant_no_cross_position_breach" file was ignored because invariant test settings have changed: added target contracts: test/invariant/handlers/CreditHandler.sol:CreditHandler, removed target contracts: test/invariant/handlers/CreditHandler.sol:CreditHandler, target selectors changed
 
 Ran 1 test for test/invariant/CreditInvariant.t.sol:CreditInvariantTest
 [PASS]

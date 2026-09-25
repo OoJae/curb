@@ -1,0 +1,11 @@
+00:08:55Z backup: waiting 4880 s for 2026-09-25T01:30:15Z
+01:30:15Z backup: window 2026-09-25T01:30:15Z .. 2026-09-25T01:50:00Z
+01:30:32Z backup: cap 100000 but the pointer has not witnessed the reopen: observe -> status               1 (success) transactionHash      0xeb01d9f84355aec74ac3e75033d68f40930033d1d234d631e1790f46b32d991c 
+01:35:51Z backup: epoch 1 opened at 1790299832, unprinted at +310 s: recordPrint -> status               0 (failed) transactionHash      0xba096762e8dc9de0487480616170f2a63424e4f17ea41b7d5b5a101225ef4333 
+01:36:33Z backup: epoch 1 printed (55735725924243243801): done for this window
+01:36:33Z backup: waiting 12222 s for 2026-09-25T05:00:15Z
+05:00:15Z backup: window 2026-09-25T05:00:15Z .. 2026-09-25T05:20:00Z
+05:00:31Z backup: cap 100000 but the pointer has not witnessed the reopen: observe -> status               1 (success) transactionHash      0x8228690c084def9ddb4e71096ab723236ffdb15f229deb6f537937cf8b9eb03e 
+05:05:46Z backup: epoch 2 opened at 1790312431, unprinted at +310 s: recordPrint -> Error: Failed to estimate gas: server returned an error response: error code 3: execution reverted, data: "0x131fa011": AlreadyPrinted 
+05:06:30Z backup: epoch 2 printed (55737473344316380423): done for this window
+05:06:30Z backup: done

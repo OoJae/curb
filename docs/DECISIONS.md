@@ -158,9 +158,9 @@ volume migration with downtime, and an HTTP poller's region does not affect its 
 the table below are therefore labelled by what they are — a US-West egress, not Singapore.
 
 **First trading-hours evidence — the 16:00 HKT boundary, Mon 14 Sep 2026.** Two independent witnesses
-(Railway US-West egress, and the MacBook's Lagos egress), polling every 5 seconds:
+(Railway US-West egress, and the team's Mac on a home connection), polling every 5 seconds:
 
-| UTC | Railway (sfo egress) | MacBook (Lagos) |
+| UTC | Railway (sfo egress) | the team's Mac |
 |---|---|---|
 | 07:49:36 | TCENTx `market` $100k · NVDAx `overnight` $200k | — |
 | 07:54:33 | (no change yet) | TCENTx `market` · **NVDAx `closed` 0** |
