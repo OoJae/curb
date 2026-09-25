@@ -205,6 +205,9 @@ Refusal reasons = error selectors: `Ineligible`, `UnsupportedAsset`, `MarketUnkn
 they emit `Refusal`, return false, change nothing** (a refusal leaves an on-chain trace in a succeeding tx).
 
 LTV (published, monotonic):
+
+> **Superseded (pre-review design):** the deployed LTV (`ltvFor`, `ltvEffective`) and cert horizon (`minCertExpiry`, not `now + 1h`) are specified by the NatSpec in `src/CurbCredit.sol`; see also "Demo amendments" below.
+
 ```
 regimeCap = UNKNOWN → 0 ; primaryCapNow>0 → 6000 ; CLOSED → 3000
 (dS,,minBid,) = depth.honouredDepth(a, address(this), now + 1h)     // certs expiring <1h don't count
@@ -301,6 +304,8 @@ K post(wTCENTx, credit, 0.028e18, 52e6, now+26h, 1e6) → ltvFor 0 → ~52%; A b
 cure frozen all weekend. US contrast (14:00–23:00): wNVDAx borrow; short cert expires; flagBreach; tick every 5 min; clock
 runs; liquidate after 30 open-min. Fade (~20:00): K post + revoke allowance; A take → Faded, bond to A.
 
+> **Superseded (plan before the reviews):** the amendments below changed the lot cutoffs and the fade's maker (D), and K's cert is posted with expiry Sat 17 Oct 06:00Z, not now+26h; the demo as run is in `docs/DEPLOYMENTS.md`, "Live demo on mainnet".
+
 ## Risks
 
 No poke at the reopen (print late; delivery unaffected; poke.sh + self-witnessing redeem/bid) · recordPrint refused on a
@@ -324,5 +329,6 @@ immutability (parameterised scripts, fork dry-runs) · stack-too-deep in legacy 
   - Bad debt is booked only when every share is seized.
   - While the market is shut, a cert counts only if it expires after now + max(73h, the next transition + 1h) + 30 min.
 - **K's wTCENTx cert** (posted while open, before the 07:55Z cut): expiry **Fri 2 Oct 06:00Z**. This keeps the weekend loan supported through Monday's reopen and the 1 Oct holiday.
+  > **Superseded:** `script/w4/credit.sh` posts it with expiry **Sat 17 Oct 2026 06:00Z** (`DEMO_EXPIRY=1792216800`); a 2 Oct expiry would stop counting from about Tue 29 Sep 04:30Z (expiry − 73 h 30 min), before the holiday, so the reasoning above is wrong.
 - **Fade demo** uses **D (the deployer)** as maker, never K. D must first be made eligible (`setEligible(D, true, keccak256("team:deployer"))`). Its cert must be at least 1 USDG, e.g. 0.03e18 @ 52e6.
 - **Friday 25 Sep is a normal trading day.** Recess 03:55–05:00Z, afternoon session to 07:55Z. Checked live against the issuer's schedule through curb-asp; the 25 Sep half day in older test fixtures was withdrawn by the issuer on 18 Sep (D-4).

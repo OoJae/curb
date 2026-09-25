@@ -98,6 +98,28 @@ Read back after the calls: `isAttestor(host A)` = true, `isAttestor(host B)` = t
 
 ## Key custody
 
-- Encrypted Foundry keystores at `~/.foundry/keystores/curb-{deployer,attestor,keeper}`, outside this repo.
+- Encrypted Foundry keystores at `~/.foundry/keystores/curb-{deployer,attestor,keeper}` (`keeper` is the retired
+  13 Sep wallet), outside this repo.
 - Keystore passwords in `~/.foundry/curb-secrets/`, mode 600, outside this repo.
 - Nothing secret is ever committed. `.gitignore` blocks keystores, password files and `.env`.
+
+**On the shared VPS (`Sonar-VPS2`).** D-8 accepts a stated risk for host B's key: most other services on that box
+run as root, and root can read its keystore and password. The same risk applies to the keeper key and to two of
+the archive tokens, which sit on the same box:
+
+- **Live keeper key** `0xd3D9…1AF6`: an encrypted keystore at `/var/lib/curb/keeper/keys/keeper.keystore.json`
+  (the container's volume), and its password in the root-owned `0600` file `/etc/curb/keeper.secret.env`. Both
+  were generated on the box and never left it. Host B's key is kept the same way (`/var/lib/curb/attestor-b`,
+  `/etc/curb/attestor-b.secret.env`). A stolen keeper key can call only `Scorecard.commit`. The deployer can
+  revoke it with `setKeeper(0xd3D9…1AF6, false)`, which stops new rows. Rows already committed stay in the
+  record: anyone may settle them, and settled rows count in `skill()`.
+- **Archive (R2) tokens.** Three Cloudflare account API tokens, one per writer. Each is scoped to Object Read &
+  Write on bucket `curb-archive` only, with no bucket configuration rights, so none can lift a lock.
+  - `curb-archive-a`: a Railway variable on `attestor-a` (host A), not on the VPS.
+  - `curb-archive-b` and `curb-archive-keeper`: root-owned `0600` files `/etc/curb/attestor-b.r2.env` and
+    `/etc/curb/keeper.r2.env` on the shared VPS.
+  - The Mac keeps a `0600` copy in `~/.foundry/curb-secrets/` for the backfill.
+
+  A leaked token cannot delete or overwrite anything under the locked `rounds/`, `marks/` and `witness/`
+  prefixes. It can add new objects to the bucket, which `archive.curb.markets` serves, and rewrite the unlocked
+  `index/`. The token list and the deleted superseded token are in `docs/DEPLOYMENTS.md`, "Publisher live".
