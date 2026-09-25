@@ -660,11 +660,29 @@
         tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: dur, ease }, T(s));
       const fadeOut = (sel, s, dur = 0.2) =>
         tl.fromTo(sel, { opacity: 1 }, { opacity: 0, duration: dur, ease: EXIT, immediateRender: false }, T(s));
+      /**
+       * The plate a crossfade replaces dissolves out over the overlap: its text always (so two headlines or two
+       * captions never sit on top of each other), its window and footage too when the layout changes (wide ↔ split),
+       * where the new window does not cover the old one and it would otherwise pop off at full brightness.
+       */
+      const plateOut = (id, s) => {
+        const t0 = T(s), me = document.getElementById(id);
+        const lay = (el) => (el.classList.contains("wide") ? "wide" : "split");
+        $$(".plate").forEach((p) => {
+          const a = Number(p.dataset.start), b = a + Number(p.dataset.duration);
+          if (p === me || !(a < t0 - 0.001 && b > t0 + 0.001)) return;
+          const moved = lay(p) !== lay(me);
+          const els = Array.from(p.children).filter((c) => moved || !c.classList.contains("win"));
+          const slot = document.getElementById(p.id.replace(/^pl-/, "sl-"));
+          if (moved && slot) els.push(slot);
+          if (els.length) tl.fromTo(els, { opacity: 1 }, { opacity: 0, duration: Math.min(0.3, b - t0), ease: "none", immediateRender: false }, t0);
+        });
+      };
       /** A plate's entrance: a 300 ms crossfade over the previous plate, or a cut. */
       const plateIn = (id, s, xfade = true) => {
         const parts = ["win", "win-cap", "ledger", "say", "sub", "meta"].map((c) => `#${id} > .${c}`).join(", ");
         const slot = document.getElementById(id.replace(/^pl-/, "sl-"));
-        if (xfade) { fadeIn(parts, s); if (slot) fadeIn(slot, s); }
+        if (xfade) { fadeIn(parts, s); if (slot) fadeIn(slot, s); plateOut(id, s); }
         else if (slot) tl.fromTo(slot, { opacity: 1 }, { opacity: 1, duration: 0.01 }, T(s));
       };
       /** Slow camera move inside a plate: a push toward what the voice names (≤ 6%; linear unless an ease is given, S06's 7% is eased in over 19 s). */
@@ -791,8 +809,10 @@
       tl.fromTo("#name-rosette", { opacity: 0, rotation: -4, transformOrigin: "50% 50%" }, { opacity: 1, rotation: 0, duration: span(40.2, 51.8), ease: "none" }, T(40.2));
       fadeIn("#name-hist", 40.9, 0.9, CURB);
       (function () {
+        // The gap is twice the path and the dash starts one unit clear of it: with gap = len and offset = len the dash
+        // ended exactly on the path's start and Chrome drew a 15 px sliver there for the whole of the build.
         const c = $("#name-mk .mk-c"), len = (R * Math.PI * 250) / 180;
-        tl.fromTo(c, { strokeDasharray: `${len} ${len}`, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.9, ease: CURB }, T(45.9));
+        tl.fromTo(c, { strokeDasharray: `${len} ${2 * len}`, strokeDashoffset: len + 1 }, { strokeDashoffset: 0, duration: 0.9, ease: CURB }, T(45.9));
         tl.fromTo("#name-mk .mk-arc", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: CURB }, T(46.7));
       })();
       rise("#name-word", 46.3, 0, 0.9);
@@ -893,7 +913,7 @@
       fadeOut("#pl-S09 > .win, #pl-S09 > .win-cap, #sl-S09", 184.2, 0.3);
       (function () {
         const c = $("#end-mk .mk-c"), len = (R * Math.PI * 250) / 180;
-        tl.fromTo(c, { strokeDasharray: `${len} ${len}`, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.9, ease: CURB }, T(184.6));
+        tl.fromTo(c, { strokeDasharray: `${len} ${2 * len}`, strokeDashoffset: len + 1 }, { strokeDashoffset: 0, duration: 0.9, ease: CURB }, T(184.6));
         // The arc comes home: it has stepped 30° a beat all film; it closes the circle at east.
         tl.fromTo("#end-arc", { opacity: 0, rotation: 210, svgOrigin: "0 0" }, { opacity: 1, rotation: 360, duration: 1.2, ease: CURB }, T(185.2));
       })();
