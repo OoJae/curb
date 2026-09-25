@@ -646,7 +646,7 @@ as such.
 ## D-13 — `curb.scorecard.mark/2`: a signal from markets that trade while Hong Kong is shut (24 Sept 2026)
 
 **Why.** D-11's contingency was met. All 15 rows settled under `curb.scorecard.mark/1` were ties, because
-the wrapper pools carry no information while primary capacity is off, yet the reopens moved 30–105 bp.
+mark/1 is the last print by construction (the pools do trade while shut; see the D-11 erratum), yet the reopens moved 0–105 bp.
 Beating the last print needs information from outside the pool.
 
 **Which signals exist.** Surveyed and tested 24 Sept, 12:07–12:30Z:

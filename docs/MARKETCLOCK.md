@@ -21,7 +21,7 @@ How much of the week it covers, measured:
 
 | cohort | count | hours mode | primary market shut |
 |---|---|---|---|
-| Hong Kong (`XHKG`) | 79 | `Regular` — no overnight session at all | **140.5 of every 168 hours (83.6%)** |
+| Hong Kong (`XHKG`) | 79 | `Regular` — no overnight session at all | **141 h 20 m of every 168 hours (84.1%)**, counting the issuer's measured five-minute early cut before every period end (D-4) |
 | United States | 632 | `TwentyFourFive` | 48 of every 168 hours |
 | ETFs (`MarketHours`) | 10 | regular hours only | similar to HK |
 
@@ -48,7 +48,7 @@ And the multiplier is **not** a dividend accumulator that only rises:
 
 - `NFLXx` = **10.000000** exactly (10-for-1 forward split)
 - `PPLTx` = 10.0, `KLACx` = 10.0168, `CRWDx` = 4.0
-- `HONx` went 1.0241 → **0.5120** (reverse split) → 0.9991 (spin-off) in 8h14m
+- `HONx` went 1.0241 → **0.5120** (reverse split) → 0.9991 (spin-off) in 8h25m
 - **336 of 732 assets have multiplier ≠ 1**
 
 Any code that treats a balance increase as income will hand out free credit on a split and
