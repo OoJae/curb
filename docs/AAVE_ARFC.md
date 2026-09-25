@@ -1,4 +1,4 @@
-# [ARFC] A risk framework for tokenized equities on Aave V3 X Layer, with wTCENTx as the worked example
+# [Discussion] A risk framework for tokenized equities on Aave V3 X Layer, with wTCENTx as the worked example
 
 **Status: FINAL DRAFT. Not posted.** Fact-checked after approval in principle; every change since is listed in `docs/AAVE_ARFC_CHANGES.md`. It goes to governance.aave.com only after the user approves this revision and the checklist at the end is complete. *Last revised 25 Sept 2026.*
 
@@ -49,7 +49,7 @@ The Hong Kong afternoon closure spans **four** boundaries. Capacity goes off at 
 
 ### 3. The pool keeps trading while the market is shut, with no primary market to anchor it
 
-Curb commits a reopen price on chain before each eligible reopen, and a contract, `Scorecard`, grades it after the reopen against the pool's own price. The contract reads that price itself, so nobody supplies it. As of 24 Sept 2026 22:53Z (Scorecard v2, block 71,521,360), the record held 15 settled closures on three Hong Kong names (wTCENTx, wXIAOx and wMEITx): nine lunch recesses and six ~17½-hour overnights. All fifteen tied the last print exactly (`skill()` = 15 settled, 0 beat the last print, 0 beat the closing VWAP).
+Curb commits a reopen price on chain before each eligible reopen, and a contract, `Scorecard`, grades it after the reopen against the pool's own price. The contract reads that price itself, so nobody supplies it. As of 25 Sept 2026 15:04Z (Scorecard v2, block 71,579,624), the record held 21 settled closures on three Hong Kong names (wTCENTx, wXIAOx and wMEITx), and none beat the last print (`skill()` = 21 settled, 0 beat the last print, 0 beat the closing VWAP). The first 15 used a mark that is the last print by construction, so they tied. Three overnight rows under a second method, which moves the mark by US-listed ADRs and a perpetual future that trade while Hong Kong is shut, all lost at the 25 Sept reopen: the signal called the gap up and HKEX opened all three names down. Three lunch-recess rows under that method tied, because it gives the recess no weight. We publish the losses as they are.
 
 **The pools did not stop trading while primary capacity was off.** The three pools printed 15 swaps during the 22 Sept lunch recess, 63 during the 23 Sept recess and 141 during the 24 Sept recess, and in 14 of the 15 closures the pool price one second before the reopen differed from its price at the cut. From the last print before the cut to the settled reopen print, prices moved 0 to 105 bp; seven of the fifteen moved 30 bp or more.
 
@@ -197,7 +197,7 @@ Copyright and related rights waived via [CC0](https://creativecommons.org/public
       71,530,930 (25 Sept ~01:33Z): `reserve()` = 3,000,000, `ltvFor(wTCENTx)` = 0, DepthCert `nextId()` = 1,
       borrowers = curb-desk + Agentic Wallet, makers = curb-desk + deployer, `admin()` = deployer, `APR_BPS` = 500.
 - [x] Finding 3 rewritten to match the chain (the pools traded during closures).
-- [x] Depth figures dated (13 Sept); Scorecard tally dated (24 Sept 22:53Z, block 71,521,360).
+- [x] Depth figures dated (13 Sept); Scorecard tally dated (25 Sept 15:04Z, block 71,579,624).
 - [x] `curb-verify tx` and `range` have landed (commit 08f2a11); the verifier bullet is updated.
 - [x] `docs/DEPLOYMENTS.md` no longer says a borrower can never be a maker (commit bee9454), so the linked file
       matches the chain.
@@ -206,16 +206,15 @@ Copyright and related rights waived via [CC0](https://creativecommons.org/public
 
 1. Review `docs/AAVE_ARFC_CHANGES.md` and approve this revision. Finding 3 and the CurbCredit section changed in
    substance since the text was approved.
-2. Push `main` and make https://github.com/OoJae/curb public (every repo URL returned 404 on 24 Sept; local
-   `main` was 195 commits ahead of `origin/main` on 25 Sept). Then open each repo link in the post and confirm it
-   resolves: `src/CurbCredit.sol`, `src/DepthCert.sol`, `docs/DEPLOYMENTS.md`, `docs/WALLETS.md`,
-   `test/fork/DepthProbe.t.sol`, `test/fork/MarketClock.t.sol`, `tools/curb-verify`.
-3. Before the repo goes public, deal with the repo record that the post now contradicts: `docs/DECISIONS.md` D-11
-   (lines 517-518, 533-552) and D-13 (637-639) say the pools did not trade during closures. The checkers found
-   swaps in every recess checked and suspect the keeper's swap scan missed them (the marks carry `no-drift`);
-   investigate that before posting.
-4. Post from your own governance.aave.com account. Use the H1 as the topic title and paste from "## Summary"
-   through "## Copyright"; leave out the status line and everything below the internal line.
+2. Done 25 Sept ~14:50Z: `main` pushed and https://github.com/OoJae/curb made public; every repo link returns 200
+   logged out.
+3. Done: `docs/DECISIONS.md` D-11 carries a public erratum (the pools do trade while shut), and D-13 was corrected.
+   The keeper's `no-drift` flag is to be investigated after the finale.
+4. Post from your own governance.aave.com account as a **[Discussion]** in **Risk > General** (not an ARFC: under
+   Governance Framework v2 an ARFC is a binding-vote stage opened by approved authors, and new listings come from
+   the service providers; this post asks for no vote). Title: the H1 without "# ". Body: from "## Summary" through
+   the CC0 line; leave out the status line and everything below the internal line. Step-by-step guide:
+   `docs/AAVE_POSTING_GUIDE.md`.
 5. On the day of posting, re-read every live figure and update or re-date it:
    - Scorecard v2 `closureCount()` / `skill()`. The post's tally is dated 24 Sept 22:53Z; at 25 Sept ~01:33Z
      `closureCount()` was already 18 (three rows unsettled) and `skill()` still (15, 0, 0).

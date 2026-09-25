@@ -67,3 +67,10 @@ Every change from the text you approved (git `HEAD:docs/AAVE_ARFC.md`, revised 2
 - "A second host… EIP-712-signs every round": kept. Both checkers marked it ok; host B began on 14 Sept 20:02Z, so the first few hours of rounds have no witness.
 - LlamaRisk "reaches the same point" sentence under *The parameter Aave does not currently have*: not added. It was an optional suggestion on an ok item.
 - The Aave Risk Framework (asset class not yet ratified): not added. It is listed as a recommendation in the checklist.
+
+## Changes on 25 Sept, after the repo went public
+
+38. Title prefix `[ARFC]` → `[Discussion]`. Under Aave Governance Framework v2 (https://governance.aave.com/t/arfc-governance-framework-v2/25348) an ARFC is a binding Snapshot stage opened by approved authors or 80,000 AAVE, and asset listings are proposed by the service providers; this post asks for no vote. Precedent for [Discussion] risk posts: /t/24882.
+39. Finding 3's tally re-read at block 71,579,624 (25 Sept 15:04Z): 21 settled, 0 wins. It now says the first 15 tied by construction, the first three mark/2 overnight rows lost (HKEX opened all three names down), and three lunch rows tied (the recess has no weight). Source: `skill()`, `closureCount()` at that block; docs/DECISIONS.md D-13.
+40. "only to allowlisted borrowers: today, two disclosed team wallets" → "one disclosed team wallet", and the maker sentence now records that curb-desk left the borrower list after the demo (tx 0xc505987a…). Source: EligibilityRegistry `isEligible` read back.
+41. Marketplace: "whose listing was still under OKX review on 24 Sept" → "listed on 25 Sept 2026". Source: `onchainos agent get-my-agents` (Listed — eligible for task recommendations).
