@@ -1,6 +1,6 @@
 {
  "schema": "curb.leaderboard/1",
- "generatedAt": "2026-09-25T01:37:16.491Z",
+ "generatedAt": "2026-09-25T02:22:51.556Z",
  "generatedBy": "tools/leaderboard/build.ts",
  "inputs": {
   "tools/research/hk-closures/out/results.json": "036d16d0560c1c2a54be810ebcef8a25417c3920ca3e06e5b5b97c850a6bd3eb",
@@ -18,9 +18,9 @@
   "chainId": 196,
   "scorecard": "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f",
   "block": {
-   "number": 71531157,
-   "hash": "0x2c154ef7e34f420a14ff4cbdbe6ebd34179a1c69033d277adb74a50cf9463918",
-   "timestamp": 1790300193
+   "number": 71533891,
+   "hash": "0x487655420dfe46e7bedaf5acdabd3524b8f43dab3a42d0b1def8b98b8ab7d17b",
+   "timestamp": 1790302927
   },
   "closureCount": 18,
   "skill": {
