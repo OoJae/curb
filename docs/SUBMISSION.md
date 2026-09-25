@@ -257,6 +257,7 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
   `curb.scorecard.mark/2` rows, graded at the 25 Sep 01:30Z reopen, all lost: the signal called the gap up and
   HKEX opened all three names down. In the walk-forward backtest (not on chain) mark/2's mean error was 68.9 bp
   against 95.4 bp for the last close; the live record is what counts, and it is shown as it is on /scorecard.
+  Errata are published (D-7, and the D-11 erratum of 25 Sep), and no row is ever re-marked.
 - **Third-party code.** forge-std (vendored), ethers, @openzeppelin/merkle-tree, canonicalize, and OKX's
   `@okxweb3/x402-core` and `x402-evm`.
 - **No token, no fundraising.** MarketClock use is free. Curb's only revenue is the per-call API.
