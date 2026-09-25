@@ -323,8 +323,14 @@ three are verified **Sourcify `exact_match`**.
 | DepthCert | `0x702b1a988765f85162F4829175EF4232197e9C6D` | `0x0b1d619895c378e2288100684c6a2359885f997b5a7f497175c44c5f0ca3fd0f` | 71,507,861 |
 | CurbCredit | `0x23c778c88C3ABf0Ad750f703C5F04cB3129ee339` | `0x8ad640d0ed4a9e07d47bb532f59c153621c6714c427c1ceb382def061a868543` | 71,507,867 |
 
-**Makers and borrowers are on separate allowlists.** A maker's bid sets every borrower's LTV, so a borrower
-must never be able to post one. The maker registry holds only curb-desk and the deployer.
+**Makers and borrowers are on separate allowlists.** A maker's bid sets every borrower's LTV, so the right to
+post a bid naming CurbCredit is granted separately from the right to borrow. The maker registry holds only
+curb-desk and the deployer. **Correction (25 Sept, found in review):** the two lists are separate contracts but not
+disjoint. curb-desk is on both: the notes/borrower registry `0xd725…e938` since block 71,503,711 (for the cycle-2
+bid it was to make) and the maker registry since block 71,507,852. So one team wallet can both borrow and set the
+LTV. No position depends on it (curb-desk has never borrowed; the Agentic Wallet, the only borrower, is not a
+maker), and the plan is to remove curb-desk from the borrower registry once the 25 Sept demo is over. An earlier
+version of this paragraph said a borrower "must never be able to post one"; that was the intent, not the state.
 
 **Three adversarial review rounds changed the design before deploy.** Each finding was independently
 verified with a PoC, then fixed and regression-tested.
