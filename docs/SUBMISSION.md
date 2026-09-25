@@ -140,11 +140,42 @@ https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md, section "Live demo 
   allowed 0, inside a successful transaction, and nothing moves (block 71,516,369):
   https://www.oklink.com/xlayer/tx/0x8bd873d77176dab81ad860c1496937d2e7535c8a6b91f0be5902936b408b5c7a
 
-**Appended here when they land (25 Sep, UTC):** 01:30Z, the reopen: `observe`, `recordPrint` at +300 s, A
-redeems note 1, and `realisedDiscountBps(1)` grades the price A paid. ~04:00Z, cycle 2 in the lunch recess.
-05:15Z, K's bonded bid naming CurbCredit lifts `ltvFor(wTCENTx)` from 0, and A borrows 1.4 USDG. 07:55Z, the
-issuer's cut: the LTV cap falls to 30%, `flagBreach` starts a cure clock, and the clock stays frozen while Hong
-Kong is shut.
+**W3 cycle 1, graded at the 25 Sep 01:30Z reopen**
+
+- The reopen is witnessed on chain, epoch 1 opened at 01:30:32Z (block 71,530,796):
+  https://www.oklink.com/xlayer/tx/0xeb01d9f84355aec74ac3e75033d68f40930033d1d234d631e1790f46b32d991c
+- A redeems note 1 and receives exactly 0.1 wTCENTx (block 71,530,833):
+  https://www.oklink.com/xlayer/tx/0xd102eca8ef75190302419edf008ecbb9117a71c67e9978a4179473d9be29e383
+- The reopen print, 55.7357 USDG a share, recorded at openedAt + 303 s (block 71,531,111):
+  https://www.oklink.com/xlayer/tx/0xce7b9189f3cf83ffbeb79f52096869aa3ded77e489f18f84d0a8674914b9fb66
+- `realisedDiscountBps(1)` = −38: Tencent reopened lower, so the buyer paid 38 bp more than the reopen was worth.
+
+**W3 cycle 2, the Friday lunch recess (03:55Z to 05:00Z)**
+
+- K mints note 2 at 04:02Z (block 71,539,903): https://www.oklink.com/xlayer/tx/0x646922f0331dc7a63f1a05aa06edd7a7713bc64ada8ef7ddad439279f5e9bf94
+- K lists lot 2, 5.57 → 5.40 USDG, ending at MarketClock's 05:00:00Z cutoff (block 71,539,949):
+  https://www.oklink.com/xlayer/tx/0x97ff93d190438978ade1cccb5cf67eb7db9f4bee0900e12ff71fe6b5329d8455
+- A buys lot 2 for 5.529059 USDG at 12:07 HKT (block 71,540,238): https://www.oklink.com/xlayer/tx/0x3a92efa702207705c0d8a8e041232f34b59bd39e6cb015ee1b543e878c467c31
+- After the 05:00Z reopen A redeems note 2 (block 71,543,421): https://www.oklink.com/xlayer/tx/0x483a3a01bc3046808199be8d2fbb954574216676a2641af94e8383f979468f05;
+  the print is 55.7375 (block 71,543,710): https://www.oklink.com/xlayer/tx/0x988f3e9b9bf913b425447b92994cdb64c104db01635d98661b3c78bd97eaaa95
+- `realisedDiscountBps(2)` = +80: this time the buyer earned 80 bp for carrying the recess.
+
+**W4: one bonded bid moves the LTV, and a fade is proved (25 Sep, Hong Kong open)**
+
+- K posts cert 1, a bonded bid for 0.028 wTCENTx at 52 USDG naming CurbCredit, 05:16Z (block 71,544,327):
+  https://www.oklink.com/xlayer/tx/0x19c80f58740a4ebb37b07613023d314a5a43119e3e8c754054f6983e40ebbd43. `ltvFor(wTCENTx)` goes from 0 to 60% in that
+  one transaction.
+- A borrows the 1.4 USDG it was refused the night before: `Borrowed(1.4 USDG, ltv 60%)` (block 71,544,372):
+  https://www.oklink.com/xlayer/tx/0x438c26de55074b10ccce9b45341203a071e21482d91d3257ccc5e291d78fd0a4
+- The fade: the deployer posts cert 2 naming A, then revokes its USDG allowance; A takes it and the contract proves the
+  fade in the same transaction, `Faded(reason ALLOWANCE)`, bond 0.2 USDG to A, A's shares returned (block 71,545,313):
+  https://www.oklink.com/xlayer/tx/0x6dd0bd29ebc5335ec8a68a4e9799c5d4c7fe5edf4dd6d954ca3d4b14aeebf470
+- Appended when it lands: at the 07:55Z cut the LTV cap falls to 30% with no transaction, `flagBreach` starts the
+  cure clock, and the clock stays frozen while Hong Kong is shut.
+
+**The first rows under the new mark method (25 Sep 01:30Z reopen): three losses.** Curb's `curb.scorecard.mark/2`
+called Tencent, Xiaomi and Meituan up; HKEX opened all three down. The contract graded all three as losses against
+the last print, and `skill()` reads (18, 0, 0). They stay on the record; no row is ever re-marked.
 
 ### Features and integrations added during the build period (17–25 Sep)
 
