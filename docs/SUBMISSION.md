@@ -224,7 +224,7 @@ build window".
 
 A tokenized stock's price only means something while creation and redemption are on. On X Layer the Hong Kong
 names are shut 84% of the week, and a lending market's static parameters can't express that. Curb makes the closure a first-class
-on-chain fact, publishes a falsifiable record of its own prices (including the 15 ties it has scored so far),
+on-chain fact, publishes a falsifiable record of its own prices (18 graded so far: 15 ties and 3 losses, no wins),
 sells the data per call to agents, and builds the instruments that the fact makes possible. They are a note that
 settles at the verified reopen, and a credit line whose LTV follows the regime and the bonded depth behind it.
 Any X Layer protocol listing xStocks can read MarketClock for free today. Why now: Ondo's 24/7 minting covers
@@ -252,9 +252,11 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
   the build window. The list above covers only what was added from 17 Sep.
 - **Team wallets.** Every demo wallet and the first paying wallet belong to the team. They are published with
   their funding graph in https://github.com/OoJae/curb/blob/main/docs/WALLETS.md. No third-party usage is claimed.
-- **Honest record.** As of 25 Sep 00:56Z, Scorecard's `skill()` reads (15, 0, 0): 15 settled rows, 0 wins and
-  15 ties, all under `curb.scorecard.mark/1`. The first `mark/2` rows are due to settle after the 01:30Z reopen.
-  Errata are published (D-7), and no row is ever re-marked.
+- **Honest record.** As of 25 Sep 01:36Z, Scorecard's `skill()` reads (18, 0, 0): 18 settled rows, 0 wins. The
+  15 `curb.scorecard.mark/1` rows tied by construction (the mark is the last print). The first 3
+  `curb.scorecard.mark/2` rows, graded at the 25 Sep 01:30Z reopen, all lost: the signal called the gap up and
+  HKEX opened all three names down. In the walk-forward backtest (not on chain) mark/2's mean error was 68.9 bp
+  against 95.4 bp for the last close; the live record is what counts, and it is shown as it is on /scorecard.
 - **Third-party code.** forge-std (vendored), ethers, @openzeppelin/merkle-tree, canonicalize, and OKX's
   `@okxweb3/x402-core` and `x402-evm`.
 - **No token, no fundraising.** MarketClock use is free. Curb's only revenue is the per-call API.
