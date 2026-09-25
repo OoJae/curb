@@ -257,6 +257,73 @@ test("the upstream budget: past maxPerMinute fetches in a rolling minute, a 503;
   assert.equal(up.calls.length, 3);
 });
 
+/** A Binance that answers any closed minute with one well-formed, final row. */
+const anyMinute = () => fakeFetch((u) => {
+  const start = Number(new URL(u).searchParams.get("startTime"));
+  return new Response(`[[${start},"1","1","1","1","0",${start + 59_999},"0",0,"0","0","0"]]`);
+});
+
+test("the per-client budget: one client past it gets 503 relay-client-busy and when a slot frees; others, and its cache hits, are unaffected", async () => {
+  let now = NOW;
+  const up = anyMinute();
+  const relay = createBinanceRelay({ fetchImpl: up.fetch, now: () => now, maxPerMinute: 5, maxPerClientPerMinute: 2 });
+  const at = (m: number) => q(`symbol=HK0700USDT&startTime=${T - m * 60_000}`);
+  const A = "198.51.100.7";
+  const B = "203.0.113.9";
+  assert.equal((await relay.handle(at(0), A)).status, 200);
+  now += 10_000;
+  const second = await relay.handle(at(1), A);
+  assert.equal(second.status, 200);
+  assert.equal(second.headers["x-curb-relay-client"], undefined, "never on an immutable, publicly cacheable answer");
+  assert.equal((await relay.handle(q("symbol=BTCUSDT&startTime=0"), A)).headers["x-curb-relay-client"], A, "a refused query shows the key, for free");
+  now += 5_000;
+  const busy = await relay.handle(at(2), A);
+  assert.equal(busy.status, 503);
+  // A's oldest fetch was 15 s ago, so a slot frees in 45 s.
+  assert.deepEqual(jsonOf(busy), { error: "relay-client-busy", maxPerClientPerMinute: 2, retryAfterS: 45 });
+  assert.equal(busy.headers["retry-after"], "45");
+  assert.equal(busy.headers["x-curb-relay-client"], A);
+  assert.equal(up.calls.length, 2, "a refused request is not fetched");
+  assert.equal((await relay.handle(at(0), A)).headers["x-curb-relay-cache"], "hit", "cache hits stay free for a client over its budget");
+
+  // Another client is untouched, and a refusal of A spent no global slot: 2 (A) + 2 (B) + 1 (no key) = 5.
+  assert.equal((await relay.handle(at(3), B)).status, 200);
+  assert.equal((await relay.handle(at(4), B)).status, 200);
+  const anon = await relay.handle(at(5));
+  assert.equal(anon.status, 200);
+  assert.equal(anon.headers["x-curb-relay-client"], undefined, "no key: only the global budget applies");
+  assert.equal(jsonOf(await relay.handle(at(6))).error, "relay-busy", "the global budget still binds");
+
+  now = NOW + 60_000;
+  assert.equal((await relay.handle(at(7), A)).status, 200, "A's first slot has rolled out");
+  assert.equal((await relay.handle(at(8), A)).status, 503, "its second has not");
+});
+
+test("one address flooding distinct minutes cannot starve the keeper: nine at the default 30 leave its commit-minute fetches room", async () => {
+  const now = NOW;
+  const up = anyMinute();
+  const relay = createBinanceRelay({ fetchImpl: up.fetch, now: () => now });   // defaults: 300 per minute, 30 per client
+  let m = 10;
+  for (let i = 0; i < 9; i++) {
+    const attacker = `192.0.2.${i + 1}`;
+    for (let j = 0; j < 40; j++) await relay.handle(q(`symbol=MEITUANUSDT&startTime=${T - m++ * 60_000}`), attacker);
+  }
+  assert.equal(up.calls.length, 270, "each address stops at 30");
+  // The keeper's commit round: the cut and commit minutes, limit=1 (signalFetch.ts), here for every symbol
+  // the relay serves, more than the keeper's three.
+  const KEEPER = "198.51.100.200";
+  for (const symbol of BINANCE_KLINE_SYMBOLS) {
+    for (const minute of [T - 60_000, T]) {
+      const r = await relay.handle(q(`symbol=${symbol}&startTime=${minute}&limit=1`), KEEPER);
+      assert.equal(r.status, 200, `${symbol} ${minute}`);
+    }
+  }
+  // Before this change, one address alone spent all 300 and the keeper's first fetch was the 301st.
+  const solo = createBinanceRelay({ fetchImpl: anyMinute().fetch, now: () => now, maxPerClientPerMinute: 0 });
+  for (let j = 0; j < 300; j++) await solo.handle(q(`symbol=MEITUANUSDT&startTime=${T - (j + 10) * 60_000}`), "192.0.2.1");
+  assert.equal(jsonOf(await solo.handle(q(`symbol=HK0700USDT&startTime=${T}`), KEEPER)).error, "relay-busy", "0 turns the per-client budget off");
+});
+
 test("the cache is bounded: past maxCache, the oldest answer goes first", async () => {
   const up = fakeFetch((u) => {
     const start = Number(new URL(u).searchParams.get("startTime"));
@@ -339,6 +406,43 @@ test("createApp routes GET /v1/relay/binance/klines to the relay: free while pay
     assert.equal(post.headers.get("allow"), "GET, OPTIONS");
     await post.arrayBuffer();
     assert.equal(up.calls.length, 1);
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});
+
+test("through createApp, the per-client key is Railway's X-Real-IP: an IPv6 /64 is one client, and no header means no key", async () => {
+  const now = () => NOW;
+  const up = anyMinute();
+  const server = createServer(createApp({
+    state: { bootMs: NOW, ticks: 1, lastTickOkMs: NOW, cohort: [], cohortAsOfMs: NOW, cohortError: null },
+    venues: new VenueStore({ refreshMs: 600_000, staleAfterMs: 630_000, outageMs: 1_800_000 }),
+    payments: new Payments({ network: "eip155:196", payTo: null, okx: null, syncSettle: true, publicUrl: "https://api.curb.markets", handlers: new Map(), now, log: silentLog }),
+    handlers: new Map(), dataDir: mkdtempSync(join(tmpdir(), "curb-asp-relay-")), publicUrl: "https://api.curb.markets", tickMs: 30_000,
+    contracts: { chainId: 196, clock: "0x160Dc415902971a7a9B5ade7f43005b36FE5B09b", scorecard: "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f" },
+    now, log: silentLog, relay: createBinanceRelay({ fetchImpl: up.fetch, now, maxPerClientPerMinute: 1 }),
+  }));
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const get = async (m: number | "refused", realIp?: string) => {
+    const query = m === "refused" ? "symbol=BTCUSDT&startTime=0" : `symbol=HK1810USDT&startTime=${T - m * 60_000}`;
+    const r = await fetch(`${base}${BINANCE_KLINES_PATH}?${query}`, { headers: realIp === undefined ? {} : { "x-real-ip": realIp } });
+    const body = await r.json();
+    return { status: r.status, client: r.headers.get("x-curb-relay-client"), error: Array.isArray(body) ? null : body.error };
+  };
+  try {
+    assert.deepEqual(await get(0, "2001:db8:1:2::10"), { status: 200, client: null, error: null });
+    assert.deepEqual(await get(1, "2001:0db8:0001:0002:ffff:0:0:99"), { status: 503, client: "2001:db8:1:2::/64", error: "relay-client-busy" }, "same /64, same budget");
+    assert.deepEqual(await get(1, "2001:db8:1:3::10"), { status: 200, client: null, error: null }, "the next /64 is another client");
+    assert.deepEqual(await get("refused", "2001:db8:1:3::10"), { status: 400, client: "2001:db8:1:3::/64", error: "symbol-not-allowed" });
+    assert.deepEqual(await get(2, "::ffff:198.51.100.7"), { status: 200, client: null, error: null });
+    assert.deepEqual(await get(3, "198.51.100.7"), { status: 503, client: "198.51.100.7", error: "relay-client-busy" }, "an IPv4-mapped address is its IPv4 client");
+    // No header, or one that is not an address: no key, so only the global budget applies (never one shared bucket).
+    for (const [m, header] of [[4, undefined], [5, "unknown"], [6, "198.51.100.7, 203.0.113.9"]] as const) {
+      assert.deepEqual(await get(m, header), { status: 200, client: null, error: null }, String(header));
+      assert.equal((await get("refused", header)).client, null, String(header));
+    }
+    assert.equal(up.calls.length, 6);
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }

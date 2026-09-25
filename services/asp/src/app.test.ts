@@ -28,6 +28,7 @@ import { Payments } from "./pay/server.ts";
 import type { PricedHandler } from "./pay/server.ts";
 import { PRICED_ROUTES, USDT0 } from "./pay/routes.ts";
 import { receiptIdOf } from "./pay/receipt.ts";
+import { CORS_HEADERS, CSP_DATA, CSP_HTML } from "./http/respond.ts";
 import { hashJson } from "./hash.ts";
 import { silentLog } from "./log.ts";
 import { recordHandler, curveHandler } from "./scorecardRoutes.ts";
@@ -177,7 +178,7 @@ async function harness(opts: { configured?: boolean; scorecardRoutes?: boolean }
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const close = () => new Promise<void>((r) => server.close(() => r()));
   const receipts = () => (existsSync(join(dataDir, "receipts")) ? readdirSync(join(dataDir, "receipts")) : []);
-  return { base, advance, dataDir, broker, events, payments, state, close, receipts, scorecard };
+  return { base, now, advance, dataDir, broker, events, payments, state, close, receipts, scorecard };
 }
 
 const API = { accept: "application/json", "user-agent": "curb-test-agent/1.0" };
@@ -189,8 +190,11 @@ async function challenge(base: string, query = "symbol=wTCENTx", path = "/v1/clo
   return decodePaymentRequiredHeader(r.headers.get("payment-required")!);
 }
 
-/** One signed payment. Each nonce is a different payment; the same nonce twice is the same payment. */
-function signedPayment(pr: PaymentRequired, nonce = "0x" + "33".repeat(32)): string {
+/**
+ * One signed payment. Each nonce is a different payment; the same nonce twice is the same payment. Like a
+ * real client, it is valid for maxTimeoutSeconds from when it is signed (`signedAtMs`, default T0).
+ */
+function signedPayment(pr: PaymentRequired, nonce = "0x" + "33".repeat(32), signedAtMs = T0): string {
   const accepted = pr.accepts[0];
   const payload: PaymentPayload = {
     x402Version: 2,
@@ -198,7 +202,7 @@ function signedPayment(pr: PaymentRequired, nonce = "0x" + "33".repeat(32)): str
     accepted,
     payload: {
       signature: SIGNATURE,
-      authorization: { from: BUYER, to: accepted.payTo, value: accepted.amount, validAfter: "0", validBefore: String(Math.floor(T0 / 1000) + 300), nonce },
+      authorization: { from: BUYER, to: accepted.payTo, value: accepted.amount, validAfter: "0", validBefore: String(Math.floor(signedAtMs / 1000) + accepted.maxTimeoutSeconds), nonce },
     },
   };
   return encodePaymentSignatureHeader(payload);
@@ -531,7 +535,7 @@ test("stale-but-usable issuer bytes are served, with their age disclosed", async
   const h = await harness();
   try {
     h.advance(12 * 60_000);   // past refresh + one tick, inside the 30-minute outage line
-    const header = signedPayment(await challenge(h.base));
+    const header = signedPayment(await challenge(h.base), undefined, h.now());
     const r = await fetch(`${h.base}/v1/closure-calendar?symbol=wTCENTx`, { headers: { ...API, "PAYMENT-SIGNATURE": header } });
     assert.equal(r.status, 200);
     const body = await r.json();
@@ -625,6 +629,56 @@ test("the free routes: assets, discovery, health and home", async () => {
     assert.equal(put.status, 405);
     assert.equal(put.headers.get("allow"), "GET, POST, OPTIONS");
     await put.arrayBuffer();
+  } finally { await h.close(); }
+});
+
+test("every response carries HSTS, nosniff, no-referrer and a CSP fitted to its type (200, 204, 400, 402, 404, 405, 500); CORS is unchanged", async () => {
+  const h = await harness();
+  try {
+    const check = (r: Response, what: string) => {
+      assert.equal(r.headers.get("strict-transport-security"), "max-age=31536000", what);
+      assert.equal(r.headers.get("x-content-type-options"), "nosniff", what);
+      assert.equal(r.headers.get("referrer-policy"), "no-referrer", what);
+      const html = /^text\/html/.test(r.headers.get("content-type") ?? "");
+      assert.equal(r.headers.get("content-security-policy"), html ? CSP_HTML : CSP_DATA, what);
+      for (const [k, v] of Object.entries(CORS_HEADERS)) assert.equal(r.headers.get(k), v, `${what}: ${k}`);
+    };
+    const browser = { accept: "text/html,application/xhtml+xml", "user-agent": "Mozilla/5.0" };
+    const cases: Array<[string, RequestInit, number, boolean]> = [
+      ["/healthz", {}, 200, false],
+      ["/", {}, 200, true],
+      ["/.well-known/x402", {}, 200, false],
+      ["/v1/closure-calendar", { method: "OPTIONS" }, 204, false],
+      ["/v1/closure-calendar?symbol=wNOPEx", { headers: API }, 400, false],
+      ["/v1/closure-calendar?symbol=wTCENTx", { headers: API }, 402, false],
+      ["/v1/closure-calendar?symbol=wTCENTx", { headers: browser }, 402, true],
+      ["/nope", {}, 404, false],
+      ["/healthz", { method: "DELETE" }, 405, false],
+    ];
+    for (const [path, init, status, html] of cases) {
+      const r = await fetch(`${h.base}${path}`, init);
+      assert.equal(r.status, status, path);
+      check(r, `${init.method ?? "GET"} ${path} ${status}`);
+      const text = await r.text();
+      // The HTML policy allows inline style and nothing else: neither page may need more.
+      if (html) assert.ok(!/<(script|img|link|iframe|form|object|embed)\b/i.test(text) && /<style>/.test(text), `${path}: only inline style`);
+    }
+
+    const paid = await fetch(`${h.base}/v1/closure-calendar?symbol=wTCENTx`, { headers: { ...API, "PAYMENT-SIGNATURE": signedPayment(await challenge(h.base)) } });
+    assert.equal(paid.status, 200);
+    check(paid, "paid 200");
+    assert.ok(paid.headers.get("x-curb-receipt"), "the SDK's and our own headers still go out beside them");
+    await paid.arrayBuffer();
+    const receipt = await fetch(`${h.base}/receipts/${paid.headers.get("x-curb-receipt")}.json`);
+    assert.equal(receipt.status, 200);
+    check(receipt, "receipt 200");
+    await receipt.arrayBuffer();
+
+    h.state.cohort = undefined as unknown as Asset[];   // any unexpected throw inside a route
+    const broken = await fetch(`${h.base}/v1/assets`);
+    assert.equal(broken.status, 500);
+    assert.deepEqual(await broken.json(), { error: "internal" });
+    check(broken, "500");
   } finally { await h.close(); }
 });
 
@@ -793,7 +847,7 @@ test("a stale record is served with its age disclosed", async () => {
   const h = await harness();
   try {
     h.advance(6 * 60_000);   // past the 5-minute stale line, inside the 30-minute outage line
-    const header = signedPayment(await challenge(h.base, "", "/v1/discount-curve"));
+    const header = signedPayment(await challenge(h.base, "", "/v1/discount-curve"), undefined, h.now());
     const r = await fetch(`${h.base}/v1/discount-curve`, { headers: { ...API, "PAYMENT-SIGNATURE": header } });
     assert.equal(r.status, 200);
     const body = await r.json();
