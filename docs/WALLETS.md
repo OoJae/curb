@@ -96,6 +96,17 @@ Every privileged call, signed by the deployer/admin from the team's Mac.
 Read back after the calls: `isAttestor(host A)` = true, `isAttestor(host B)` = true, `isAttestor(0x4c3e…)` = true
 (kept as cold spare). Host B's `/healthz` then reported `armed: true`.
 
+### Outreach sent from the deployer — 25 Sept 2026
+
+Three zero-value messages (UTF-8 calldata, no Builder Code) to third-party LPs, as `docs/OUTREACH.md` requires. These
+recipients are **not** Curb wallets; they are listed so nobody mistakes them for team addresses.
+
+| to | tx |
+|---|---|
+| `0x12C41Db9BbC678b5707EEb81cE814fa23421C34d` | `0x72c40545155323601e8fb9b757a3d0e456a5eceff46569320cf94bda0c08352b` (block 71,577,123) |
+| `0xb5240c4b1408A293F5aF3341E29Fcee67f5C7018` | `0x9882f1745f7f9bfd6c0fcf28843621d3e6ad3d415d9623cc34c2a27f413d2d43` (block 71,577,135) |
+| `0x1Bb84BcF9852A63e2b95C660e4b6C1098Cc1236d` | `0xad83bcc0b1c62a37c473d6759b2a4394e7687c6fda87947dee525426f051f3a0` (block 71,577,153) |
+
 ## Key custody
 
 - Encrypted Foundry keystores at `~/.foundry/keystores/curb-{deployer,attestor,keeper}` (`keeper` is the retired

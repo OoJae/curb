@@ -1,6 +1,6 @@
 # LP outreach: targets, message, and what we are honestly asking
 
-**Status: APPROVED by the user 24 Sept ~22:30Z (Variant C). Not yet sent.** The five messages below passed an
+**Status: SENT 25 Sept 14:22–14:23Z to three LPs (rows 1, 3, 8); rows 7 and 9 were dropped by the send-time guard.** Log below. Earlier status: APPROVED by the user 24 Sept ~22:30Z (Variant C). The five messages below passed an
 adversarial re-verification on 24–25 Sept and a live send-time guard at 01:16Z on 25 Sept. They are sent with
 `bash script/outreach/send.sh`, which re-checks every recipient immediately before its send; the automated
 session was not permitted to send third-party messages, so the user runs it. Earlier rule, kept: nothing goes out
@@ -150,3 +150,23 @@ contract is live.
 Decided **1 Oct**, not on the day. The loan beat is cut. The irreversible onstage moment becomes the **proved
 fade and slash** between two disclosed team wallets. That needs no counterparty, no price move and no open
 market, and it is presented as a demonstration of the mechanism, never as usage.
+
+
+## Sent log
+
+Sent 25 Sept 2026 by `bash script/outreach/send.sh` (run by the user's session), zero-value transactions from the deployer
+`0x78a5955b433988198bccA2E8bdC671444798f809`, calldata = the Variant C text below, no Builder Code suffix. Each recipient
+passed the send-time guard (still owns its evidence position, liquidity > 0, pool tick inside its range) seconds before
+its send. Log: `artifacts/outreach-2026-09-25.log`.
+
+| row | recipient | text names | guard | tx | block |
+|---|---|---|---|---|---|
+| 1 | `0x12C41Db9BbC678b5707EEb81cE814fa23421C34d` | wTCENTx | token 46637 in range | `0x72c40545155323601e8fb9b757a3d0e456a5eceff46569320cf94bda0c08352b` | 71,577,123 |
+| 3 | `0xb5240c4b1408A293F5aF3341E29Fcee67f5C7018` | wTCENTx | token 38240 in range | `0x9882f1745f7f9bfd6c0fcf28843621d3e6ad3d415d9623cc34c2a27f413d2d43` | 71,577,135 |
+| 7 | `0x7e349f84732Ee499a464d118d32635cBaFdfd189` | (wMEITx) | **dropped**: token 46622 had no liquidity left | not sent | |
+| 8 | `0x1Bb84BcF9852A63e2b95C660e4b6C1098Cc1236d` | wTCENTx | token 44883 in range | `0xad83bcc0b1c62a37c473d6759b2a4394e7687c6fda87947dee525426f051f3a0` | 71,577,153 |
+| 9 | `0x1294394faCc6B4EEe808AeF886ee13eA590F8608` | (wXIAOx) | **dropped**: token 37071 out of range (tick −264,305 vs [−264,160, −263,260)) | not sent | |
+
+Text sent (229 bytes): "Curb (curb.markets): DepthCert is live at 0x702b1a988765f85162F4829175EF4232197e9C6D. Post a bonded bid for
+wTCENTx shares; a faded fill is proved on chain and the bond goes to the taker. You LP this book. Interested? Reply here."
+Replies arrive as transactions to the deployer or through curb.markets; any that do are recorded here with their funding path.
