@@ -478,6 +478,130 @@
   font-weight: 500;
 }
 
+/* ── benchmarks ────────────────────────────────────────────────────────────────────────────── */
+/* Static numbers: nothing here animates or counts up. The lowest error in a backtest row is bold, and says so
+   to screen readers; it is never coloured. Below 768 px each row becomes a labelled card. */
+.sc-bench__lede {
+  margin-top: var(--s-2);
+}
+
+.sc-bench__block {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--s-6);
+  padding-top: var(--s-3);
+  border-top: var(--rule-strong) solid var(--figure);
+}
+
+.sc-bench__table {
+  table-layout: auto;
+}
+
+.sc-bench__table th,
+.sc-bench__table td {
+  vertical-align: top;
+}
+
+.sc-bench__table tbody th {
+  font-weight: 400;
+  color: var(--figure);
+  border-bottom: var(--rule) solid var(--hairline);
+}
+
+.sc-bench__table tbody th code {
+  font-family: var(--font-data);
+  font-size: var(--t-data);
+  font-stretch: var(--wdth-code);
+}
+
+.sc-bench__table .sc-sub {
+  font-family: var(--font-text);
+  font-stretch: normal;
+}
+
+.sc-bench__row--total > th,
+.sc-bench__row--total > td {
+  border-top: var(--rule) solid var(--hairline-strong);
+  font-weight: 500;
+}
+
+.sc-bench__best {
+  font-weight: 600;
+}
+
+.sc-bench__asof,
+.sc-bench__q {
+  min-height: calc(2em * var(--lh-small));
+}
+
+.sc-bench__band {
+  min-height: calc(3em * var(--lh-body));
+  padding: var(--s-1-5) var(--s-2);
+  border-inline-start: var(--rule-strong) solid var(--figure);
+  background: var(--wash);
+}
+
+.sc-bench__src {
+  margin-top: var(--s-5);
+}
+
+@media (max-width: 767.98px) {
+  .sc-bench__table thead,
+  .sc-bench__table thead tr {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .sc-bench__table,
+  .sc-bench__table tbody,
+  .sc-bench__table caption {
+    display: block;
+  }
+
+  .sc-bench__row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s-1-5) var(--gutter);
+    padding-block: var(--s-2);
+    border-top: var(--rule) solid var(--hairline);
+  }
+
+  .sc-bench__row:last-child {
+    border-bottom: var(--rule) solid var(--hairline);
+  }
+
+  .sc-bench__table .sc-bench__row > th,
+  .sc-bench__table .sc-bench__row > td {
+    display: block;
+    padding: 0;
+    border: 0;
+    text-align: start;
+  }
+
+  .sc-bench__row > th {
+    grid-column: 1 / -1;
+  }
+
+  .sc-bench__row > td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: var(--s-half);
+    color: var(--muted);
+    font-family: var(--font-text);
+    font-size: var(--t-small);
+    font-weight: 400;
+    font-stretch: normal;
+  }
+
+  .sc-bench__empty {
+    display: block;
+  }
+}
+
 /* ── verify a row ──────────────────────────────────────────────────────────────────────────── */
 .sc-verify {
   row-gap: var(--s-5);

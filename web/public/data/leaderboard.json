@@ -1,0 +1,1751 @@
+{
+ "schema": "curb.leaderboard/1",
+ "generatedAt": "2026-09-25T01:37:16.491Z",
+ "generatedBy": "tools/leaderboard/build.ts",
+ "inputs": {
+  "tools/research/hk-closures/out/results.json": "036d16d0560c1c2a54be810ebcef8a25417c3920ca3e06e5b5b97c850a6bd3eb",
+  "tools/research/hk-closures/data/0700.HK.1y.json": "2cf61bfb4d21b65ef730dec32e3f32ff6ee4f027805234c97e95eed39c56ceb0",
+  "tools/research/hk-closures/data/1810.HK.1y.json": "4066a76f6ac73b6f5d54a4a460ff451e3fe3ce6b679f62c8df6fb235fc21fbf2",
+  "tools/research/hk-closures/data/3690.HK.1y.json": "ed739fcfd9fea4b486dcb354ab1ed61321d35a30baf97d4807057f202d18d318",
+  "tools/research/hk-closures/data/TCEHY.1y.json": "ede6c2be1a1e01c91de38d80a37b523d540bf35e9cfb614dd9e131a3264ef19a",
+  "tools/research/hk-closures/data/XIACY.1y.json": "0ecf9f80465eab6935ae42b471a172c5d1174f0cd941c7b23da0a7a0aded5612",
+  "tools/research/hk-closures/data/MPNGY.1y.json": "cc9557f73a40b2a324c589447d6235cc118cfb50cb05022ad36a93fe450a1243",
+  "tools/research/hk-closures/data/HKD=X.1y.json": "2bececcc1700e56b9dd9da2db52b7b053f73d73bff6cf39d186842262ad3767a",
+  "tools/research/hk-closures/data/klines-cache.json": "b157e6a718dfef70a58d120cee6dae3aff5e75e6cfeff001f59fb8f16838ddeb"
+ },
+ "onChain": {
+  "label": "Scorecard v2 on X Layer, read at one block. Every number here is a contract getter or a strict recount of them.",
+  "chainId": 196,
+  "scorecard": "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f",
+  "block": {
+   "number": 71531157,
+   "hash": "0x2c154ef7e34f420a14ff4cbdbe6ebd34179a1c69033d277adb74a50cf9463918",
+   "timestamp": 1790300193
+  },
+  "closureCount": 18,
+  "skill": {
+   "settled": 18,
+   "beatLast": 0,
+   "beatVwap": 0
+  },
+  "recount": {
+   "settled": 18,
+   "beatLast": 0,
+   "beatVwap": 0
+  },
+  "recountMatchesSkill": true,
+  "all": {
+   "rows": 18,
+   "settled": 18,
+   "pending": 0,
+   "expired": 0,
+   "vsLastPrint": {
+    "wins": 0,
+    "ties": 15,
+    "losses": 3
+   },
+   "vsClosingVwap": {
+    "wins": 0,
+    "ties": 15,
+    "losses": 3
+   },
+   "meanCurbErrorBps": 66.9,
+   "meanLastPrintErrorBps": 56.1,
+   "markMoved": 3,
+   "band": {
+    "minBps": 25,
+    "maxBps": 113,
+    "covered": 8,
+    "settled": 18
+   }
+  },
+  "byMethod": {
+   "curb.scorecard.mark/1": {
+    "rows": 15,
+    "settled": 15,
+    "pending": 0,
+    "expired": 0,
+    "vsLastPrint": {
+     "wins": 0,
+     "ties": 15,
+     "losses": 0
+    },
+    "vsClosingVwap": {
+     "wins": 0,
+     "ties": 15,
+     "losses": 0
+    },
+    "meanCurbErrorBps": 31.2,
+    "meanLastPrintErrorBps": 31.2,
+    "markMoved": 0,
+    "band": {
+     "minBps": 25,
+     "maxBps": 25,
+     "covered": 8,
+     "settled": 15
+    }
+   },
+   "curb.scorecard.mark/2": {
+    "rows": 3,
+    "settled": 3,
+    "pending": 0,
+    "expired": 0,
+    "vsLastPrint": {
+     "wins": 0,
+     "ties": 0,
+     "losses": 3
+    },
+    "vsClosingVwap": {
+     "wins": 0,
+     "ties": 0,
+     "losses": 3
+    },
+    "meanCurbErrorBps": 245.7,
+    "meanLastPrintErrorBps": 180.7,
+    "markMoved": 3,
+    "band": {
+     "minBps": 32,
+     "maxBps": 113,
+     "covered": 0,
+     "settled": 3
+    }
+   }
+  },
+  "integrity": {
+   "duplicateClosures": [],
+   "expiredUnsettled": 0,
+   "settlers": [
+    {
+     "address": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+     "label": "Curb keeper",
+     "rows": 18
+    }
+   ]
+  },
+  "rows": [
+   {
+    "index": 17,
+    "id": "0xcd161214966862de8368e77d233df1ca276085f083e6e7f24ed010b4c3834e0a",
+    "asset": "wMEITx",
+    "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+    "method": "curb.scorecard.mark/2",
+    "methodDigest": "0x8bcd8a87d98cbe436e70be4a5ece5276c096c6b717baa63111ed8b7bb181d8b6",
+    "reopenAt": "2026-09-25T01:30:00Z",
+    "committedAt": "2026-09-25T01:20:47Z",
+    "committedBlock": 71530211,
+    "commitTx": "0x7e9104f844718fcf6f11c934f891ae4a8329da92dc1a558b6dd3d5e3e39a9b29",
+    "mark": "9.260459184668219103",
+    "lastPrint": "9.250228432022402327",
+    "closingVwap": "9.250228432022402327",
+    "markE18": "9260459184668219103",
+    "lastPrintE18": "9250228432022402327",
+    "markMovedBps": 11,
+    "bandBps": 32,
+    "status": "settled",
+    "settledAt": "2026-09-25T01:35:30Z",
+    "settledBlock": 71531094,
+    "settleTx": "0x55d3a7c7dec45134dc06ab235c2c1814ef58b65320a721a5b7fb90d844fafb4c",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "9.07444471791919096",
+    "reopenPrintE18": "9074444717919190960",
+    "curbErrorBps": 204,
+    "lastPrintErrorBps": 193,
+    "closingVwapErrorBps": 193,
+    "vsLastPrint": "loss",
+    "vsClosingVwap": "loss",
+    "bandCovered": false
+   },
+   {
+    "index": 16,
+    "id": "0x1451f5f5d55b587631eedb32898815828c87108290c2feeacc94c2bf8c12eb13",
+    "asset": "wXIAOx",
+    "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+    "method": "curb.scorecard.mark/2",
+    "methodDigest": "0x8bcd8a87d98cbe436e70be4a5ece5276c096c6b717baa63111ed8b7bb181d8b6",
+    "reopenAt": "2026-09-25T01:30:00Z",
+    "committedAt": "2026-09-25T01:20:39Z",
+    "committedBlock": 71530203,
+    "commitTx": "0x90125dac7ec5d6332131fe94e0b48b254e37f59580780551b94b3b695e673104",
+    "mark": "3.41882610782580883",
+    "lastPrint": "3.403767838906486534",
+    "closingVwap": "3.403767838906486534",
+    "markE18": "3418826107825808830",
+    "lastPrintE18": "3403767838906486534",
+    "markMovedBps": 44,
+    "bandBps": 53,
+    "status": "settled",
+    "settledAt": "2026-09-25T01:35:27Z",
+    "settledBlock": 71531091,
+    "settleTx": "0x37f5b51b4eb4e594cac66083ae38ccccba0fd684e18a9b1613148fc56474a142",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "3.293064822946132944",
+    "reopenPrintE18": "3293064822946132944",
+    "curbErrorBps": 381,
+    "lastPrintErrorBps": 336,
+    "closingVwapErrorBps": 336,
+    "vsLastPrint": "loss",
+    "vsClosingVwap": "loss",
+    "bandCovered": false
+   },
+   {
+    "index": 15,
+    "id": "0x91c1ebf9e7d34094b7b0ce4d73269f5add6cceb1813645d8fbfad90de75c9595",
+    "asset": "wTCENTx",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "method": "curb.scorecard.mark/2",
+    "methodDigest": "0x8bcd8a87d98cbe436e70be4a5ece5276c096c6b717baa63111ed8b7bb181d8b6",
+    "reopenAt": "2026-09-25T01:30:00Z",
+    "committedAt": "2026-09-25T01:20:31Z",
+    "committedBlock": 71530195,
+    "commitTx": "0xebd87019a2c1bef804e09ed5c5ab606568565bbc1f148c9a1bf1e3b104f062f4",
+    "mark": "56.585964121861512998",
+    "lastPrint": "55.809982130321522549",
+    "closingVwap": "55.809982130321522549",
+    "markE18": "56585964121861512998",
+    "lastPrintE18": "55809982130321522549",
+    "markMovedBps": 139,
+    "bandBps": 113,
+    "status": "settled",
+    "settledAt": "2026-09-25T01:35:26Z",
+    "settledBlock": 71531090,
+    "settleTx": "0x5ca722b538a42ca7ca20d5bb447f5d98be518c8a9d5d7d21e53480035c13ed0e",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "55.735725924243243801",
+    "reopenPrintE18": "55735725924243243801",
+    "curbErrorBps": 152,
+    "lastPrintErrorBps": 13,
+    "closingVwapErrorBps": 13,
+    "vsLastPrint": "loss",
+    "vsClosingVwap": "loss",
+    "bandCovered": false
+   },
+   {
+    "index": 14,
+    "id": "0x4e2c47a99b6482c6516a415a227f86663dfbd6fa6d60589de5ba345cbd21897c",
+    "asset": "wMEITx",
+    "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-24T05:00:00Z",
+    "committedAt": "2026-09-24T04:50:40Z",
+    "committedBlock": 71456404,
+    "commitTx": "0xd7a87b61f2150c60fb3b4c2eca7b4653c1e371dca2654ea94cb0084cc084af7f",
+    "mark": "9.283276991536271172",
+    "lastPrint": "9.283276991536271172",
+    "closingVwap": "9.283276991536271172",
+    "markE18": "9283276991536271172",
+    "lastPrintE18": "9283276991536271172",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-24T05:05:27Z",
+    "settledBlock": 71457291,
+    "settleTx": "0x099bbf9b9bb803144f0f78e5ea453c7f9950047246d11bc82c16e7f71e0c446b",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "9.283276991536271172",
+    "reopenPrintE18": "9283276991536271172",
+    "curbErrorBps": 0,
+    "lastPrintErrorBps": 0,
+    "closingVwapErrorBps": 0,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 13,
+    "id": "0xafadedff440455c2eda5ac3efa7b2907bcc18fc79c244b31a68fe9000fed3d57",
+    "asset": "wXIAOx",
+    "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-24T05:00:00Z",
+    "committedAt": "2026-09-24T04:50:33Z",
+    "committedBlock": 71456397,
+    "commitTx": "0x78e84c95ebb6ad519688d43b0e8c668848de1354b4a98b7f25bb9ff11690e405",
+    "mark": "3.348055768963409787",
+    "lastPrint": "3.348055768963409787",
+    "closingVwap": "3.348055768963409787",
+    "markE18": "3348055768963409787",
+    "lastPrintE18": "3348055768963409787",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-24T05:05:25Z",
+    "settledBlock": 71457289,
+    "settleTx": "0x3bda5a59928115784529c955f30a70acd297e54ae798b53d547802d1e5c8a3f4",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "3.383265812521771324",
+    "reopenPrintE18": "3383265812521771324",
+    "curbErrorBps": 104,
+    "lastPrintErrorBps": 104,
+    "closingVwapErrorBps": 104,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": false
+   },
+   {
+    "index": 12,
+    "id": "0x7b0ac6c98fd033de65edb9204418c9edd90baafcb1f4a09292558f9fe8ad47d7",
+    "asset": "wTCENTx",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-24T05:00:00Z",
+    "committedAt": "2026-09-24T04:50:26Z",
+    "committedBlock": 71456390,
+    "commitTx": "0xdd8d1525aa320c39400a7dfeb1dae9db837744d0f121daa232eea49eb877b964",
+    "mark": "55.869194009629492562",
+    "lastPrint": "55.869194009629492562",
+    "closingVwap": "55.869194009629492562",
+    "markE18": "55869194009629492562",
+    "lastPrintE18": "55869194009629492562",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-24T05:05:23Z",
+    "settledBlock": 71457287,
+    "settleTx": "0xf7518368a6b7fcb2cd7527fcbc5bb564c6167a6b70dd3f96ca59c8d58ea9c254",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "55.870038498397709898",
+    "reopenPrintE18": "55870038498397709898",
+    "curbErrorBps": 0,
+    "lastPrintErrorBps": 0,
+    "closingVwapErrorBps": 0,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 11,
+    "id": "0x0552f40c7ad930ad1888238d97684210ef9466b2fe246f083e2350d256021ed6",
+    "asset": "wMEITx",
+    "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-24T01:30:00Z",
+    "committedAt": "2026-09-24T01:20:39Z",
+    "committedBlock": 71443803,
+    "commitTx": "0x47dfcf5df77ec4164b005310abd7dec7441f0ef6bb01bf703e69164f819890ae",
+    "mark": "9.339389125061564807",
+    "lastPrint": "9.339389125061564807",
+    "closingVwap": "9.339389125061564807",
+    "markE18": "9339389125061564807",
+    "lastPrintE18": "9339389125061564807",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-24T01:35:23Z",
+    "settledBlock": 71444687,
+    "settleTx": "0x3d2429c62de16fe3f431224ff52a6ea015593194414fc98b3c2d8572c53cdc42",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "9.279695347928289109",
+    "reopenPrintE18": "9279695347928289109",
+    "curbErrorBps": 64,
+    "lastPrintErrorBps": 64,
+    "closingVwapErrorBps": 64,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": false
+   },
+   {
+    "index": 10,
+    "id": "0x27daa6f1821399d9bb60b961cd3a11edc454b7e6cc1b2858495e5c95743488df",
+    "asset": "wXIAOx",
+    "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-24T01:30:00Z",
+    "committedAt": "2026-09-24T01:20:32Z",
+    "committedBlock": 71443796,
+    "commitTx": "0x31dfb866d78456383d7732873fb5202d520189e7e02ffd74626b9adb5ced5d17",
+    "mark": "3.382793587878372658",
+    "lastPrint": "3.382793587878372658",
+    "closingVwap": "3.382793587878372658",
+    "markE18": "3382793587878372658",
+    "lastPrintE18": "3382793587878372658",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-24T01:35:20Z",
+    "settledBlock": 71444684,
+    "settleTx": "0xb6ac32224469a879483bb3da844cd5026efae53d4a6b70e516ee8d103f74d373",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "3.388119817571199623",
+    "reopenPrintE18": "3388119817571199623",
+    "curbErrorBps": 15,
+    "lastPrintErrorBps": 15,
+    "closingVwapErrorBps": 15,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 9,
+    "id": "0x88dbadff1f882310524f85c958120a2b1f691c74c00991bd9daef685fefb63a6",
+    "asset": "wTCENTx",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-24T01:30:00Z",
+    "committedAt": "2026-09-24T01:20:21Z",
+    "committedBlock": 71443785,
+    "commitTx": "0x086056b9bce47235de40a504488a974e785314144787ffdcc4c44786a723887f",
+    "mark": "56.318512711103969424",
+    "lastPrint": "56.318512711103969424",
+    "closingVwap": "56.318512711103969424",
+    "markE18": "56318512711103969424",
+    "lastPrintE18": "56318512711103969424",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-24T01:35:18Z",
+    "settledBlock": 71444682,
+    "settleTx": "0x58c5a01c43967daf3d2d19388a38a98670f747e060fe04a9fea4a087126c3d09",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "56.141134193068484075",
+    "reopenPrintE18": "56141134193068484075",
+    "curbErrorBps": 31,
+    "lastPrintErrorBps": 31,
+    "closingVwapErrorBps": 31,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": false
+   },
+   {
+    "index": 8,
+    "id": "0xe577d27d2f23a1360b22e49b628ef6a8901388f7c7348c9f7a06bbf632cdc243",
+    "asset": "wMEITx",
+    "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-23T05:00:00Z",
+    "committedAt": "2026-09-23T04:50:36Z",
+    "committedBlock": 71370000,
+    "commitTx": "0x257b3dca57c6b1f429456cf3dc362eab2f1a3c86e29683a8a14fdb0b83c6e08c",
+    "mark": "9.366085781359356134",
+    "lastPrint": "9.366085781359356134",
+    "closingVwap": "9.366085781359356134",
+    "markE18": "9366085781359356134",
+    "lastPrintE18": "9366085781359356134",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-23T05:05:21Z",
+    "settledBlock": 71370885,
+    "settleTx": "0x26051b96fd9330f72167d2bd989a19c4851aef9b50f2c5485d7c03db0fd9b5a0",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "9.354759273808787865",
+    "reopenPrintE18": "9354759273808787865",
+    "curbErrorBps": 12,
+    "lastPrintErrorBps": 12,
+    "closingVwapErrorBps": 12,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 7,
+    "id": "0xc8aa9eeb0c17a2057abcf0de8e13115ba7ed5dce2c4dad759f6c40b14b61d1ab",
+    "asset": "wXIAOx",
+    "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-23T05:00:00Z",
+    "committedAt": "2026-09-23T04:50:29Z",
+    "committedBlock": 71369993,
+    "commitTx": "0x1ab48aab638013cbb81c0ab5ca0f943ace085738deb775930f567cd3df35a469",
+    "mark": "3.420127826292565829",
+    "lastPrint": "3.420127826292565829",
+    "closingVwap": "3.420127826292565829",
+    "markE18": "3420127826292565829",
+    "lastPrintE18": "3420127826292565829",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-23T05:05:19Z",
+    "settledBlock": 71370883,
+    "settleTx": "0x4c7413d77d31b504a6c5a1f67e8e03c48011e90cbfb434bf7d8726f805b191cb",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "3.395803710157673775",
+    "reopenPrintE18": "3395803710157673775",
+    "curbErrorBps": 71,
+    "lastPrintErrorBps": 71,
+    "closingVwapErrorBps": 71,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": false
+   },
+   {
+    "index": 6,
+    "id": "0xe022bdac7a6caca9853833a509c40fb04c86836f8f89acaad79842e49f10119b",
+    "asset": "wTCENTx",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-23T05:00:00Z",
+    "committedAt": "2026-09-23T04:50:22Z",
+    "committedBlock": 71369986,
+    "commitTx": "0xc0c5a7f8011c80d4d80083a3c3b528f256352105bc5559ff7c869484e62c129f",
+    "mark": "56.834391148160725016",
+    "lastPrint": "56.834391148160725016",
+    "closingVwap": "56.834391148160725016",
+    "markE18": "56834391148160725016",
+    "lastPrintE18": "56834391148160725016",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-23T05:05:17Z",
+    "settledBlock": 71370881,
+    "settleTx": "0x1edc528d6c152b37bcc4cf0d4e2f181bec86e73a87a02d41637b7c94e0accedd",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "56.801411062278550001",
+    "reopenPrintE18": "56801411062278550001",
+    "curbErrorBps": 5,
+    "lastPrintErrorBps": 5,
+    "closingVwapErrorBps": 5,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 5,
+    "id": "0xa0ec74449df87d116e1730b0007fe433e19543555ced36c2796ceb15f4a4ad6e",
+    "asset": "wMEITx",
+    "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-23T01:30:00Z",
+    "committedAt": "2026-09-23T01:20:29Z",
+    "committedBlock": 71357393,
+    "commitTx": "0x1b25b3988d2823be9ebd4388817d71e6c1e1ca0e651d78a1e029947426532bc2",
+    "mark": "9.326513718647257787",
+    "lastPrint": "9.326513718647257787",
+    "closingVwap": "9.326513718647257787",
+    "markE18": "9326513718647257787",
+    "lastPrintE18": "9326513718647257787",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-23T01:35:20Z",
+    "settledBlock": 71358284,
+    "settleTx": "0x787813d45831ad718ec09bef62226d8f075006ec28ed8a123a1205cbeb56b761",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "9.355092184942376165",
+    "reopenPrintE18": "9355092184942376165",
+    "curbErrorBps": 30,
+    "lastPrintErrorBps": 30,
+    "closingVwapErrorBps": 30,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": false
+   },
+   {
+    "index": 4,
+    "id": "0x22ba6a6bbf27b251304133b134759eccb673cf458c8f411a680dee84497eff8b",
+    "asset": "wXIAOx",
+    "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-23T01:30:00Z",
+    "committedAt": "2026-09-23T01:20:23Z",
+    "committedBlock": 71357387,
+    "commitTx": "0x6c92ae4443c6743c4d3036ee838d613b41128b052da0021e0c09edecde28434a",
+    "mark": "3.494033117070402624",
+    "lastPrint": "3.494033117070402624",
+    "closingVwap": "3.494033117070402624",
+    "markE18": "3494033117070402624",
+    "lastPrintE18": "3494033117070402624",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-23T01:35:18Z",
+    "settledBlock": 71358282,
+    "settleTx": "0xa9403585c82129bd17ecc3f9ee43f5bf84b016af7b12181f4f2ceba109bac363",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "3.468673205602176869",
+    "reopenPrintE18": "3468673205602176869",
+    "curbErrorBps": 73,
+    "lastPrintErrorBps": 73,
+    "closingVwapErrorBps": 73,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": false
+   },
+   {
+    "index": 3,
+    "id": "0x3632c01603ceb4de5d0026d332f325b4d23941348aee85ab9df516656186eca2",
+    "asset": "wTCENTx",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-23T01:30:00Z",
+    "committedAt": "2026-09-23T01:20:18Z",
+    "committedBlock": 71357382,
+    "commitTx": "0xcd021f4d67fb2a6901721ce371c3b448aff7c3e34f28c80b4189e523bd40dc72",
+    "mark": "57.538211366309229177",
+    "lastPrint": "57.538211366309229177",
+    "closingVwap": "57.538211366309229177",
+    "markE18": "57538211366309229177",
+    "lastPrintE18": "57538211366309229177",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-23T01:35:15Z",
+    "settledBlock": 71358279,
+    "settleTx": "0x5f8ba0350b950d70083b9f2b5349d7940c6f385a9d36dec18c3c9988eb696004",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "57.2335866148335967",
+    "reopenPrintE18": "57233586614833596700",
+    "curbErrorBps": 53,
+    "lastPrintErrorBps": 53,
+    "closingVwapErrorBps": 53,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": false
+   },
+   {
+    "index": 2,
+    "id": "0xc56e2b2bec41395e6265c7e0b19e64aba776f0c89070a250f3c25b3fb27011a9",
+    "asset": "wMEITx",
+    "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-22T05:00:00Z",
+    "committedAt": "2026-09-22T04:50:40Z",
+    "committedBlock": 71283604,
+    "commitTx": "0x1d55142fb7355d989c5c7ed4f1abe1de6ba1f08ecbe59dc82bdab7cab97cb974",
+    "mark": "9.402172454852075877",
+    "lastPrint": "9.402172454852075877",
+    "closingVwap": "9.402172454852075877",
+    "markE18": "9402172454852075877",
+    "lastPrintE18": "9402172454852075877",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-22T05:05:25Z",
+    "settledBlock": 71284489,
+    "settleTx": "0xb416d7b8656cf68f1ecaeb5c48ada4fcbce993f350ea60dc23d5a15fb87ab028",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "9.398584188228615357",
+    "reopenPrintE18": "9398584188228615357",
+    "curbErrorBps": 3,
+    "lastPrintErrorBps": 3,
+    "closingVwapErrorBps": 3,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 1,
+    "id": "0xf1130a703e8c04e6091d2f6b76777e35199e31c2afd9fa53e866b250c256d12c",
+    "asset": "wXIAOx",
+    "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-22T05:00:00Z",
+    "committedAt": "2026-09-22T04:50:30Z",
+    "committedBlock": 71283594,
+    "commitTx": "0x62195c42dcd60885f29438fc95436a414aec12e6a54598e972ac62d8f15c62b9",
+    "mark": "3.54107314163428049",
+    "lastPrint": "3.54107314163428049",
+    "closingVwap": "3.54107314163428049",
+    "markE18": "3541073141634280490",
+    "lastPrintE18": "3541073141634280490",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-22T05:05:20Z",
+    "settledBlock": 71284484,
+    "settleTx": "0x872e0cf3ac6d11470b59fc77deadd35dc566de49ad3cc919cb03d38f39c7b305",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "3.538409695312991773",
+    "reopenPrintE18": "3538409695312991773",
+    "curbErrorBps": 7,
+    "lastPrintErrorBps": 7,
+    "closingVwapErrorBps": 7,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 0,
+    "id": "0x9ba49e083a6243c9feb011e78d4af4523739143e485e979a698d9b85ee717fa2",
+    "asset": "wTCENTx",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "method": "curb.scorecard.mark/1",
+    "methodDigest": "0x5982b5eed9c311740692aaa13e4f171e542fa7d424c7812cf1da690b9e6a2fcd",
+    "reopenAt": "2026-09-22T05:00:00Z",
+    "committedAt": "2026-09-22T04:50:18Z",
+    "committedBlock": 71283582,
+    "commitTx": "0x1c839166a27d48e30a51da725b07e3b57bd00a6cc173395838e15d4b6481294e",
+    "mark": "58.243189692637603411",
+    "lastPrint": "58.243189692637603411",
+    "closingVwap": "58.243189692637603411",
+    "markE18": "58243189692637603411",
+    "lastPrintE18": "58243189692637603411",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-22T05:05:16Z",
+    "settledBlock": 71284480,
+    "settleTx": "0x84b5ccb1ad95150eb32a060eee8600041d0b55725e14a21d93594969fe36fb4c",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "58.237918997832996539",
+    "reopenPrintE18": "58237918997832996539",
+    "curbErrorBps": 0,
+    "lastPrintErrorBps": 0,
+    "closingVwapErrorBps": 0,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   }
+  ]
+ },
+ "band": {
+  "rule": "bandBps = min(2000, max(25, 25 + floor(|move| / 2))), move in bp: mark/2's r when its signal is applied, otherwise the pool's drift (0 when the pool did not trade). Covered: curbErrorBps <= bandBps.",
+  "committed": {
+   "minBps": 25,
+   "maxBps": 113,
+   "covered": 8,
+   "settled": 18
+  },
+  "backtest": {
+   "walkForward": {
+    "covered": 47,
+    "n": 87,
+    "medianBandBps": 52,
+    "p68ErrorBp": 77.8
+   },
+   "inSample": {
+    "covered": 65,
+    "n": 118,
+    "medianBandBps": 53,
+    "p68ErrorBp": 76
+   }
+  }
+ },
+ "backtest": {
+  "label": "Historical backtest, not on chain. Graded against the HKEX official open, not the pool print Scorecard settles at.",
+  "source": "tools/research/hk-closures/fit.mjs",
+  "doc": "docs/research/HK_CLOSURE.md",
+  "sample": {
+   "firstCut": "2026-07-22",
+   "lastReopen": "2026-09-22",
+   "closures": 118,
+   "byAsset": {
+    "wTCENTx": 44,
+    "wXIAOx": 44,
+    "wMEITx": 30
+   },
+   "byKind": {
+    "overnight": 94,
+    "weekend-holiday": 24
+   },
+   "perpOnly": 3,
+   "adrOnly": 0,
+   "excluded": "the nights behind the six D-11 overnight rows (reopen 23 and 24 Sep 2026), and every lunch recess"
+  },
+  "metric": "|estimate - HK open| / HK close, in bp; the HK open is the official opening price, not the pool print the Scorecard grades",
+  "estimators": {
+   "lastClose": {
+    "label": "Last close",
+    "note": "The HK close itself: the baseline the Scorecard grades against."
+   },
+   "perp": {
+    "label": "Perp alone",
+    "note": "The Binance perpetual's move from the cut to the commit, applied in full (beta 1)."
+   },
+   "adr": {
+    "label": "ADR alone",
+    "note": "The ADR's last US close at USD/HKD against the HK close, applied in full (beta 1). The last close where the ADR bar is missing."
+   },
+   "mark2": {
+    "label": "mark/2",
+    "note": "The published method: beta x mean of the legs. In-sample beta 0.79; walk-forward beta refitted before each closure by the same rule."
+   }
+  },
+  "d13": {
+   "reproduced": true,
+   "n": 118,
+   "beta": 0.9825991824864198,
+   "se": 0.09349703882835991,
+   "r2Uncentered": 0.48559626381530296,
+   "damped": 0.79,
+   "names": {
+    "wTCENTx": {
+     "n": 44,
+     "beta": 1.0480774402235804,
+     "maeLastCloseBp": 92.73520470520299,
+     "maeMark2Bp": 58.2336268802872
+    },
+    "wXIAOx": {
+     "n": 44,
+     "beta": 0.9012738586924297,
+     "maeLastCloseBp": 96.6416971694934,
+     "maeMark2Bp": 78.45303552939458
+    },
+    "wMEITx": {
+     "n": 30,
+     "beta": 0.9757594594113463,
+     "maeLastCloseBp": 93.24746527012167,
+     "maeMark2Bp": 67.26377654267185
+    }
+   }
+  },
+  "walkForward": {
+   "label": "Walk-forward (out of sample): each closure marked with the beta the published rule gives on earlier closures only.",
+   "minTrain": 30,
+   "firstReopen": "2026-08-13",
+   "lastReopen": "2026-09-22",
+   "warmupExcluded": 31,
+   "publishedBeta": {
+    "first": 0.82,
+    "last": 0.77,
+    "min": 0.63,
+    "max": 0.82
+   },
+   "n": 87,
+   "groups": {
+    "wTCENTx": {
+     "lastClose": {
+      "n": 29,
+      "maeBp": 106.7,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 94.9,
+       "p68": 133.7,
+       "p90": 217.1
+      }
+     },
+     "perp": {
+      "n": 29,
+      "maeBp": 50.4,
+      "vsLastClose": {
+       "wins": 21,
+       "ties": 0,
+       "losses": 8,
+       "winRate": 0.7241
+      },
+      "direction": {
+       "calls": 27,
+       "hits": 22,
+       "hitRate": 0.8148
+      },
+      "absErrorBp": {
+       "p50": 38.6,
+       "p68": 67.1,
+       "p90": 106.6
+      }
+     },
+     "adr": {
+      "n": 29,
+      "maeBp": 67.8,
+      "vsLastClose": {
+       "wins": 21,
+       "ties": 1,
+       "losses": 7,
+       "winRate": 0.7241
+      },
+      "direction": {
+       "calls": 26,
+       "hits": 22,
+       "hitRate": 0.8462
+      },
+      "absErrorBp": {
+       "p50": 57.1,
+       "p68": 73,
+       "p90": 119.7
+      }
+     },
+     "mark2": {
+      "n": 29,
+      "maeBp": 63.1,
+      "vsLastClose": {
+       "wins": 21,
+       "ties": 0,
+       "losses": 8,
+       "winRate": 0.7241
+      },
+      "direction": {
+       "calls": 27,
+       "hits": 22,
+       "hitRate": 0.8148
+      },
+      "absErrorBp": {
+       "p50": 62.8,
+       "p68": 77.8,
+       "p90": 125
+      }
+     }
+    },
+    "wXIAOx": {
+     "lastClose": {
+      "n": 29,
+      "maeBp": 85.8,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 85.5,
+       "p68": 100.3,
+       "p90": 183.3
+      }
+     },
+     "perp": {
+      "n": 29,
+      "maeBp": 83.4,
+      "vsLastClose": {
+       "wins": 17,
+       "ties": 0,
+       "losses": 12,
+       "winRate": 0.5862
+      },
+      "direction": {
+       "calls": 25,
+       "hits": 18,
+       "hitRate": 0.72
+      },
+      "absErrorBp": {
+       "p50": 58.3,
+       "p68": 99.2,
+       "p90": 215.2
+      }
+     },
+     "adr": {
+      "n": 29,
+      "maeBp": 80.7,
+      "vsLastClose": {
+       "wins": 18,
+       "ties": 1,
+       "losses": 10,
+       "winRate": 0.6207
+      },
+      "direction": {
+       "calls": 24,
+       "hits": 19,
+       "hitRate": 0.7917
+      },
+      "absErrorBp": {
+       "p50": 51.1,
+       "p68": 71.4,
+       "p90": 170.8
+      }
+     },
+     "mark2": {
+      "n": 29,
+      "maeBp": 72.5,
+      "vsLastClose": {
+       "wins": 15,
+       "ties": 0,
+       "losses": 14,
+       "winRate": 0.5172
+      },
+      "direction": {
+       "calls": 25,
+       "hits": 16,
+       "hitRate": 0.64
+      },
+      "absErrorBp": {
+       "p50": 42,
+       "p68": 57.2,
+       "p90": 172.6
+      }
+     }
+    },
+    "wMEITx": {
+     "lastClose": {
+      "n": 29,
+      "maeBp": 93.7,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 91.3,
+       "p68": 126.6,
+       "p90": 201
+      }
+     },
+     "perp": {
+      "n": 29,
+      "maeBp": 94.5,
+      "vsLastClose": {
+       "wins": 13,
+       "ties": 1,
+       "losses": 15,
+       "winRate": 0.4483
+      },
+      "direction": {
+       "calls": 24,
+       "hits": 15,
+       "hitRate": 0.625
+      },
+      "absErrorBp": {
+       "p50": 76,
+       "p68": 99.2,
+       "p90": 198.2
+      }
+     },
+     "adr": {
+      "n": 29,
+      "maeBp": 57.2,
+      "vsLastClose": {
+       "wins": 20,
+       "ties": 1,
+       "losses": 8,
+       "winRate": 0.6897
+      },
+      "direction": {
+       "calls": 24,
+       "hits": 21,
+       "hitRate": 0.875
+      },
+      "absErrorBp": {
+       "p50": 42.4,
+       "p68": 71.5,
+       "p90": 125
+      }
+     },
+     "mark2": {
+      "n": 29,
+      "maeBp": 71.1,
+      "vsLastClose": {
+       "wins": 19,
+       "ties": 0,
+       "losses": 10,
+       "winRate": 0.6552
+      },
+      "direction": {
+       "calls": 25,
+       "hits": 20,
+       "hitRate": 0.8
+      },
+      "absErrorBp": {
+       "p50": 56.1,
+       "p68": 92.1,
+       "p90": 179.4
+      }
+     }
+    },
+    "pooled": {
+     "lastClose": {
+      "n": 87,
+      "maeBp": 95.4,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 87.5,
+       "p68": 126.6,
+       "p90": 199.2
+      }
+     },
+     "perp": {
+      "n": 87,
+      "maeBp": 76.1,
+      "vsLastClose": {
+       "wins": 51,
+       "ties": 1,
+       "losses": 35,
+       "winRate": 0.5862
+      },
+      "direction": {
+       "calls": 76,
+       "hits": 55,
+       "hitRate": 0.7237
+      },
+      "absErrorBp": {
+       "p50": 58.6,
+       "p68": 94.1,
+       "p90": 148.9
+      }
+     },
+     "adr": {
+      "n": 87,
+      "maeBp": 68.6,
+      "vsLastClose": {
+       "wins": 59,
+       "ties": 3,
+       "losses": 25,
+       "winRate": 0.6782
+      },
+      "direction": {
+       "calls": 74,
+       "hits": 62,
+       "hitRate": 0.8378
+      },
+      "absErrorBp": {
+       "p50": 51.1,
+       "p68": 73,
+       "p90": 121.8
+      }
+     },
+     "mark2": {
+      "n": 87,
+      "maeBp": 68.9,
+      "vsLastClose": {
+       "wins": 55,
+       "ties": 0,
+       "losses": 32,
+       "winRate": 0.6322
+      },
+      "direction": {
+       "calls": 77,
+       "hits": 58,
+       "hitRate": 0.7532
+      },
+      "absErrorBp": {
+       "p50": 56.1,
+       "p68": 77.8,
+       "p90": 132.2
+      }
+     }
+    }
+   },
+   "byKind": {
+    "overnight": {
+     "lastClose": {
+      "n": 69,
+      "maeBp": 95.7,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 87.5,
+       "p68": 126.6,
+       "p90": 199.2
+      }
+     },
+     "perp": {
+      "n": 69,
+      "maeBp": 78.5,
+      "vsLastClose": {
+       "wins": 39,
+       "ties": 1,
+       "losses": 29,
+       "winRate": 0.5652
+      },
+      "direction": {
+       "calls": 60,
+       "hits": 43,
+       "hitRate": 0.7167
+      },
+      "absErrorBp": {
+       "p50": 58,
+       "p68": 93.7,
+       "p90": 156.1
+      }
+     },
+     "adr": {
+      "n": 69,
+      "maeBp": 68.8,
+      "vsLastClose": {
+       "wins": 45,
+       "ties": 3,
+       "losses": 21,
+       "winRate": 0.6522
+      },
+      "direction": {
+       "calls": 58,
+       "hits": 48,
+       "hitRate": 0.8276
+      },
+      "absErrorBp": {
+       "p50": 45.2,
+       "p68": 71.4,
+       "p90": 121.8
+      }
+     },
+     "mark2": {
+      "n": 69,
+      "maeBp": 69,
+      "vsLastClose": {
+       "wins": 43,
+       "ties": 0,
+       "losses": 26,
+       "winRate": 0.6232
+      },
+      "direction": {
+       "calls": 61,
+       "hits": 46,
+       "hitRate": 0.7541
+      },
+      "absErrorBp": {
+       "p50": 54.5,
+       "p68": 76.7,
+       "p90": 134.9
+      }
+     }
+    },
+    "weekend-holiday": {
+     "lastClose": {
+      "n": 18,
+      "maeBp": 94,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 77.4,
+       "p68": 126.5,
+       "p90": 247.1
+      }
+     },
+     "perp": {
+      "n": 18,
+      "maeBp": 66.9,
+      "vsLastClose": {
+       "wins": 12,
+       "ties": 0,
+       "losses": 6,
+       "winRate": 0.6667
+      },
+      "direction": {
+       "calls": 16,
+       "hits": 12,
+       "hitRate": 0.75
+      },
+      "absErrorBp": {
+       "p50": 60.6,
+       "p68": 99.2,
+       "p90": 134.4
+      }
+     },
+     "adr": {
+      "n": 18,
+      "maeBp": 67.7,
+      "vsLastClose": {
+       "wins": 14,
+       "ties": 0,
+       "losses": 4,
+       "winRate": 0.7778
+      },
+      "direction": {
+       "calls": 16,
+       "hits": 14,
+       "hitRate": 0.875
+      },
+      "absErrorBp": {
+       "p50": 71,
+       "p68": 83.5,
+       "p90": 132.3
+      }
+     },
+     "mark2": {
+      "n": 18,
+      "maeBp": 68.6,
+      "vsLastClose": {
+       "wins": 12,
+       "ties": 0,
+       "losses": 6,
+       "winRate": 0.6667
+      },
+      "direction": {
+       "calls": 16,
+       "hits": 12,
+       "hitRate": 0.75
+      },
+      "absErrorBp": {
+       "p50": 56.1,
+       "p68": 79,
+       "p90": 128.9
+      }
+     }
+    }
+   },
+   "band": {
+    "n": 87,
+    "mark2Band": {
+     "covered": 47,
+     "rate": 0.5402,
+     "bandBp": {
+      "min": 25,
+      "p50": 52,
+      "max": 188
+     }
+    },
+    "flat25": {
+     "covered": 14,
+     "rate": 0.1609
+    },
+    "contractMetricFlips": 0
+   }
+  },
+  "inSample": {
+   "label": "In-sample: every closure marked with the published beta, fitted on these same closures.",
+   "beta": 0.79,
+   "n": 118,
+   "groups": {
+    "wTCENTx": {
+     "lastClose": {
+      "n": 44,
+      "maeBp": 92.7,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 92.3,
+       "p68": 121.2,
+       "p90": 165.5
+      }
+     },
+     "perp": {
+      "n": 44,
+      "maeBp": 62.2,
+      "vsLastClose": {
+       "wins": 28,
+       "ties": 1,
+       "losses": 15,
+       "winRate": 0.6364
+      },
+      "direction": {
+       "calls": 40,
+       "hits": 32,
+       "hitRate": 0.8
+      },
+      "absErrorBp": {
+       "p50": 47.8,
+       "p68": 91.1,
+       "p90": 138.2
+      }
+     },
+     "adr": {
+      "n": 44,
+      "maeBp": 65.5,
+      "vsLastClose": {
+       "wins": 29,
+       "ties": 1,
+       "losses": 14,
+       "winRate": 0.6591
+      },
+      "direction": {
+       "calls": 40,
+       "hits": 34,
+       "hitRate": 0.85
+      },
+      "absErrorBp": {
+       "p50": 52.9,
+       "p68": 73,
+       "p90": 119.7
+      }
+     },
+     "mark2": {
+      "n": 44,
+      "maeBp": 58.2,
+      "vsLastClose": {
+       "wins": 28,
+       "ties": 0,
+       "losses": 16,
+       "winRate": 0.6364
+      },
+      "direction": {
+       "calls": 41,
+       "hits": 33,
+       "hitRate": 0.8049
+      },
+      "absErrorBp": {
+       "p50": 58.5,
+       "p68": 70.6,
+       "p90": 105
+      }
+     }
+    },
+    "wXIAOx": {
+     "lastClose": {
+      "n": 44,
+      "maeBp": 96.6,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 81.7,
+       "p68": 104.9,
+       "p90": 183.3
+      }
+     },
+     "perp": {
+      "n": 44,
+      "maeBp": 97.2,
+      "vsLastClose": {
+       "wins": 22,
+       "ties": 1,
+       "losses": 21,
+       "winRate": 0.5
+      },
+      "direction": {
+       "calls": 38,
+       "hits": 25,
+       "hitRate": 0.6579
+      },
+      "absErrorBp": {
+       "p50": 77.1,
+       "p68": 129.1,
+       "p90": 195.3
+      }
+     },
+     "adr": {
+      "n": 44,
+      "maeBp": 88.5,
+      "vsLastClose": {
+       "wins": 28,
+       "ties": 1,
+       "losses": 15,
+       "winRate": 0.6364
+      },
+      "direction": {
+       "calls": 38,
+       "hits": 30,
+       "hitRate": 0.7895
+      },
+      "absErrorBp": {
+       "p50": 58.2,
+       "p68": 86.5,
+       "p90": 170.8
+      }
+     },
+     "mark2": {
+      "n": 44,
+      "maeBp": 78.5,
+      "vsLastClose": {
+       "wins": 22,
+       "ties": 0,
+       "losses": 22,
+       "winRate": 0.5
+      },
+      "direction": {
+       "calls": 39,
+       "hits": 24,
+       "hitRate": 0.6154
+      },
+      "absErrorBp": {
+       "p50": 44.2,
+       "p68": 82.5,
+       "p90": 135.9
+      }
+     }
+    },
+    "wMEITx": {
+     "lastClose": {
+      "n": 30,
+      "maeBp": 93.2,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 81.2,
+       "p68": 126.6,
+       "p90": 199.2
+      }
+     },
+     "perp": {
+      "n": 30,
+      "maeBp": 94.2,
+      "vsLastClose": {
+       "wins": 13,
+       "ties": 1,
+       "losses": 16,
+       "winRate": 0.4333
+      },
+      "direction": {
+       "calls": 25,
+       "hits": 16,
+       "hitRate": 0.64
+      },
+      "absErrorBp": {
+       "p50": 76,
+       "p68": 99.2,
+       "p90": 173.1
+      }
+     },
+     "adr": {
+      "n": 30,
+      "maeBp": 55.6,
+      "vsLastClose": {
+       "wins": 21,
+       "ties": 1,
+       "losses": 8,
+       "winRate": 0.7
+      },
+      "direction": {
+       "calls": 25,
+       "hits": 22,
+       "hitRate": 0.88
+      },
+      "absErrorBp": {
+       "p50": 41.6,
+       "p68": 71.5,
+       "p90": 104.7
+      }
+     },
+     "mark2": {
+      "n": 30,
+      "maeBp": 67.3,
+      "vsLastClose": {
+       "wins": 19,
+       "ties": 0,
+       "losses": 11,
+       "winRate": 0.6333
+      },
+      "direction": {
+       "calls": 26,
+       "hits": 21,
+       "hitRate": 0.8077
+      },
+      "absErrorBp": {
+       "p50": 51.4,
+       "p68": 81.2,
+       "p90": 115.9
+      }
+     }
+    },
+    "pooled": {
+     "lastClose": {
+      "n": 118,
+      "maeBp": 94.3,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 86.5,
+       "p68": 126.5,
+       "p90": 188
+      }
+     },
+     "perp": {
+      "n": 118,
+      "maeBp": 83.4,
+      "vsLastClose": {
+       "wins": 63,
+       "ties": 3,
+       "losses": 52,
+       "winRate": 0.5339
+      },
+      "direction": {
+       "calls": 103,
+       "hits": 73,
+       "hitRate": 0.7087
+      },
+      "absErrorBp": {
+       "p50": 74.5,
+       "p68": 101.3,
+       "p90": 173.1
+      }
+     },
+     "adr": {
+      "n": 118,
+      "maeBp": 71.5,
+      "vsLastClose": {
+       "wins": 78,
+       "ties": 3,
+       "losses": 37,
+       "winRate": 0.661
+      },
+      "direction": {
+       "calls": 103,
+       "hits": 86,
+       "hitRate": 0.835
+      },
+      "absErrorBp": {
+       "p50": 52,
+       "p68": 81.2,
+       "p90": 125.1
+      }
+     },
+     "mark2": {
+      "n": 118,
+      "maeBp": 68.1,
+      "vsLastClose": {
+       "wins": 69,
+       "ties": 0,
+       "losses": 49,
+       "winRate": 0.5847
+      },
+      "direction": {
+       "calls": 106,
+       "hits": 78,
+       "hitRate": 0.7358
+      },
+      "absErrorBp": {
+       "p50": 52.6,
+       "p68": 76,
+       "p90": 128.2
+      }
+     }
+    }
+   },
+   "byKind": {
+    "overnight": {
+     "lastClose": {
+      "n": 94,
+      "maeBp": 96.8,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 86.9,
+       "p68": 126.6,
+       "p90": 188
+      }
+     },
+     "perp": {
+      "n": 94,
+      "maeBp": 87.7,
+      "vsLastClose": {
+       "wins": 48,
+       "ties": 3,
+       "losses": 43,
+       "winRate": 0.5106
+      },
+      "direction": {
+       "calls": 81,
+       "hits": 56,
+       "hitRate": 0.6914
+      },
+      "absErrorBp": {
+       "p50": 75.1,
+       "p68": 106.6,
+       "p90": 175.5
+      }
+     },
+     "adr": {
+      "n": 94,
+      "maeBp": 72.3,
+      "vsLastClose": {
+       "wins": 61,
+       "ties": 3,
+       "losses": 30,
+       "winRate": 0.6489
+      },
+      "direction": {
+       "calls": 81,
+       "hits": 67,
+       "hitRate": 0.8272
+      },
+      "absErrorBp": {
+       "p50": 48.7,
+       "p68": 79.4,
+       "p90": 121.8
+      }
+     },
+     "mark2": {
+      "n": 94,
+      "maeBp": 69.6,
+      "vsLastClose": {
+       "wins": 54,
+       "ties": 0,
+       "losses": 40,
+       "winRate": 0.5745
+      },
+      "direction": {
+       "calls": 84,
+       "hits": 61,
+       "hitRate": 0.7262
+      },
+      "absErrorBp": {
+       "p50": 53.7,
+       "p68": 76,
+       "p90": 134.3
+      }
+     }
+    },
+    "weekend-holiday": {
+     "lastClose": {
+      "n": 24,
+      "maeBp": 84.7,
+      "vsLastClose": null,
+      "direction": null,
+      "absErrorBp": {
+       "p50": 70.3,
+       "p68": 109.1,
+       "p90": 153.2
+      }
+     },
+     "perp": {
+      "n": 24,
+      "maeBp": 66.4,
+      "vsLastClose": {
+       "wins": 15,
+       "ties": 0,
+       "losses": 9,
+       "winRate": 0.625
+      },
+      "direction": {
+       "calls": 22,
+       "hits": 17,
+       "hitRate": 0.7727
+      },
+      "absErrorBp": {
+       "p50": 58.6,
+       "p68": 92.2,
+       "p90": 107.7
+      }
+     },
+     "adr": {
+      "n": 24,
+      "maeBp": 68.5,
+      "vsLastClose": {
+       "wins": 17,
+       "ties": 0,
+       "losses": 7,
+       "winRate": 0.7083
+      },
+      "direction": {
+       "calls": 22,
+       "hits": 19,
+       "hitRate": 0.8636
+      },
+      "absErrorBp": {
+       "p50": 71,
+       "p68": 84.8,
+       "p90": 132.3
+      }
+     },
+     "mark2": {
+      "n": 24,
+      "maeBp": 62.1,
+      "vsLastClose": {
+       "wins": 15,
+       "ties": 0,
+       "losses": 9,
+       "winRate": 0.625
+      },
+      "direction": {
+       "calls": 22,
+       "hits": 17,
+       "hitRate": 0.7727
+      },
+      "absErrorBp": {
+       "p50": 51.4,
+       "p68": 70.6,
+       "p90": 119.5
+      }
+     }
+    }
+   },
+   "band": {
+    "n": 118,
+    "mark2Band": {
+     "covered": 65,
+     "rate": 0.5508,
+     "bandBp": {
+      "min": 25,
+      "p50": 53,
+      "max": 188
+     }
+    },
+    "flat25": {
+     "covered": 22,
+     "rate": 0.1864
+    },
+    "contractMetricFlips": 1
+   }
+  }
+ }
+}

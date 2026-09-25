@@ -706,3 +706,42 @@ cannot prove it. The perp leg can be checked by refetching; the Yahoo leg cannot
 The mark/1 verification range closes at block 71,486,953 (`MARK2_CUTOVER_BLOCK`).
 
 First mark/2 row: TODO(lead) block, tx and closure id once committed, and its grade once settled.
+
+---
+
+## D-14 — Benchmarks for mark/2: walk-forward, named baselines and the band (25 Sept 2026)
+
+**Published 25 Sept 2026.** The evidence for mark/2 now sits in a Benchmarks section on `/scorecard`. It is
+shown next to the on-chain tally and kept apart from it. The study is `tools/research/hk-closures/fit.mjs`,
+written up with its sources and limits in [docs/research/HK_CLOSURE.md](research/HK_CLOSURE.md). The script
+reproduces D-13's numbers exactly and exits 1 if they differ. It adds three things. All of them are
+historical backtests against the HKEX official open.
+
+- **Walk-forward.** Before each closure, β is refitted on the closures that reopened earlier, using the
+  published rule. Over 87 closures (reopens 13 Aug to 22 Sep), mark/2's mean error was 68.9 bp and the last
+  close's was 95.4 bp. mark/2 beat the last close on 55 of the 87. β ranged from 0.63 to 0.82.
+- **Named baselines.** Pooled, the ADR alone matched mark/2 (68.6 bp). The ADR alone was better on Meituan,
+  and the perp alone was better on Tencent. mark/2 hedges between two legs. It is not the best leg for
+  each name.
+- **The band.** The committed band is 25 bp plus half of r. It held 47 of the 87 walk-forward closures, and
+  the pooled p68 error is 77.8 bp. On chain, the 25 bp band on the first 15 rows held 8 of 15. The page states
+  both numbers.
+
+**The first live mark/2 rows lost.** Three mark/2 rows were marked for the overnight closure that reopened at
+01:30Z on 25 Sep, and all three lost to the last print. The signal moved the marks up by 139, 44 and 11 bp
+(wTCENTx, wXIAOx, wMEITx). Each pool reopened below its last print, and the last print's own error was 13, 336 and
+193 bp. None of the three
+reopens landed inside its band. As of block 71,531,157 the record is 18 settled rows: 0 wins, 15 ties and
+3 losses. Three rows prove nothing either way, and the walk-forward lost 32 of its 87 closures. Both are
+shown as they are.
+
+**Nothing in the keeper changes.** mark/2, its β and its band stay as D-13 set them while the first
+out-of-sample mark/2 rows accrue. Any change will get a new method id, and no row is ever re-marked.
+
+**Limits.** 118 closures in two months. The damping and the two-leg average were chosen on the full sample.
+The target is the official open, not the pool print Scorecard settles at. The recess weight of 0 is D-13's
+and is not re-tested here.
+
+`tools/leaderboard/build.ts` writes `web/public/data/leaderboard.json` (`curb.leaderboard/1`), which holds
+both records and the sha256 of every input. It refuses to write unless its recount of the rows equals
+`skill()` at the same block.

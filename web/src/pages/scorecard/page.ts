@@ -1,9 +1,13 @@
 // /scorecard: the graded record, including that it has no wins yet.
 // Rows: Scorecard v2 storage at one pinned block (data/scorecard.ts). Tx hashes: one single-block getLogs
 // per row, cached forever (resolveTxHashes). Never hard-code a count: every number here is read.
+// Benchmarks: the same rows tallied by method, then the historical backtest from /data/leaderboard.json
+// (data/leaderboard.ts), which is labelled as such and never mixed into an on-chain count.
 import { boot } from '../../shell/boot';
 import './page.css';
 
+import { getLeaderboard, tallyLive, tallySnapshot } from '../../data/leaderboard';
+import type { EstimatorKey, GroupScores, Leaderboard, MethodTally } from '../../data/leaderboard';
 import { getScorecard, getSkill, resolveTxHashes } from '../../data/scorecard';
 import { isMock } from '../../data/mock';
 import type { ClosureKind, Outcome, ScorecardRow, ScorecardView, SkillTally } from '../../data/types';
@@ -372,6 +376,166 @@ const copyVerify = $<HTMLButtonElement>('[data-sc-copy-verify]');
 if (copyVerify) copyButton(copyVerify, verifyCommand);
 enhanceCopyButtons(main);
 
+// ── benchmarks: the on-chain tally by method, then the backtest (static; nothing counts up) ─────────
+
+let board: Leaderboard | null = null;
+let boardFailed = false;
+
+/** "2026-07-22" → "22 Jul". */
+function day(iso: string): string {
+  const [, m, d] = iso.split('-');
+  return `${Number(d)} ${MONTHS[Number(m) - 1] ?? ''}`;
+}
+
+function methodLabel(m: string): string {
+  if (m === 'all') return 'All methods';
+  return m.startsWith('curb.scorecard.') ? m.slice('curb.scorecard.'.length) : shortHash(m);
+}
+
+const bp1 = (v: number | null) => (v === null ? '—' : v.toFixed(1));
+const ofN = (k: number, n: number) => (n ? `${fmtInt(k)} of ${fmtInt(n)}` : '—');
+
+function liveRowHTML(t: MethodTally): SafeHTML {
+  const s = t.settled;
+  const pending = t.pending ? html`<span class="sc-sub muted">${plural(t.pending, 'row', 'rows')} waiting</span>` : '';
+  const cls = t.method === 'all' ? 'sc-bench__row sc-bench__row--total' : 'sc-bench__row';
+  return html`<tr class="${cls}">
+  <th scope="row">${t.method === 'all' ? methodLabel(t.method) : html`<code>${methodLabel(t.method)}</code>`}${pending}</th>
+  <td class="num" data-label="Settled">${fmtInt(s)}</td>
+  <td class="num" data-label="Wins">${s ? fmtInt(t.wins) : '—'}</td>
+  <td class="num" data-label="Ties">${s ? fmtInt(t.ties) : '—'}</td>
+  <td class="num" data-label="Losses">${s ? fmtInt(t.losses) : '—'}</td>
+  <td class="num" data-label="Mark moved off last print">${ofN(t.markMoved, s)}</td>
+  <td class="num" data-label="Mean error, Curb (bp)">${bp1(t.meanCurbErrorBps)}</td>
+  <td class="num" data-label="Mean error, last print (bp)">${bp1(t.meanLastPrintErrorBps)}</td>
+  <td class="num" data-label="Band held">${ofN(t.bandCovered, s)}</td>
+</tr>`;
+}
+
+/** The live tally when the page has read the chain, else the build-time snapshot, labelled as such. */
+function renderBenchLive(): void {
+  const tbody = $('[data-sc-bench-live]');
+  const asof = $('[data-sc-bench-live-asof]');
+  if (!tbody) return;
+  let tallies: MethodTally[] | null = null;
+  if (view) {
+    tallies = tallyLive(view.rows);
+    if (asof) render(asof, html`${view.source === 'fixture' ? 'Fixture captured at ' : 'Read live at '}${blockLinkHTML(view.block)}, with the ledger above.`);
+  } else if (board) {
+    tallies = tallySnapshot(board);
+    if (asof) render(asof, html`From the snapshot taken at ${blockLinkHTML(board.onChain.block.number)} when the site was built. ${failures > 0 ? 'The live read failed and is retrying.' : 'The live read has not landed yet.'}`);
+  }
+  if (!tallies) {
+    // Neither the chain nor the snapshot: say so rather than leave "Reading…" up forever.
+    if (boardFailed && failures > 0) render(tbody, html`<tr class="sc-bench__empty"><td colspan="9" class="muted">The Scorecard is unreadable just now. Retrying.</td></tr>`);
+    return;
+  }
+  render(tbody, html`${tallies.map(liveRowHTML)}`);
+  renderBand(tallies);
+}
+
+/** "25 bp each" or "32 to 113 bp". */
+function bandRange(t: MethodTally): string {
+  if (t.bandMinBps === null) return '';
+  return t.bandMinBps === t.bandMaxBps ? `${fmtInt(t.bandMinBps)} bp each` : `${fmtInt(t.bandMinBps)} to ${fmtInt(t.bandMaxBps!)} bp`;
+}
+
+/** The honest band line: what the committed band held on chain, next to the error the backtest measured. */
+function renderBand(tallies: MethodTally[]): void {
+  const el = $('[data-sc-band]');
+  if (!el) return;
+  const all = tallies.at(-1)!;
+  const methods = tallies.slice(0, -1).filter((t) => t.settled);
+  let line = '';
+  if (all.settled) {
+    line = `The band committed with each mark held the reopen on ${fmtInt(all.bandCovered)} of ${plural(all.settled, 'settled row', 'settled rows')}`;
+    line += methods.length > 1
+      ? `: ${methods.map((t) => `${fmtInt(t.bandCovered)} of ${fmtInt(t.settled)} under ${methodLabel(t.method)} (${bandRange(t)})`).join(', ')}.`
+      : ` (${bandRange(all)}).`;
+  }
+  if (board) {
+    const wf = board.band.backtest.walkForward;
+    line += `${line ? ' ' : ''}Measured p68 ≈ ${Math.round(wf.p68ErrorBp)} bp: in the walk-forward backtest, 68% of mark/2's errors were within ${Math.round(wf.p68ErrorBp)} bp, and its band (median ${fmtInt(wf.medianBandBps)} bp) held ${fmtInt(wf.covered)} of ${fmtInt(wf.n)} closures. mark/2's band is 25 bp plus half the signal's move, so it is not sized to a measured error.`;
+  }
+  el.textContent = line || ' ';
+}
+
+const NAMES: Record<string, [string, string]> = {
+  wTCENTx: ['Tencent', 'wTCENTx'],
+  wXIAOx: ['Xiaomi', 'wXIAOx'],
+  wMEITx: ['Meituan', 'wMEITx'],
+  pooled: ['All three', 'pooled'],
+};
+const COLS: [EstimatorKey, string][] = [['lastClose', 'Last close (bp)'], ['perp', 'Perp alone (bp)'], ['adr', 'ADR alone (bp)'], ['mark2', 'mark/2 (bp)']];
+
+function backtestRowHTML(key: string, g: GroupScores): SafeHTML {
+  const [name, sub] = NAMES[key] ?? [key, ''];
+  const best = Math.min(...COLS.map(([k]) => g[k].maeBp));
+  const m2 = g.mark2;
+  const dir = m2.direction;
+  return html`<tr class="${key === 'pooled' ? 'sc-bench__row sc-bench__row--total' : 'sc-bench__row'}">
+  <th scope="row">${name}<span class="sc-sub muted">${sub}</span></th>
+  <td class="num" data-label="Closures">${fmtInt(g.lastClose.n)}</td>
+  ${COLS.map(([k, label]) => html`<td class="num${g[k].maeBp === best ? ' sc-bench__best' : ''}" data-label="${label}">${g[k].maeBp.toFixed(1)}${g[k].maeBp === best ? html`<span class="visually-hidden"> (lowest)</span>` : ''}</td>`)}
+  <td class="num" data-label="mark/2 beat last close">${m2.vsLastClose ? ofN(m2.vsLastClose.wins, m2.n) : '—'}</td>
+  <td class="num" data-label="mark/2 direction right">${dir && dir.hitRate !== null ? html`${Math.round(dir.hitRate * 100)}%<span class="sc-sub muted">${fmtInt(dir.hits)} of ${fmtInt(dir.calls)}</span>` : '—'}</td>
+</tr>`;
+}
+
+function quantileLine(run: { groups: Record<string, GroupScores>; byKind: Record<string, GroupScores> }): string {
+  const q = run.groups.pooled?.mark2.absErrorBp;
+  const o = run.byKind.overnight?.mark2;
+  const w = run.byKind['weekend-holiday']?.mark2;
+  if (!q) return '';
+  const kinds = o && w ? ` Mean error by closure length: overnight ${o.maeBp.toFixed(1)} bp over ${fmtInt(o.n)}, weekend or holiday ${w.maeBp.toFixed(1)} bp over ${fmtInt(w.n)}.` : '';
+  return `mark/2's absolute error, all three names: p50 ${q.p50} bp, p68 ${q.p68} bp, p90 ${q.p90} bp.${kinds}`;
+}
+
+function renderBacktest(lb: Leaderboard): void {
+  const bt = lb.backtest;
+  const order = ['wTCENTx', 'wXIAOx', 'wMEITx', 'pooled'];
+  const rowsOf = (groups: Record<string, GroupScores>) => html`${order.filter((k) => groups[k]).map((k) => backtestRowHTML(k, groups[k]!))}`;
+  const set = (sel: string, text: string) => {
+    const el = $(sel);
+    if (el) el.textContent = text;
+  };
+
+  const wf = bt.walkForward;
+  const wfBody = $('[data-sc-bench-wf]');
+  if (wfBody) render(wfBody, rowsOf(wf.groups));
+  set('[data-sc-bench-wf-caption]', `Historical backtest, not on chain. ${fmtInt(wf.n)} closures that reopened ${day(wf.firstReopen)} to ${day(wf.lastReopen)}. Mean absolute error against the HKEX official open, in basis points of the prior close. The lowest in each row is in bold.`);
+  set('[data-sc-bench-wf-note]', `Before each closure, β is refitted on the closures that reopened earlier, by the published rule round(0.8 × pooled fit, 2). It ran from ${wf.publishedBeta.min} to ${wf.publishedBeta.max}. The first ${fmtInt(wf.warmupExcluded)} closures are the warm-up and have no mark. Every column is scored on the same closures. Perp alone and ADR alone apply the leg's own move in full. Direction counts only the closures where both the open and the mark moved.`);
+  set('[data-sc-bench-wf-q]', quantileLine(wf));
+
+  const is = bt.inSample;
+  const isBody = $('[data-sc-bench-is]');
+  if (isBody) render(isBody, rowsOf(is.groups));
+  set('[data-sc-bench-is-caption]', `Historical backtest, not on chain. ${fmtInt(is.n)} closures, cut ${day(bt.sample.firstCut)} to reopen ${day(bt.sample.lastReopen)}. Same metric as above.`);
+  set('[data-sc-bench-is-note]', `β ${is.beta} was fitted on these same ${fmtInt(is.n)} closures, so this table flatters mark/2. The walk-forward table above is the fairer test. These are D-13's published numbers, reproduced exactly.`);
+  set('[data-sc-bench-is-q]', quantileLine(is));
+
+  const src = $('[data-sc-bench-src]');
+  if (src) {
+    const built = new Date(lb.generatedAt);
+    render(src, html`The HKEX official open is not the pool print Scorecard settles at, so a backtest number and an on-chain number are not the same measurement. Lunch recesses are not in the backtest: mark/2 gives them weight zero. Method, data and limits: <code>${bt.doc}</code>, reproduced by <code>${bt.source}</code>. File built ${Number.isFinite(built.getTime()) ? whenHKT(built.getTime()) : lb.generatedAt}.`);
+  }
+}
+
+async function loadBench(): Promise<void> {
+  try {
+    board = await getLeaderboard();
+    renderBacktest(board);
+  } catch (err) {
+    boardFailed = true;
+    for (const sel of ['[data-sc-bench-wf]', '[data-sc-bench-is]']) {
+      const el = $(sel);
+      if (el) render(el, html`<tr class="sc-bench__empty"><td colspan="8" class="muted">The backtest file is unreadable just now.</td></tr>`);
+    }
+    console.warn('scorecard: leaderboard.json unreadable', err);
+  }
+  renderBenchLive();
+}
+
 // ── read + poll ────────────────────────────────────────────────────────────────────────────────
 
 let reading = false;
@@ -385,6 +549,7 @@ async function loadAll(animateNew: boolean): Promise<void> {
   renderTally(v);
   renderFilter(v);
   renderRows(v, animateNew);
+  renderBenchLive();
   renderVerifyOptions();
   observeRows();
   if (verifyId) queueTx([verifyId]);
@@ -412,6 +577,7 @@ async function tick(): Promise<void> {
     if (!view) {
       const hl = $('[data-sc-headline]');
       if (hl) hl.textContent = 'The Scorecard is unreadable just now.';
+      renderBenchLive();
     }
     if (failures === 1) console.warn('scorecard: read failed', err);
   } finally {
@@ -431,4 +597,5 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+void loadBench();
 void tick();

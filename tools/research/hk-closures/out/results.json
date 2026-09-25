@@ -1,0 +1,2554 @@
+{
+ "schema": "curb.hk-closures.results/1",
+ "generatedBy": "tools/research/hk-closures/fit.mjs",
+ "kind": "historical backtest",
+ "inputs": {
+  "data/0700.HK.1y.json": "2cf61bfb4d21b65ef730dec32e3f32ff6ee4f027805234c97e95eed39c56ceb0",
+  "data/1810.HK.1y.json": "4066a76f6ac73b6f5d54a4a460ff451e3fe3ce6b679f62c8df6fb235fc21fbf2",
+  "data/3690.HK.1y.json": "ed739fcfd9fea4b486dcb354ab1ed61321d35a30baf97d4807057f202d18d318",
+  "data/TCEHY.1y.json": "ede6c2be1a1e01c91de38d80a37b523d540bf35e9cfb614dd9e131a3264ef19a",
+  "data/XIACY.1y.json": "0ecf9f80465eab6935ae42b471a172c5d1174f0cd941c7b23da0a7a0aded5612",
+  "data/MPNGY.1y.json": "cc9557f73a40b2a324c589447d6235cc118cfb50cb05022ad36a93fe450a1243",
+  "data/HKD=X.1y.json": "2bececcc1700e56b9dd9da2db52b7b053f73d73bff6cf39d186842262ad3767a",
+  "data/klines-cache.json": "b157e6a718dfef70a58d120cee6dae3aff5e75e6cfeff001f59fb8f16838ddeb"
+ },
+ "sample": {
+  "firstCut": "2026-07-22",
+  "lastReopen": "2026-09-22",
+  "closures": 118,
+  "byAsset": {
+   "wTCENTx": 44,
+   "wXIAOx": 44,
+   "wMEITx": 30
+  },
+  "byKind": {
+   "overnight": 94,
+   "weekend-holiday": 24
+  },
+  "perpOnly": 3,
+  "adrOnly": 0,
+  "excluded": "the nights behind the six D-11 overnight rows (reopen 23 and 24 Sep 2026), and every lunch recess"
+ },
+ "metric": "|estimate - HK open| / HK close, in bp; the HK open is the official opening price, not the pool print the Scorecard grades",
+ "estimators": {
+  "lastClose": {
+   "label": "Last close",
+   "note": "The HK close itself: the baseline the Scorecard grades against."
+  },
+  "perp": {
+   "label": "Perp alone",
+   "note": "The Binance perpetual's move from the cut to the commit, applied in full (beta 1)."
+  },
+  "adr": {
+   "label": "ADR alone",
+   "note": "The ADR's last US close at USD/HKD against the HK close, applied in full (beta 1). The last close where the ADR bar is missing."
+  },
+  "mark2": {
+   "label": "mark/2",
+   "note": "The published method: beta x mean of the legs. In-sample beta 0.79; walk-forward beta refitted before each closure by the same rule."
+  }
+ },
+ "band": {
+  "rule": "min(2000, max(25, 25 + floor(|r| / 2))) bp, r the keeper's integer-bp mean of the legs (services/keeper/src/mark.ts)",
+  "covered": "|mark - open| / close <= band"
+ },
+ "d13": {
+  "reproduced": true,
+  "n": 118,
+  "beta": 0.9825991824864198,
+  "se": 0.09349703882835991,
+  "r2Uncentered": 0.48559626381530296,
+  "damped": 0.79,
+  "names": {
+   "wTCENTx": {
+    "n": 44,
+    "beta": 1.0480774402235804,
+    "maeLastCloseBp": 92.73520470520299,
+    "maeMark2Bp": 58.2336268802872
+   },
+   "wXIAOx": {
+    "n": 44,
+    "beta": 0.9012738586924297,
+    "maeLastCloseBp": 96.6416971694934,
+    "maeMark2Bp": 78.45303552939458
+   },
+   "wMEITx": {
+    "n": 30,
+    "beta": 0.9757594594113463,
+    "maeLastCloseBp": 93.24746527012167,
+    "maeMark2Bp": 67.26377654267185
+   }
+  }
+ },
+ "inSample": {
+  "beta": 0.79,
+  "n": 118,
+  "groups": {
+   "wTCENTx": {
+    "lastClose": {
+     "n": 44,
+     "maeBp": 92.7,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 92.3,
+      "p68": 121.2,
+      "p90": 165.5
+     }
+    },
+    "perp": {
+     "n": 44,
+     "maeBp": 62.2,
+     "vsLastClose": {
+      "wins": 28,
+      "ties": 1,
+      "losses": 15,
+      "winRate": 0.6364
+     },
+     "direction": {
+      "calls": 40,
+      "hits": 32,
+      "hitRate": 0.8
+     },
+     "absErrorBp": {
+      "p50": 47.8,
+      "p68": 91.1,
+      "p90": 138.2
+     }
+    },
+    "adr": {
+     "n": 44,
+     "maeBp": 65.5,
+     "vsLastClose": {
+      "wins": 29,
+      "ties": 1,
+      "losses": 14,
+      "winRate": 0.6591
+     },
+     "direction": {
+      "calls": 40,
+      "hits": 34,
+      "hitRate": 0.85
+     },
+     "absErrorBp": {
+      "p50": 52.9,
+      "p68": 73,
+      "p90": 119.7
+     }
+    },
+    "mark2": {
+     "n": 44,
+     "maeBp": 58.2,
+     "vsLastClose": {
+      "wins": 28,
+      "ties": 0,
+      "losses": 16,
+      "winRate": 0.6364
+     },
+     "direction": {
+      "calls": 41,
+      "hits": 33,
+      "hitRate": 0.8049
+     },
+     "absErrorBp": {
+      "p50": 58.5,
+      "p68": 70.6,
+      "p90": 105
+     }
+    }
+   },
+   "wXIAOx": {
+    "lastClose": {
+     "n": 44,
+     "maeBp": 96.6,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 81.7,
+      "p68": 104.9,
+      "p90": 183.3
+     }
+    },
+    "perp": {
+     "n": 44,
+     "maeBp": 97.2,
+     "vsLastClose": {
+      "wins": 22,
+      "ties": 1,
+      "losses": 21,
+      "winRate": 0.5
+     },
+     "direction": {
+      "calls": 38,
+      "hits": 25,
+      "hitRate": 0.6579
+     },
+     "absErrorBp": {
+      "p50": 77.1,
+      "p68": 129.1,
+      "p90": 195.3
+     }
+    },
+    "adr": {
+     "n": 44,
+     "maeBp": 88.5,
+     "vsLastClose": {
+      "wins": 28,
+      "ties": 1,
+      "losses": 15,
+      "winRate": 0.6364
+     },
+     "direction": {
+      "calls": 38,
+      "hits": 30,
+      "hitRate": 0.7895
+     },
+     "absErrorBp": {
+      "p50": 58.2,
+      "p68": 86.5,
+      "p90": 170.8
+     }
+    },
+    "mark2": {
+     "n": 44,
+     "maeBp": 78.5,
+     "vsLastClose": {
+      "wins": 22,
+      "ties": 0,
+      "losses": 22,
+      "winRate": 0.5
+     },
+     "direction": {
+      "calls": 39,
+      "hits": 24,
+      "hitRate": 0.6154
+     },
+     "absErrorBp": {
+      "p50": 44.2,
+      "p68": 82.5,
+      "p90": 135.9
+     }
+    }
+   },
+   "wMEITx": {
+    "lastClose": {
+     "n": 30,
+     "maeBp": 93.2,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 81.2,
+      "p68": 126.6,
+      "p90": 199.2
+     }
+    },
+    "perp": {
+     "n": 30,
+     "maeBp": 94.2,
+     "vsLastClose": {
+      "wins": 13,
+      "ties": 1,
+      "losses": 16,
+      "winRate": 0.4333
+     },
+     "direction": {
+      "calls": 25,
+      "hits": 16,
+      "hitRate": 0.64
+     },
+     "absErrorBp": {
+      "p50": 76,
+      "p68": 99.2,
+      "p90": 173.1
+     }
+    },
+    "adr": {
+     "n": 30,
+     "maeBp": 55.6,
+     "vsLastClose": {
+      "wins": 21,
+      "ties": 1,
+      "losses": 8,
+      "winRate": 0.7
+     },
+     "direction": {
+      "calls": 25,
+      "hits": 22,
+      "hitRate": 0.88
+     },
+     "absErrorBp": {
+      "p50": 41.6,
+      "p68": 71.5,
+      "p90": 104.7
+     }
+    },
+    "mark2": {
+     "n": 30,
+     "maeBp": 67.3,
+     "vsLastClose": {
+      "wins": 19,
+      "ties": 0,
+      "losses": 11,
+      "winRate": 0.6333
+     },
+     "direction": {
+      "calls": 26,
+      "hits": 21,
+      "hitRate": 0.8077
+     },
+     "absErrorBp": {
+      "p50": 51.4,
+      "p68": 81.2,
+      "p90": 115.9
+     }
+    }
+   },
+   "pooled": {
+    "lastClose": {
+     "n": 118,
+     "maeBp": 94.3,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 86.5,
+      "p68": 126.5,
+      "p90": 188
+     }
+    },
+    "perp": {
+     "n": 118,
+     "maeBp": 83.4,
+     "vsLastClose": {
+      "wins": 63,
+      "ties": 3,
+      "losses": 52,
+      "winRate": 0.5339
+     },
+     "direction": {
+      "calls": 103,
+      "hits": 73,
+      "hitRate": 0.7087
+     },
+     "absErrorBp": {
+      "p50": 74.5,
+      "p68": 101.3,
+      "p90": 173.1
+     }
+    },
+    "adr": {
+     "n": 118,
+     "maeBp": 71.5,
+     "vsLastClose": {
+      "wins": 78,
+      "ties": 3,
+      "losses": 37,
+      "winRate": 0.661
+     },
+     "direction": {
+      "calls": 103,
+      "hits": 86,
+      "hitRate": 0.835
+     },
+     "absErrorBp": {
+      "p50": 52,
+      "p68": 81.2,
+      "p90": 125.1
+     }
+    },
+    "mark2": {
+     "n": 118,
+     "maeBp": 68.1,
+     "vsLastClose": {
+      "wins": 69,
+      "ties": 0,
+      "losses": 49,
+      "winRate": 0.5847
+     },
+     "direction": {
+      "calls": 106,
+      "hits": 78,
+      "hitRate": 0.7358
+     },
+     "absErrorBp": {
+      "p50": 52.6,
+      "p68": 76,
+      "p90": 128.2
+     }
+    }
+   }
+  },
+  "byKind": {
+   "overnight": {
+    "lastClose": {
+     "n": 94,
+     "maeBp": 96.8,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 86.9,
+      "p68": 126.6,
+      "p90": 188
+     }
+    },
+    "perp": {
+     "n": 94,
+     "maeBp": 87.7,
+     "vsLastClose": {
+      "wins": 48,
+      "ties": 3,
+      "losses": 43,
+      "winRate": 0.5106
+     },
+     "direction": {
+      "calls": 81,
+      "hits": 56,
+      "hitRate": 0.6914
+     },
+     "absErrorBp": {
+      "p50": 75.1,
+      "p68": 106.6,
+      "p90": 175.5
+     }
+    },
+    "adr": {
+     "n": 94,
+     "maeBp": 72.3,
+     "vsLastClose": {
+      "wins": 61,
+      "ties": 3,
+      "losses": 30,
+      "winRate": 0.6489
+     },
+     "direction": {
+      "calls": 81,
+      "hits": 67,
+      "hitRate": 0.8272
+     },
+     "absErrorBp": {
+      "p50": 48.7,
+      "p68": 79.4,
+      "p90": 121.8
+     }
+    },
+    "mark2": {
+     "n": 94,
+     "maeBp": 69.6,
+     "vsLastClose": {
+      "wins": 54,
+      "ties": 0,
+      "losses": 40,
+      "winRate": 0.5745
+     },
+     "direction": {
+      "calls": 84,
+      "hits": 61,
+      "hitRate": 0.7262
+     },
+     "absErrorBp": {
+      "p50": 53.7,
+      "p68": 76,
+      "p90": 134.3
+     }
+    }
+   },
+   "weekend-holiday": {
+    "lastClose": {
+     "n": 24,
+     "maeBp": 84.7,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 70.3,
+      "p68": 109.1,
+      "p90": 153.2
+     }
+    },
+    "perp": {
+     "n": 24,
+     "maeBp": 66.4,
+     "vsLastClose": {
+      "wins": 15,
+      "ties": 0,
+      "losses": 9,
+      "winRate": 0.625
+     },
+     "direction": {
+      "calls": 22,
+      "hits": 17,
+      "hitRate": 0.7727
+     },
+     "absErrorBp": {
+      "p50": 58.6,
+      "p68": 92.2,
+      "p90": 107.7
+     }
+    },
+    "adr": {
+     "n": 24,
+     "maeBp": 68.5,
+     "vsLastClose": {
+      "wins": 17,
+      "ties": 0,
+      "losses": 7,
+      "winRate": 0.7083
+     },
+     "direction": {
+      "calls": 22,
+      "hits": 19,
+      "hitRate": 0.8636
+     },
+     "absErrorBp": {
+      "p50": 71,
+      "p68": 84.8,
+      "p90": 132.3
+     }
+    },
+    "mark2": {
+     "n": 24,
+     "maeBp": 62.1,
+     "vsLastClose": {
+      "wins": 15,
+      "ties": 0,
+      "losses": 9,
+      "winRate": 0.625
+     },
+     "direction": {
+      "calls": 22,
+      "hits": 17,
+      "hitRate": 0.7727
+     },
+     "absErrorBp": {
+      "p50": 51.4,
+      "p68": 70.6,
+      "p90": 119.5
+     }
+    }
+   }
+  },
+  "band": {
+   "n": 118,
+   "mark2Band": {
+    "covered": 65,
+    "rate": 0.5508,
+    "bandBp": {
+     "min": 25,
+     "p50": 53,
+     "max": 188
+    }
+   },
+   "flat25": {
+    "covered": 22,
+    "rate": 0.1864
+   },
+   "contractMetricFlips": 1
+  }
+ },
+ "walkForward": {
+  "minTrain": 30,
+  "firstReopen": "2026-08-13",
+  "lastReopen": "2026-09-22",
+  "warmupExcluded": 31,
+  "publishedBeta": {
+   "first": 0.82,
+   "last": 0.77,
+   "min": 0.63,
+   "max": 0.82
+  },
+  "n": 87,
+  "groups": {
+   "wTCENTx": {
+    "lastClose": {
+     "n": 29,
+     "maeBp": 106.7,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 94.9,
+      "p68": 133.7,
+      "p90": 217.1
+     }
+    },
+    "perp": {
+     "n": 29,
+     "maeBp": 50.4,
+     "vsLastClose": {
+      "wins": 21,
+      "ties": 0,
+      "losses": 8,
+      "winRate": 0.7241
+     },
+     "direction": {
+      "calls": 27,
+      "hits": 22,
+      "hitRate": 0.8148
+     },
+     "absErrorBp": {
+      "p50": 38.6,
+      "p68": 67.1,
+      "p90": 106.6
+     }
+    },
+    "adr": {
+     "n": 29,
+     "maeBp": 67.8,
+     "vsLastClose": {
+      "wins": 21,
+      "ties": 1,
+      "losses": 7,
+      "winRate": 0.7241
+     },
+     "direction": {
+      "calls": 26,
+      "hits": 22,
+      "hitRate": 0.8462
+     },
+     "absErrorBp": {
+      "p50": 57.1,
+      "p68": 73,
+      "p90": 119.7
+     }
+    },
+    "mark2": {
+     "n": 29,
+     "maeBp": 63.1,
+     "vsLastClose": {
+      "wins": 21,
+      "ties": 0,
+      "losses": 8,
+      "winRate": 0.7241
+     },
+     "direction": {
+      "calls": 27,
+      "hits": 22,
+      "hitRate": 0.8148
+     },
+     "absErrorBp": {
+      "p50": 62.8,
+      "p68": 77.8,
+      "p90": 125
+     }
+    }
+   },
+   "wXIAOx": {
+    "lastClose": {
+     "n": 29,
+     "maeBp": 85.8,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 85.5,
+      "p68": 100.3,
+      "p90": 183.3
+     }
+    },
+    "perp": {
+     "n": 29,
+     "maeBp": 83.4,
+     "vsLastClose": {
+      "wins": 17,
+      "ties": 0,
+      "losses": 12,
+      "winRate": 0.5862
+     },
+     "direction": {
+      "calls": 25,
+      "hits": 18,
+      "hitRate": 0.72
+     },
+     "absErrorBp": {
+      "p50": 58.3,
+      "p68": 99.2,
+      "p90": 215.2
+     }
+    },
+    "adr": {
+     "n": 29,
+     "maeBp": 80.7,
+     "vsLastClose": {
+      "wins": 18,
+      "ties": 1,
+      "losses": 10,
+      "winRate": 0.6207
+     },
+     "direction": {
+      "calls": 24,
+      "hits": 19,
+      "hitRate": 0.7917
+     },
+     "absErrorBp": {
+      "p50": 51.1,
+      "p68": 71.4,
+      "p90": 170.8
+     }
+    },
+    "mark2": {
+     "n": 29,
+     "maeBp": 72.5,
+     "vsLastClose": {
+      "wins": 15,
+      "ties": 0,
+      "losses": 14,
+      "winRate": 0.5172
+     },
+     "direction": {
+      "calls": 25,
+      "hits": 16,
+      "hitRate": 0.64
+     },
+     "absErrorBp": {
+      "p50": 42,
+      "p68": 57.2,
+      "p90": 172.6
+     }
+    }
+   },
+   "wMEITx": {
+    "lastClose": {
+     "n": 29,
+     "maeBp": 93.7,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 91.3,
+      "p68": 126.6,
+      "p90": 201
+     }
+    },
+    "perp": {
+     "n": 29,
+     "maeBp": 94.5,
+     "vsLastClose": {
+      "wins": 13,
+      "ties": 1,
+      "losses": 15,
+      "winRate": 0.4483
+     },
+     "direction": {
+      "calls": 24,
+      "hits": 15,
+      "hitRate": 0.625
+     },
+     "absErrorBp": {
+      "p50": 76,
+      "p68": 99.2,
+      "p90": 198.2
+     }
+    },
+    "adr": {
+     "n": 29,
+     "maeBp": 57.2,
+     "vsLastClose": {
+      "wins": 20,
+      "ties": 1,
+      "losses": 8,
+      "winRate": 0.6897
+     },
+     "direction": {
+      "calls": 24,
+      "hits": 21,
+      "hitRate": 0.875
+     },
+     "absErrorBp": {
+      "p50": 42.4,
+      "p68": 71.5,
+      "p90": 125
+     }
+    },
+    "mark2": {
+     "n": 29,
+     "maeBp": 71.1,
+     "vsLastClose": {
+      "wins": 19,
+      "ties": 0,
+      "losses": 10,
+      "winRate": 0.6552
+     },
+     "direction": {
+      "calls": 25,
+      "hits": 20,
+      "hitRate": 0.8
+     },
+     "absErrorBp": {
+      "p50": 56.1,
+      "p68": 92.1,
+      "p90": 179.4
+     }
+    }
+   },
+   "pooled": {
+    "lastClose": {
+     "n": 87,
+     "maeBp": 95.4,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 87.5,
+      "p68": 126.6,
+      "p90": 199.2
+     }
+    },
+    "perp": {
+     "n": 87,
+     "maeBp": 76.1,
+     "vsLastClose": {
+      "wins": 51,
+      "ties": 1,
+      "losses": 35,
+      "winRate": 0.5862
+     },
+     "direction": {
+      "calls": 76,
+      "hits": 55,
+      "hitRate": 0.7237
+     },
+     "absErrorBp": {
+      "p50": 58.6,
+      "p68": 94.1,
+      "p90": 148.9
+     }
+    },
+    "adr": {
+     "n": 87,
+     "maeBp": 68.6,
+     "vsLastClose": {
+      "wins": 59,
+      "ties": 3,
+      "losses": 25,
+      "winRate": 0.6782
+     },
+     "direction": {
+      "calls": 74,
+      "hits": 62,
+      "hitRate": 0.8378
+     },
+     "absErrorBp": {
+      "p50": 51.1,
+      "p68": 73,
+      "p90": 121.8
+     }
+    },
+    "mark2": {
+     "n": 87,
+     "maeBp": 68.9,
+     "vsLastClose": {
+      "wins": 55,
+      "ties": 0,
+      "losses": 32,
+      "winRate": 0.6322
+     },
+     "direction": {
+      "calls": 77,
+      "hits": 58,
+      "hitRate": 0.7532
+     },
+     "absErrorBp": {
+      "p50": 56.1,
+      "p68": 77.8,
+      "p90": 132.2
+     }
+    }
+   }
+  },
+  "byKind": {
+   "overnight": {
+    "lastClose": {
+     "n": 69,
+     "maeBp": 95.7,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 87.5,
+      "p68": 126.6,
+      "p90": 199.2
+     }
+    },
+    "perp": {
+     "n": 69,
+     "maeBp": 78.5,
+     "vsLastClose": {
+      "wins": 39,
+      "ties": 1,
+      "losses": 29,
+      "winRate": 0.5652
+     },
+     "direction": {
+      "calls": 60,
+      "hits": 43,
+      "hitRate": 0.7167
+     },
+     "absErrorBp": {
+      "p50": 58,
+      "p68": 93.7,
+      "p90": 156.1
+     }
+    },
+    "adr": {
+     "n": 69,
+     "maeBp": 68.8,
+     "vsLastClose": {
+      "wins": 45,
+      "ties": 3,
+      "losses": 21,
+      "winRate": 0.6522
+     },
+     "direction": {
+      "calls": 58,
+      "hits": 48,
+      "hitRate": 0.8276
+     },
+     "absErrorBp": {
+      "p50": 45.2,
+      "p68": 71.4,
+      "p90": 121.8
+     }
+    },
+    "mark2": {
+     "n": 69,
+     "maeBp": 69,
+     "vsLastClose": {
+      "wins": 43,
+      "ties": 0,
+      "losses": 26,
+      "winRate": 0.6232
+     },
+     "direction": {
+      "calls": 61,
+      "hits": 46,
+      "hitRate": 0.7541
+     },
+     "absErrorBp": {
+      "p50": 54.5,
+      "p68": 76.7,
+      "p90": 134.9
+     }
+    }
+   },
+   "weekend-holiday": {
+    "lastClose": {
+     "n": 18,
+     "maeBp": 94,
+     "vsLastClose": null,
+     "direction": null,
+     "absErrorBp": {
+      "p50": 77.4,
+      "p68": 126.5,
+      "p90": 247.1
+     }
+    },
+    "perp": {
+     "n": 18,
+     "maeBp": 66.9,
+     "vsLastClose": {
+      "wins": 12,
+      "ties": 0,
+      "losses": 6,
+      "winRate": 0.6667
+     },
+     "direction": {
+      "calls": 16,
+      "hits": 12,
+      "hitRate": 0.75
+     },
+     "absErrorBp": {
+      "p50": 60.6,
+      "p68": 99.2,
+      "p90": 134.4
+     }
+    },
+    "adr": {
+     "n": 18,
+     "maeBp": 67.7,
+     "vsLastClose": {
+      "wins": 14,
+      "ties": 0,
+      "losses": 4,
+      "winRate": 0.7778
+     },
+     "direction": {
+      "calls": 16,
+      "hits": 14,
+      "hitRate": 0.875
+     },
+     "absErrorBp": {
+      "p50": 71,
+      "p68": 83.5,
+      "p90": 132.3
+     }
+    },
+    "mark2": {
+     "n": 18,
+     "maeBp": 68.6,
+     "vsLastClose": {
+      "wins": 12,
+      "ties": 0,
+      "losses": 6,
+      "winRate": 0.6667
+     },
+     "direction": {
+      "calls": 16,
+      "hits": 12,
+      "hitRate": 0.75
+     },
+     "absErrorBp": {
+      "p50": 56.1,
+      "p68": 79,
+      "p90": 128.9
+     }
+    }
+   }
+  },
+  "band": {
+   "n": 87,
+   "mark2Band": {
+    "covered": 47,
+    "rate": 0.5402,
+    "bandBp": {
+     "min": 25,
+     "p50": 52,
+     "max": 188
+    }
+   },
+   "flat25": {
+    "covered": 14,
+    "rate": 0.1609
+   },
+   "contractMetricFlips": 0
+  }
+ },
+ "rows": [
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-22",
+   "reopen": "2026-07-23",
+   "kind": "overnight",
+   "gapBp": -13.6179,
+   "perpBp": 132.5298,
+   "adrBp": -115.5312,
+   "rBp": 8.4993,
+   "keeperRBps": 8,
+   "bandBps": 29,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-22",
+   "reopen": "2026-07-23",
+   "kind": "overnight",
+   "gapBp": -104.9478,
+   "perpBp": 90.3614,
+   "adrBp": -16.0664,
+   "rBp": 37.1475,
+   "keeperRBps": 37,
+   "bandBps": 43,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-23",
+   "reopen": "2026-07-24",
+   "kind": "overnight",
+   "gapBp": -157.2327,
+   "perpBp": -3.3881,
+   "adrBp": -251.1937,
+   "rBp": -127.2909,
+   "keeperRBps": -127,
+   "bandBps": 88,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-23",
+   "reopen": "2026-07-24",
+   "kind": "overnight",
+   "gapBp": -221.0753,
+   "perpBp": -140.6886,
+   "adrBp": -149.5732,
+   "rBp": -145.1309,
+   "keeperRBps": -144,
+   "bandBps": 97,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-24",
+   "reopen": "2026-07-27",
+   "kind": "weekend-holiday",
+   "gapBp": 96.6402,
+   "perpBp": 144.901,
+   "adrBp": 27.8039,
+   "rBp": 86.3524,
+   "keeperRBps": 85,
+   "bandBps": 67,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-24",
+   "reopen": "2026-07-27",
+   "kind": "weekend-holiday",
+   "gapBp": 67.3654,
+   "perpBp": 123.2723,
+   "adrBp": -57.7661,
+   "rBp": 32.7531,
+   "keeperRBps": 33,
+   "bandBps": 41,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-27",
+   "reopen": "2026-07-28",
+   "kind": "overnight",
+   "gapBp": 108.3519,
+   "perpBp": -3.8336,
+   "adrBp": 119.9675,
+   "rBp": 58.0669,
+   "keeperRBps": 58,
+   "bandBps": 54,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-27",
+   "reopen": "2026-07-28",
+   "kind": "overnight",
+   "gapBp": 181.3112,
+   "perpBp": 52.2102,
+   "adrBp": 94.7876,
+   "rBp": 73.4989,
+   "keeperRBps": 73,
+   "bandBps": 61,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-28",
+   "reopen": "2026-07-29",
+   "kind": "overnight",
+   "gapBp": 129.6956,
+   "perpBp": 101.636,
+   "adrBp": 117.7052,
+   "rBp": 109.6706,
+   "keeperRBps": 109,
+   "bandBps": 79,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-28",
+   "reopen": "2026-07-29",
+   "kind": "overnight",
+   "gapBp": 150.3761,
+   "perpBp": 358.4971,
+   "adrBp": 119.6537,
+   "rBp": 239.0754,
+   "keeperRBps": 238,
+   "bandBps": 144,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-29",
+   "reopen": "2026-07-30",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": 118.7877,
+   "adrBp": -47.7865,
+   "rBp": 35.5006,
+   "keeperRBps": 35,
+   "bandBps": 42,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-29",
+   "reopen": "2026-07-30",
+   "kind": "overnight",
+   "gapBp": 163.1124,
+   "perpBp": 311.9093,
+   "adrBp": -78.5739,
+   "rBp": 116.6677,
+   "keeperRBps": 116,
+   "bandBps": 83,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-30",
+   "reopen": "2026-07-31",
+   "kind": "overnight",
+   "gapBp": -38.1515,
+   "perpBp": 142.8451,
+   "adrBp": 64.2623,
+   "rBp": 103.5537,
+   "keeperRBps": 103,
+   "bandBps": 76,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-30",
+   "reopen": "2026-07-31",
+   "kind": "overnight",
+   "gapBp": -560.5675,
+   "perpBp": -385.1091,
+   "adrBp": -25.7295,
+   "rBp": -205.4193,
+   "keeperRBps": -205,
+   "bandBps": 127,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-07-31",
+   "reopen": "2026-08-03",
+   "kind": "weekend-holiday",
+   "gapBp": 143.0974,
+   "perpBp": 88.8208,
+   "adrBp": 138.5354,
+   "rBp": 113.6781,
+   "keeperRBps": 113,
+   "bandBps": 81,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-07-31",
+   "reopen": "2026-08-03",
+   "kind": "weekend-holiday",
+   "gapBp": -13.8989,
+   "perpBp": 83.8282,
+   "adrBp": -15.2819,
+   "rBp": 34.2731,
+   "keeperRBps": 34,
+   "bandBps": 42,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-03",
+   "reopen": "2026-08-04",
+   "kind": "overnight",
+   "gapBp": 12.235,
+   "perpBp": 165.5765,
+   "adrBp": 6.9434,
+   "rBp": 86.2599,
+   "keeperRBps": 85,
+   "bandBps": 67,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-03",
+   "reopen": "2026-08-04",
+   "kind": "overnight",
+   "gapBp": -35.7648,
+   "perpBp": 150.6456,
+   "adrBp": -32.2621,
+   "rBp": 59.1918,
+   "keeperRBps": 59,
+   "bandBps": 54,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-04",
+   "reopen": "2026-08-05",
+   "kind": "overnight",
+   "gapBp": 118.9497,
+   "perpBp": 139.6085,
+   "adrBp": 96.4427,
+   "rBp": 118.0256,
+   "keeperRBps": 117,
+   "bandBps": 83,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-04",
+   "reopen": "2026-08-05",
+   "kind": "overnight",
+   "gapBp": 14.3065,
+   "perpBp": -60.7577,
+   "adrBp": 18.0938,
+   "rBp": -21.3319,
+   "keeperRBps": -21,
+   "bandBps": 35,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-05",
+   "reopen": "2026-08-06",
+   "kind": "overnight",
+   "gapBp": -24.3806,
+   "perpBp": -77.0466,
+   "adrBp": -191.6737,
+   "rBp": -134.3602,
+   "keeperRBps": -134,
+   "bandBps": 92,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-05",
+   "reopen": "2026-08-06",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": 68.5179,
+   "adrBp": -58.2238,
+   "rBp": 5.147,
+   "keeperRBps": 5,
+   "bandBps": 27,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-06",
+   "reopen": "2026-08-07",
+   "kind": "overnight",
+   "gapBp": -4.1739,
+   "perpBp": 0,
+   "adrBp": -60.0254,
+   "rBp": -30.0127,
+   "keeperRBps": -30,
+   "bandBps": 40,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-06",
+   "reopen": "2026-08-07",
+   "kind": "overnight",
+   "gapBp": -74.4604,
+   "perpBp": 96.7982,
+   "adrBp": 39.1903,
+   "rBp": 67.9943,
+   "keeperRBps": 67,
+   "bandBps": 58,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-07",
+   "reopen": "2026-08-10",
+   "kind": "weekend-holiday",
+   "gapBp": 4.1774,
+   "perpBp": 96.4067,
+   "adrBp": 144.508,
+   "rBp": 120.4573,
+   "keeperRBps": 120,
+   "bandBps": 85,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-07",
+   "reopen": "2026-08-10",
+   "kind": "weekend-holiday",
+   "gapBp": 14.7823,
+   "perpBp": 55.4939,
+   "adrBp": 99.6087,
+   "rBp": 77.5513,
+   "keeperRBps": 77,
+   "bandBps": 63,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-10",
+   "reopen": "2026-08-11",
+   "kind": "overnight",
+   "gapBp": -4.1542,
+   "perpBp": -3.9331,
+   "adrBp": 25.6772,
+   "rBp": 10.8721,
+   "keeperRBps": 11,
+   "bandBps": 30,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-10",
+   "reopen": "2026-08-11",
+   "kind": "overnight",
+   "gapBp": -86.8942,
+   "perpBp": 61.5051,
+   "adrBp": -7.4663,
+   "rBp": 27.0194,
+   "keeperRBps": 27,
+   "bandBps": 38,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-11",
+   "reopen": "2026-08-12",
+   "kind": "overnight",
+   "gapBp": -80.6018,
+   "perpBp": -167.2241,
+   "adrBp": -89.2657,
+   "rBp": -128.2449,
+   "keeperRBps": -128,
+   "bandBps": 89,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-11",
+   "reopen": "2026-08-12",
+   "kind": "overnight",
+   "gapBp": -131.6904,
+   "perpBp": -25.2515,
+   "adrBp": -81.9551,
+   "rBp": -53.6033,
+   "keeperRBps": -53,
+   "bandBps": 51,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-11",
+   "reopen": "2026-08-12",
+   "kind": "overnight",
+   "gapBp": -75.019,
+   "perpBp": 0,
+   "adrBp": -47.9386,
+   "rBp": -23.9693,
+   "keeperRBps": -23,
+   "bandBps": 36,
+   "walkForwardBeta": null
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-12",
+   "reopen": "2026-08-13",
+   "kind": "overnight",
+   "gapBp": -114.5666,
+   "perpBp": -68.4346,
+   "adrBp": -73.2,
+   "rBp": -70.8173,
+   "keeperRBps": -70,
+   "bandBps": 60,
+   "walkForwardBeta": 0.82
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-12",
+   "reopen": "2026-08-13",
+   "kind": "overnight",
+   "gapBp": -329.2897,
+   "perpBp": -222.7147,
+   "adrBp": -433.3638,
+   "rBp": -328.0393,
+   "keeperRBps": -327,
+   "bandBps": 188,
+   "walkForwardBeta": 0.82
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-12",
+   "reopen": "2026-08-13",
+   "kind": "overnight",
+   "gapBp": -98.6344,
+   "perpBp": -64.4183,
+   "adrBp": -34.2265,
+   "rBp": -49.3224,
+   "keeperRBps": -49,
+   "bandBps": 49,
+   "walkForwardBeta": 0.82
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-13",
+   "reopen": "2026-08-14",
+   "kind": "overnight",
+   "gapBp": -136.9863,
+   "perpBp": -77.4527,
+   "adrBp": -261.9893,
+   "rBp": -169.721,
+   "keeperRBps": -169,
+   "bandBps": 109,
+   "walkForwardBeta": 0.82
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-13",
+   "reopen": "2026-08-14",
+   "kind": "overnight",
+   "gapBp": -113.3787,
+   "perpBp": -31.2309,
+   "adrBp": -166.3263,
+   "rBp": -98.7786,
+   "keeperRBps": -98,
+   "bandBps": 74,
+   "walkForwardBeta": 0.82
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-13",
+   "reopen": "2026-08-14",
+   "kind": "overnight",
+   "gapBp": -7.7274,
+   "perpBp": 42.2427,
+   "adrBp": -1.1212,
+   "rBp": 20.5607,
+   "keeperRBps": 20,
+   "bandBps": 35,
+   "walkForwardBeta": 0.82
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-14",
+   "reopen": "2026-08-17",
+   "kind": "weekend-holiday",
+   "gapBp": 0,
+   "perpBp": 17.9372,
+   "adrBp": 83.4722,
+   "rBp": 50.7047,
+   "keeperRBps": 50,
+   "bandBps": 50,
+   "walkForwardBeta": 0.81
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-14",
+   "reopen": "2026-08-17",
+   "kind": "weekend-holiday",
+   "gapBp": 109.0906,
+   "perpBp": 103.4154,
+   "adrBp": 76.5181,
+   "rBp": 89.9668,
+   "keeperRBps": 89,
+   "bandBps": 69,
+   "walkForwardBeta": 0.81
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-14",
+   "reopen": "2026-08-17",
+   "kind": "weekend-holiday",
+   "gapBp": 70.257,
+   "perpBp": 11.6822,
+   "adrBp": 77.0055,
+   "rBp": 44.3439,
+   "keeperRBps": 44,
+   "bandBps": 47,
+   "walkForwardBeta": 0.81
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-17",
+   "reopen": "2026-08-18",
+   "kind": "overnight",
+   "gapBp": -142.6127,
+   "perpBp": 178.2531,
+   "adrBp": -63.1127,
+   "rBp": 57.5702,
+   "keeperRBps": 57,
+   "bandBps": 53,
+   "walkForwardBeta": 0.81
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-17",
+   "reopen": "2026-08-18",
+   "kind": "overnight",
+   "gapBp": -49.2827,
+   "perpBp": 88.9008,
+   "adrBp": -21.2988,
+   "rBp": 33.801,
+   "keeperRBps": 33,
+   "bandBps": 41,
+   "walkForwardBeta": 0.81
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-17",
+   "reopen": "2026-08-18",
+   "kind": "overnight",
+   "gapBp": -146.8312,
+   "perpBp": 88.7688,
+   "adrBp": -25.0447,
+   "rBp": 31.8621,
+   "keeperRBps": 31,
+   "bandBps": 40,
+   "walkForwardBeta": 0.81
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-18",
+   "reopen": "2026-08-19",
+   "kind": "overnight",
+   "gapBp": 5.844,
+   "perpBp": -192.3077,
+   "adrBp": -28.7504,
+   "rBp": -110.5291,
+   "keeperRBps": -110,
+   "bandBps": 80,
+   "walkForwardBeta": 0.78
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-18",
+   "reopen": "2026-08-19",
+   "kind": "overnight",
+   "gapBp": -94.9363,
+   "perpBp": -124.1019,
+   "adrBp": -1.6732,
+   "rBp": -62.8876,
+   "keeperRBps": -62,
+   "bandBps": 56,
+   "walkForwardBeta": 0.78
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-18",
+   "reopen": "2026-08-19",
+   "kind": "overnight",
+   "gapBp": 297.9369,
+   "perpBp": -72.4914,
+   "adrBp": -298.3063,
+   "rBp": -185.3988,
+   "keeperRBps": -185,
+   "bandBps": 117,
+   "walkForwardBeta": 0.78
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-19",
+   "reopen": "2026-08-20",
+   "kind": "overnight",
+   "gapBp": 201.0339,
+   "perpBp": -80.573,
+   "adrBp": 96.3545,
+   "rBp": 7.8908,
+   "keeperRBps": 8,
+   "bandBps": 29,
+   "walkForwardBeta": 0.63
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-19",
+   "reopen": "2026-08-20",
+   "kind": "overnight",
+   "gapBp": 165.4739,
+   "perpBp": 129.7947,
+   "adrBp": 123.8581,
+   "rBp": 126.8264,
+   "keeperRBps": 126,
+   "bandBps": 88,
+   "walkForwardBeta": 0.63
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-19",
+   "reopen": "2026-08-20",
+   "kind": "overnight",
+   "gapBp": 123.9068,
+   "perpBp": 181.8843,
+   "adrBp": 101.9207,
+   "rBp": 141.9025,
+   "keeperRBps": 141,
+   "bandBps": 95,
+   "walkForwardBeta": 0.63
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-20",
+   "reopen": "2026-08-21",
+   "kind": "overnight",
+   "gapBp": -17.4725,
+   "perpBp": -82.1918,
+   "adrBp": -18.4585,
+   "rBp": -50.3251,
+   "keeperRBps": -50,
+   "bandBps": 50,
+   "walkForwardBeta": 0.64
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-20",
+   "reopen": "2026-08-21",
+   "kind": "overnight",
+   "gapBp": -8.8612,
+   "perpBp": 2.4235,
+   "adrBp": -70.5689,
+   "rBp": -34.0727,
+   "keeperRBps": -34,
+   "bandBps": 42,
+   "walkForwardBeta": 0.64
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-20",
+   "reopen": "2026-08-21",
+   "kind": "overnight",
+   "gapBp": 230.5473,
+   "perpBp": 200.8608,
+   "adrBp": -36.158,
+   "rBp": 82.3514,
+   "keeperRBps": 82,
+   "bandBps": 66,
+   "walkForwardBeta": 0.64
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-21",
+   "reopen": "2026-08-24",
+   "kind": "weekend-holiday",
+   "gapBp": -247.0586,
+   "perpBp": -147.8743,
+   "adrBp": -57.2486,
+   "rBp": -102.5614,
+   "keeperRBps": -102,
+   "bandBps": 76,
+   "walkForwardBeta": 0.66
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-21",
+   "reopen": "2026-08-24",
+   "kind": "weekend-holiday",
+   "gapBp": -153.1729,
+   "perpBp": -51.8997,
+   "adrBp": -33.4725,
+   "rBp": -42.6861,
+   "keeperRBps": -42,
+   "bandBps": 46,
+   "walkForwardBeta": 0.66
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-21",
+   "reopen": "2026-08-24",
+   "kind": "weekend-holiday",
+   "gapBp": -144.7278,
+   "perpBp": -10.3699,
+   "adrBp": -37.5497,
+   "rBp": -23.9598,
+   "keeperRBps": -23,
+   "bandBps": 36,
+   "walkForwardBeta": 0.66
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-24",
+   "reopen": "2026-08-25",
+   "kind": "overnight",
+   "gapBp": 24.1844,
+   "perpBp": 180.2657,
+   "adrBp": 52.5654,
+   "rBp": 116.4155,
+   "keeperRBps": 116,
+   "bandBps": 83,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-24",
+   "reopen": "2026-08-25",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": 3.6219,
+   "adrBp": 171.3621,
+   "rBp": 87.492,
+   "keeperRBps": 87,
+   "bandBps": 68,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-24",
+   "reopen": "2026-08-25",
+   "kind": "overnight",
+   "gapBp": 179.7268,
+   "perpBp": 193.6178,
+   "adrBp": 8.9285,
+   "rBp": 101.2732,
+   "keeperRBps": 100,
+   "bandBps": 75,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-25",
+   "reopen": "2026-08-26",
+   "kind": "overnight",
+   "gapBp": 129.5337,
+   "perpBp": 171.8908,
+   "adrBp": 84.2961,
+   "rBp": 128.0934,
+   "keeperRBps": 127,
+   "bandBps": 88,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-25",
+   "reopen": "2026-08-26",
+   "kind": "overnight",
+   "gapBp": 67.8733,
+   "perpBp": 70.4941,
+   "adrBp": 25.4832,
+   "rBp": 47.9887,
+   "keeperRBps": 47,
+   "bandBps": 48,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-25",
+   "reopen": "2026-08-26",
+   "kind": "overnight",
+   "gapBp": 86.4552,
+   "perpBp": 82.6446,
+   "adrBp": 37.771,
+   "rBp": 60.2078,
+   "keeperRBps": 59,
+   "bandBps": 54,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-26",
+   "reopen": "2026-08-27",
+   "kind": "overnight",
+   "gapBp": 57.655,
+   "perpBp": 109.671,
+   "adrBp": -38.0073,
+   "rBp": 35.8318,
+   "keeperRBps": 35,
+   "bandBps": 42,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-26",
+   "reopen": "2026-08-27",
+   "kind": "overnight",
+   "gapBp": 121.2392,
+   "perpBp": 24.5799,
+   "adrBp": -64.3078,
+   "rBp": -19.864,
+   "keeperRBps": -20,
+   "bandBps": 35,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-26",
+   "reopen": "2026-08-27",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": 38.475,
+   "adrBp": -112.9426,
+   "rBp": -37.2338,
+   "keeperRBps": -37,
+   "bandBps": 43,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-27",
+   "reopen": "2026-08-28",
+   "kind": "overnight",
+   "gapBp": -122.5803,
+   "perpBp": 50.5561,
+   "adrBp": -67.4822,
+   "rBp": -8.463,
+   "keeperRBps": -8,
+   "bandBps": 29,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-27",
+   "reopen": "2026-08-28",
+   "kind": "overnight",
+   "gapBp": -84.859,
+   "perpBp": 20.7677,
+   "adrBp": -41.3279,
+   "rBp": -10.2801,
+   "keeperRBps": -10,
+   "bandBps": 30,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-27",
+   "reopen": "2026-08-28",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": 58.2878,
+   "adrBp": -44.6094,
+   "rBp": 6.8392,
+   "keeperRBps": 7,
+   "bandBps": 28,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-28",
+   "reopen": "2026-08-31",
+   "kind": "weekend-holiday",
+   "gapBp": 251.6125,
+   "perpBp": 312.1853,
+   "adrBp": 119.2896,
+   "rBp": 215.7374,
+   "keeperRBps": 215,
+   "bandBps": 132,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-28",
+   "reopen": "2026-08-31",
+   "kind": "weekend-holiday",
+   "gapBp": -92.2674,
+   "perpBp": -66.1829,
+   "adrBp": -19.3062,
+   "rBp": -42.7446,
+   "keeperRBps": -42,
+   "bandBps": 46,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-28",
+   "reopen": "2026-08-31",
+   "kind": "weekend-holiday",
+   "gapBp": 21.567,
+   "perpBp": 32.2581,
+   "adrBp": 30.6133,
+   "rBp": 31.4357,
+   "keeperRBps": 31,
+   "bandBps": 40,
+   "walkForwardBeta": 0.69
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-08-31",
+   "reopen": "2026-09-01",
+   "kind": "overnight",
+   "gapBp": -76.0454,
+   "perpBp": 19.7433,
+   "adrBp": -73.6252,
+   "rBp": -26.9409,
+   "keeperRBps": -27,
+   "bandBps": 38,
+   "walkForwardBeta": 0.71
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-08-31",
+   "reopen": "2026-09-01",
+   "kind": "overnight",
+   "gapBp": -145.6955,
+   "perpBp": -116.0247,
+   "adrBp": -102.5324,
+   "rBp": -109.2785,
+   "keeperRBps": -109,
+   "bandBps": 79,
+   "walkForwardBeta": 0.71
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-08-31",
+   "reopen": "2026-09-01",
+   "kind": "overnight",
+   "gapBp": -36.2058,
+   "perpBp": 108.4599,
+   "adrBp": -88.1955,
+   "rBp": 10.1322,
+   "keeperRBps": 10,
+   "bandBps": 30,
+   "walkForwardBeta": 0.71
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-01",
+   "reopen": "2026-09-02",
+   "kind": "overnight",
+   "gapBp": -91.3248,
+   "perpBp": 0,
+   "adrBp": -115.725,
+   "rBp": -57.8625,
+   "keeperRBps": -57,
+   "bandBps": 53,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-01",
+   "reopen": "2026-09-02",
+   "kind": "overnight",
+   "gapBp": -54.3723,
+   "perpBp": -39.4704,
+   "adrBp": -38.8783,
+   "rBp": -39.1743,
+   "keeperRBps": -38,
+   "bandBps": 44,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-01",
+   "reopen": "2026-09-02",
+   "kind": "overnight",
+   "gapBp": -21.7705,
+   "perpBp": 72.3327,
+   "adrBp": -5.1179,
+   "rBp": 33.6074,
+   "keeperRBps": 33,
+   "bandBps": 41,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-02",
+   "reopen": "2026-09-03",
+   "kind": "overnight",
+   "gapBp": -6.3496,
+   "perpBp": 69.5134,
+   "adrBp": 36.0833,
+   "rBp": 52.7984,
+   "keeperRBps": 52,
+   "bandBps": 51,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-02",
+   "reopen": "2026-09-03",
+   "kind": "overnight",
+   "gapBp": 136.9238,
+   "perpBp": 98.3733,
+   "adrBp": 36.1547,
+   "rBp": 67.264,
+   "keeperRBps": 67,
+   "bandBps": 58,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-02",
+   "reopen": "2026-09-03",
+   "kind": "overnight",
+   "gapBp": 85.5309,
+   "perpBp": 67.6157,
+   "adrBp": 59.3318,
+   "rBp": 63.4737,
+   "keeperRBps": 63,
+   "bandBps": 56,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-03",
+   "reopen": "2026-09-04",
+   "kind": "overnight",
+   "gapBp": 135.2216,
+   "perpBp": 121.2121,
+   "adrBp": 93.5981,
+   "rBp": 107.4051,
+   "keeperRBps": 107,
+   "bandBps": 78,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-03",
+   "reopen": "2026-09-04",
+   "kind": "overnight",
+   "gapBp": 217.0899,
+   "perpBp": 169.3005,
+   "adrBp": 114.396,
+   "rBp": 141.8482,
+   "keeperRBps": 141,
+   "bandBps": 95,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-03",
+   "reopen": "2026-09-04",
+   "kind": "overnight",
+   "gapBp": 87.4635,
+   "perpBp": 112.9326,
+   "adrBp": 93.4877,
+   "rBp": 103.2101,
+   "keeperRBps": 102,
+   "bandBps": 76,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-04",
+   "reopen": "2026-09-07",
+   "kind": "weekend-holiday",
+   "gapBp": -30.581,
+   "perpBp": 57.6369,
+   "adrBp": -33.3699,
+   "rBp": 12.1335,
+   "keeperRBps": 12,
+   "bandBps": 31,
+   "walkForwardBeta": 0.74
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-04",
+   "reopen": "2026-09-07",
+   "kind": "weekend-holiday",
+   "gapBp": -49.6834,
+   "perpBp": 57.9677,
+   "adrBp": 21.3191,
+   "rBp": 39.6434,
+   "keeperRBps": 39,
+   "bandBps": 44,
+   "walkForwardBeta": 0.74
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-04",
+   "reopen": "2026-09-07",
+   "kind": "weekend-holiday",
+   "gapBp": -77.3563,
+   "perpBp": 137.8579,
+   "adrBp": -59.4089,
+   "rBp": 39.2245,
+   "keeperRBps": 39,
+   "bandBps": 44,
+   "walkForwardBeta": 0.74
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-07",
+   "reopen": "2026-09-08",
+   "kind": "overnight",
+   "gapBp": -81.1994,
+   "perpBp": 39.0625,
+   "adrBp": null,
+   "rBp": 39.0625,
+   "keeperRBps": 39,
+   "bandBps": 44,
+   "walkForwardBeta": 0.73
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-07",
+   "reopen": "2026-09-08",
+   "kind": "overnight",
+   "gapBp": -31.9342,
+   "perpBp": 14.9949,
+   "adrBp": null,
+   "rBp": 14.9949,
+   "keeperRBps": 14,
+   "bandBps": 32,
+   "walkForwardBeta": 0.73
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-07",
+   "reopen": "2026-09-08",
+   "kind": "overnight",
+   "gapBp": -87.2726,
+   "perpBp": 61.5942,
+   "adrBp": null,
+   "rBp": 61.5942,
+   "keeperRBps": 61,
+   "bandBps": 55,
+   "walkForwardBeta": 0.73
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-08",
+   "reopen": "2026-09-09",
+   "kind": "overnight",
+   "gapBp": -49.628,
+   "perpBp": -19.3986,
+   "adrBp": -39.6308,
+   "rBp": -29.5147,
+   "keeperRBps": -29,
+   "bandBps": 39,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-08",
+   "reopen": "2026-09-09",
+   "kind": "overnight",
+   "gapBp": 18.3743,
+   "perpBp": 54.5947,
+   "adrBp": -51.5737,
+   "rBp": 1.5105,
+   "keeperRBps": 1,
+   "bandBps": 25,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-08",
+   "reopen": "2026-09-09",
+   "kind": "overnight",
+   "gapBp": -81.7234,
+   "perpBp": -99.631,
+   "adrBp": -10.826,
+   "rBp": -55.2285,
+   "keeperRBps": -54,
+   "bandBps": 52,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-09",
+   "reopen": "2026-09-10",
+   "kind": "overnight",
+   "gapBp": -199.2292,
+   "perpBp": -90.4523,
+   "adrBp": -162.9738,
+   "rBp": -126.713,
+   "keeperRBps": -126,
+   "bandBps": 88,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-09",
+   "reopen": "2026-09-10",
+   "kind": "overnight",
+   "gapBp": -92.1659,
+   "perpBp": -99.0577,
+   "adrBp": -118.752,
+   "rBp": -108.9048,
+   "keeperRBps": -108,
+   "bandBps": 79,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-09",
+   "reopen": "2026-09-10",
+   "kind": "overnight",
+   "gapBp": -128.8849,
+   "perpBp": -45.489,
+   "adrBp": -161.094,
+   "rBp": -103.2915,
+   "keeperRBps": -103,
+   "bandBps": 76,
+   "walkForwardBeta": 0.72
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-10",
+   "reopen": "2026-09-11",
+   "kind": "overnight",
+   "gapBp": -100.3344,
+   "perpBp": -83.5073,
+   "adrBp": -112.0087,
+   "rBp": -97.758,
+   "keeperRBps": -97,
+   "bandBps": 73,
+   "walkForwardBeta": 0.73
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-10",
+   "reopen": "2026-09-11",
+   "kind": "overnight",
+   "gapBp": -145.677,
+   "perpBp": -97.5107,
+   "adrBp": -88.5355,
+   "rBp": -93.0231,
+   "keeperRBps": -92,
+   "bandBps": 71,
+   "walkForwardBeta": 0.73
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-10",
+   "reopen": "2026-09-11",
+   "kind": "overnight",
+   "gapBp": -100.3087,
+   "perpBp": -53.9707,
+   "adrBp": -64.1265,
+   "rBp": -59.0486,
+   "keeperRBps": -58,
+   "bandBps": 54,
+   "walkForwardBeta": 0.73
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-11",
+   "reopen": "2026-09-14",
+   "kind": "weekend-holiday",
+   "gapBp": -126.4976,
+   "perpBp": -135.2758,
+   "adrBp": -54.9491,
+   "rBp": -95.1124,
+   "keeperRBps": -94,
+   "bandBps": 72,
+   "walkForwardBeta": 0.74
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-11",
+   "reopen": "2026-09-14",
+   "kind": "weekend-holiday",
+   "gapBp": -107.3764,
+   "perpBp": -86.6587,
+   "adrBp": -35.6122,
+   "rBp": -61.1355,
+   "keeperRBps": -60,
+   "bandBps": 55,
+   "walkForwardBeta": 0.74
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-11",
+   "reopen": "2026-09-14",
+   "kind": "weekend-holiday",
+   "gapBp": 22.7616,
+   "perpBp": 22.7618,
+   "adrBp": -70.6024,
+   "rBp": -23.9203,
+   "keeperRBps": -24,
+   "bandBps": 37,
+   "walkForwardBeta": 0.74
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-14",
+   "reopen": "2026-09-15",
+   "kind": "overnight",
+   "gapBp": 126.5819,
+   "perpBp": 52.0833,
+   "adrBp": 31.0854,
+   "rBp": 41.5844,
+   "keeperRBps": 41,
+   "bandBps": 45,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-14",
+   "reopen": "2026-09-15",
+   "kind": "overnight",
+   "gapBp": -60.381,
+   "perpBp": -44.4362,
+   "adrBp": 52.9251,
+   "rBp": 4.2444,
+   "keeperRBps": 4,
+   "bandBps": 27,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-14",
+   "reopen": "2026-09-15",
+   "kind": "overnight",
+   "gapBp": -14.7272,
+   "perpBp": -14.7113,
+   "adrBp": 36.3865,
+   "rBp": 10.8376,
+   "keeperRBps": 11,
+   "bandBps": 30,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-15",
+   "reopen": "2026-09-16",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": -93.6524,
+   "adrBp": 20.2819,
+   "rBp": -36.6853,
+   "keeperRBps": -36,
+   "bandBps": 43,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-15",
+   "reopen": "2026-09-16",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": -40.7606,
+   "adrBp": -28.1091,
+   "rBp": -34.4348,
+   "keeperRBps": -34,
+   "bandBps": 42,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-15",
+   "reopen": "2026-09-16",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": -109.0226,
+   "adrBp": -2.2675,
+   "rBp": -55.645,
+   "keeperRBps": -55,
+   "bandBps": 52,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-16",
+   "reopen": "2026-09-17",
+   "kind": "overnight",
+   "gapBp": -188.0449,
+   "perpBp": -73.6842,
+   "adrBp": -116.667,
+   "rBp": -95.1756,
+   "keeperRBps": -94,
+   "bandBps": 72,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-16",
+   "reopen": "2026-09-17",
+   "kind": "overnight",
+   "gapBp": -166.1279,
+   "perpBp": -75.0374,
+   "adrBp": -142.7902,
+   "rBp": -108.9138,
+   "keeperRBps": -108,
+   "bandBps": 79,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-16",
+   "reopen": "2026-09-17",
+   "kind": "overnight",
+   "gapBp": -183.3459,
+   "perpBp": -45.7143,
+   "adrBp": -111.9748,
+   "rBp": -78.8446,
+   "keeperRBps": -78,
+   "bandBps": 64,
+   "walkForwardBeta": 0.75
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-17",
+   "reopen": "2026-09-18",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": 42.9646,
+   "adrBp": -68.4701,
+   "rBp": -12.7528,
+   "keeperRBps": -13,
+   "bandBps": 31,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-17",
+   "reopen": "2026-09-18",
+   "kind": "overnight",
+   "gapBp": 46.9484,
+   "perpBp": 71.1644,
+   "adrBp": 35.2666,
+   "rBp": 53.2155,
+   "keeperRBps": 53,
+   "bandBps": 51,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-17",
+   "reopen": "2026-09-18",
+   "kind": "overnight",
+   "gapBp": 7.6513,
+   "perpBp": 106.8702,
+   "adrBp": -25.3543,
+   "rBp": 40.7579,
+   "keeperRBps": 40,
+   "bandBps": 45,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-18",
+   "reopen": "2026-09-21",
+   "kind": "weekend-holiday",
+   "gapBp": -54.644,
+   "perpBp": 21.3904,
+   "adrBp": -26.4883,
+   "rBp": -2.549,
+   "keeperRBps": -2,
+   "bandBps": 26,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-18",
+   "reopen": "2026-09-21",
+   "kind": "weekend-holiday",
+   "gapBp": 133.6517,
+   "perpBp": 66.5687,
+   "adrBp": 92.9362,
+   "rBp": 79.7525,
+   "keeperRBps": 79,
+   "bandBps": 64,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-18",
+   "reopen": "2026-09-21",
+   "kind": "weekend-holiday",
+   "gapBp": 0,
+   "perpBp": 106.5449,
+   "adrBp": -67.8042,
+   "rBp": 19.3704,
+   "keeperRBps": 19,
+   "bandBps": 34,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wMEITx",
+   "cut": "2026-09-21",
+   "reopen": "2026-09-22",
+   "kind": "overnight",
+   "gapBp": 0,
+   "perpBp": 116.7728,
+   "adrBp": 33.8337,
+   "rBp": 75.3033,
+   "keeperRBps": 74,
+   "bandBps": 62,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wTCENTx",
+   "cut": "2026-09-21",
+   "reopen": "2026-09-22",
+   "kind": "overnight",
+   "gapBp": 297.6741,
+   "perpBp": 215.9526,
+   "adrBp": 189.0268,
+   "rBp": 202.4897,
+   "keeperRBps": 202,
+   "bandBps": 126,
+   "walkForwardBeta": 0.77
+  },
+  {
+   "asset": "wXIAOx",
+   "cut": "2026-09-21",
+   "reopen": "2026-09-22",
+   "kind": "overnight",
+   "gapBp": 145.0325,
+   "perpBp": 222.1413,
+   "adrBp": 46.2603,
+   "rBp": 134.2008,
+   "keeperRBps": 134,
+   "bandBps": 92,
+   "walkForwardBeta": 0.77
+  }
+ ]
+}

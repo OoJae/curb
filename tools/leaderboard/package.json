@@ -1,0 +1,11 @@
+{
+  "name": "@curb/leaderboard-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fit": "node ../research/hk-closures/fit.mjs",
+    "build": "node --experimental-strip-types build.ts",
+    "test": "node --test --experimental-strip-types '*.test.ts'",
+    "check": "tsc --noEmit"
+  }
+}

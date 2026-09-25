@@ -130,6 +130,90 @@
         </div>
       </section>
 
+      <section class="wrap section sc-bench" aria-labelledby="sc-bench-title">
+        <div class="grid">
+          <div class="col-ledger">
+            <h2 id="sc-bench-title" class="t-h2">Benchmarks</h2>
+            <p class="t-body measure sc-bench__lede">Two records, kept apart. The first is Scorecard's own, on chain, and it grows at every reopen. The second is a historical backtest: mark/2 against the Hong Kong official open on closures before the first row. Nothing in the backtest is on chain.</p>
+          </div>
+        </div>
+
+        <div class="sc-bench__block">
+          <h3 id="sc-bench-live-title" class="t-h3">On chain, by method</h3>
+          <table class="table sc-bench__table sc-bench__table--live">
+            <caption data-sc-bench-live-caption>Scorecard rows by mark method, graded against the last print. Errors are the contract's own, in basis points of the reopen print.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Method</th>
+                <th scope="col" class="num">Settled</th>
+                <th scope="col" class="num">Wins</th>
+                <th scope="col" class="num">Ties</th>
+                <th scope="col" class="num">Losses</th>
+                <th scope="col" class="num">Mark moved off last print</th>
+                <th scope="col" class="num">Mean error, Curb (bp)</th>
+                <th scope="col" class="num">Mean error, last print (bp)</th>
+                <th scope="col" class="num">Band held</th>
+              </tr>
+            </thead>
+            <tbody data-sc-bench-live>
+              <tr class="sc-bench__empty"><td colspan="9" class="muted">Reading the record…</td></tr>
+            </tbody>
+          </table>
+          <p class="t-data muted sc-bench__asof" data-sc-bench-live-asof>&nbsp;</p>
+          <p class="t-body measure sc-bench__band" data-sc-band>&nbsp;</p>
+        </div>
+
+        <div class="sc-bench__block">
+          <h3 id="sc-bench-wf-title" class="t-h3">Backtest, walk-forward (out of sample)</h3>
+          <p class="t-small muted measure" data-sc-bench-wf-note>&nbsp;</p>
+          <table class="table sc-bench__table">
+            <caption data-sc-bench-wf-caption>Historical backtest, walk-forward.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Asset</th>
+                <th scope="col" class="num">Closures</th>
+                <th scope="col" class="num">Last close (bp)</th>
+                <th scope="col" class="num">Perp alone (bp)</th>
+                <th scope="col" class="num">ADR alone (bp)</th>
+                <th scope="col" class="num">mark/2 (bp)</th>
+                <th scope="col" class="num">mark/2 beat last close</th>
+                <th scope="col" class="num">mark/2 direction right</th>
+              </tr>
+            </thead>
+            <tbody data-sc-bench-wf>
+              <tr class="sc-bench__empty"><td colspan="8" class="muted">Reading the backtest…</td></tr>
+            </tbody>
+          </table>
+          <p class="t-small muted measure sc-bench__q" data-sc-bench-wf-q>&nbsp;</p>
+        </div>
+
+        <div class="sc-bench__block">
+          <h3 id="sc-bench-is-title" class="t-h3">Backtest, in-sample</h3>
+          <p class="t-small muted measure" data-sc-bench-is-note>&nbsp;</p>
+          <table class="table sc-bench__table">
+            <caption data-sc-bench-is-caption>Historical backtest, in-sample.</caption>
+            <thead>
+              <tr>
+                <th scope="col">Asset</th>
+                <th scope="col" class="num">Closures</th>
+                <th scope="col" class="num">Last close (bp)</th>
+                <th scope="col" class="num">Perp alone (bp)</th>
+                <th scope="col" class="num">ADR alone (bp)</th>
+                <th scope="col" class="num">mark/2 (bp)</th>
+                <th scope="col" class="num">mark/2 beat last close</th>
+                <th scope="col" class="num">mark/2 direction right</th>
+              </tr>
+            </thead>
+            <tbody data-sc-bench-is>
+              <tr class="sc-bench__empty"><td colspan="8" class="muted">Reading the backtest…</td></tr>
+            </tbody>
+          </table>
+          <p class="t-small muted measure sc-bench__q" data-sc-bench-is-q>&nbsp;</p>
+        </div>
+
+        <p class="t-small muted measure sc-bench__src" data-sc-bench-src>&nbsp;</p>
+      </section>
+
       <section class="wrap section sc-verify grid" aria-labelledby="sc-verify-title">
         <div class="col-ledger">
           <h2 id="sc-verify-title" class="t-h2">Verify a row</h2>
