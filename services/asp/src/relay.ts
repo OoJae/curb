@@ -19,6 +19,15 @@
  * other parameter. That keeps the upstream URL canonical (one request, one URL a verifier can rebuild), and
  * keeps this from being an open proxy onto Binance. A global budget of upstream fetches per rolling minute
  * (cache hits are free) keeps a flood of distinct requests from spending this IP's Binance rate limit.
+ *
+ * Inside that budget, each client (http/client.ts: Railway's X-Real-IP, IPv6 by /64) gets its own, smaller
+ * one. Without it, one caller asking for distinct past minutes at ~5 a second spends the whole global budget,
+ * and the keeper's single, unretried fetch at its commit minute gets the 503. The keeper asks for two
+ * minutes per closure it marks (services/keeper/src/sources/signalFetch.ts: the cut minute and the commit
+ * minute, limit=1), and only three names have a perp proxy (mark.ts SIGNAL_PROXIES), so at most six in one
+ * round: a per-client budget of 30 never touches it, and draining the global 300 now takes ten separate
+ * addresses rather than one. A refusal names the per-client limit and when a slot frees. Requests with no
+ * client key are held by the global budget alone.
  */
 import { createHash } from "node:crypto";
 import type { ServerResponse } from "node:http";
@@ -57,6 +66,8 @@ export interface BinanceRelayOptions {
   maxCache?: number;
   /** Upstream fetches allowed per rolling 60 s; cache hits do not count. Default 300. */
   maxPerMinute?: number;
+  /** Upstream fetches one client may cause per rolling 60 s, inside maxPerMinute; 0 turns it off. Default 30. */
+  maxPerClientPerMinute?: number;
   /** A row is cacheable once its closeTime is this far in the past. Default 5000 ms. */
   cacheAfterCloseMs?: number;
   log?: Log;
@@ -69,8 +80,11 @@ export interface RelayResponse {
 }
 
 export interface BinanceRelay {
-  /** Never rejects: every outcome, including an unexpected error, is a response. */
-  handle(query: URLSearchParams): Promise<RelayResponse>;
+  /**
+   * Never rejects: every outcome, including an unexpected error, is a response. `client` is the caller's
+   * key (http/client.ts); null or absent, only the global budget applies.
+   */
+  handle(query: URLSearchParams, client?: string | null): Promise<RelayResponse>;
 }
 
 type KlinesQuery = { ok: true; symbol: string; startTime: number; limit: number };
@@ -134,14 +148,18 @@ export function createBinanceRelay(opts: BinanceRelayOptions = {}): BinanceRelay
   const base = opts.upstreamBase ?? BINANCE_FAPI_BASE;
   const maxCache = opts.maxCache ?? 2_000;
   const maxPerMinute = opts.maxPerMinute ?? 300;
+  const maxPerClient = opts.maxPerClientPerMinute ?? 30;
   const afterCloseMs = opts.cacheAfterCloseMs ?? CACHE_AFTER_CLOSE_MS;
   const log = opts.log ?? silentLog;
   const noteUpstream = throttledLog(log, "relay-upstream-error", 60_000, now);
   const noteBusy = throttledLog(log, "relay-busy", 60_000, now);
+  const noteClientBusy = throttledLog(log, "relay-client-busy", 60_000, now);
   const noteError = throttledLog(log, "relay-error", 60_000, now);
 
   const cache = new Map<string, { bytes: Uint8Array; sha256: string }>();
   const fetchedAt: number[] = [];
+  /** Per client, the times of the upstream fetches it caused in the last minute, oldest first. */
+  const byClient = new Map<string, number[]>();
 
   /** One upstream fetch from the rolling-minute budget, or false when it is spent. */
   function takeBudget(nowMs: number): boolean {
@@ -149,6 +167,25 @@ export function createBinanceRelay(opts: BinanceRelayOptions = {}): BinanceRelay
     if (fetchedAt.length >= maxPerMinute) return false;
     fetchedAt.push(nowMs);
     return true;
+  }
+
+  /** This client's fetches still inside the rolling minute (pruned in place). */
+  function clientWindow(client: string, nowMs: number): number[] {
+    const times = byClient.get(client) ?? [];
+    while (times.length > 0 && times[0] <= nowMs - MINUTE_MS) times.shift();
+    return times;
+  }
+
+  /**
+   * Record a fetch this client caused. Only fetches the global budget granted are recorded, so live entries
+   * never outnumber maxPerMinute; the sweep drops clients whose last fetch has aged out.
+   */
+  function noteClientFetch(client: string, times: number[], nowMs: number): void {
+    times.push(nowMs);
+    if (!byClient.has(client)) byClient.set(client, times);
+    if (byClient.size > 4 * maxPerMinute) {
+      for (const [k, t] of byClient) if (t.length === 0 || t[t.length - 1] <= nowMs - MINUTE_MS) byClient.delete(k);
+    }
   }
 
   /** The raw exchange, bounded by timeoutMs even if the fetch implementation ignores its signal. */
@@ -178,7 +215,16 @@ export function createBinanceRelay(opts: BinanceRelayOptions = {}): BinanceRelay
     }
   }
 
-  async function handle(query: URLSearchParams): Promise<RelayResponse> {
+  async function handle(query: URLSearchParams, client: string | null = null): Promise<RelayResponse> {
+    const r = await answer(query, client);
+    // Which key the limit was applied to, so anyone can check from outside that it is their own address (a
+    // refused query is a free way to see it). Never on a publicly cacheable answer: a shared cache must not
+    // hand one caller's address to the next.
+    if (client !== null && !/\bpublic\b/.test(r.headers["cache-control"] ?? "")) r.headers["x-curb-relay-client"] = client;
+    return r;
+  }
+
+  async function answer(query: URLSearchParams, client: string | null): Promise<RelayResponse> {
     try {
       const q = parseKlinesQuery(query);
       if (!q.ok) return jsonResponse(400, q.body);
@@ -201,10 +247,19 @@ export function createBinanceRelay(opts: BinanceRelayOptions = {}): BinanceRelay
       const hit = cache.get(url);
       if (hit) return { status: 200, headers: evidence(hit.sha256, "hit", true), body: hit.bytes };
 
+      // The client's own budget first, so a client over it never spends a global slot.
+      const mine = client !== null && maxPerClient > 0 ? clientWindow(client, nowMs) : null;
+      if (mine && mine.length >= maxPerClient) {
+        const retryAfterS = Math.max(1, Math.ceil((mine[0] + MINUTE_MS - nowMs) / 1000));
+        noteClientBusy({ client, maxPerClientPerMinute: maxPerClient });
+        return jsonResponse(503, { error: "relay-client-busy", maxPerClientPerMinute: maxPerClient, retryAfterS },
+          { "retry-after": String(retryAfterS) });
+      }
       if (!takeBudget(nowMs)) {
         noteBusy({ maxPerMinute });
         return jsonResponse(503, { error: "relay-busy", maxPerMinute }, { "retry-after": "5" });
       }
+      if (mine) noteClientFetch(client!, mine, nowMs);
       const up = await fetchUpstream(url);
       if (!up.ok) {
         noteUpstream({ upstreamUrl: url, upstreamStatus: 0, reason: up.error });
@@ -239,7 +294,7 @@ export function createBinanceRelay(opts: BinanceRelayOptions = {}): BinanceRelay
 }
 
 /** app.ts's dispatch: the relay's answer onto the socket, through the same `send` as every other route. */
-export async function serveRelay(res: ServerResponse, relay: BinanceRelay, query: URLSearchParams): Promise<void> {
-  const r = await relay.handle(query);
+export async function serveRelay(res: ServerResponse, relay: BinanceRelay, query: URLSearchParams, client: string | null = null): Promise<void> {
+  const r = await relay.handle(query, client);
   send(res, r.status, r.body, r.headers);
 }

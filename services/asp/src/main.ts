@@ -45,6 +45,7 @@ import type { Network } from "@okxweb3/x402-core/types";
 
 import { createApp } from "./app.ts";
 import type { AppState } from "./app.ts";
+import { createBinanceRelay } from "./relay.ts";
 import { calendarHandler } from "./calendarRoute.ts";
 import { recordHandler, curveHandler } from "./scorecardRoutes.ts";
 import { ScorecardIndex, rpcChain } from "./index/scorecard.ts";
@@ -132,6 +133,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     regimeIndexConcurrency: num("REGIME_INDEX_CONCURRENCY", get("REGIME_INDEX_CONCURRENCY", "4"), 1, 8),
     /** Full sweeps of the issuer's corporate-actions history. Each is ~8 requests. */
     corporateActionsSweepMs: num("CORPORATE_ACTIONS_SWEEP_MS", get("CORPORATE_ACTIONS_SWEEP_MS", "1800000"), 300_000, 86_400_000),
+    /** Binance relay: upstream fetches one client may cause per minute, inside the global 300 (relay.ts). 0 turns it off. */
+    relayMaxPerClientPerMinute: num("RELAY_MAX_PER_CLIENT_PER_MINUTE", get("RELAY_MAX_PER_CLIENT_PER_MINUTE", "30"), 0, 300),
   };
   if (cfg.rpcs.length === 0) errors.push("RPCS is empty");
   if (get("CLOCK", DEFAULT_CLOCK) === "") errors.push("CLOCK is required");
@@ -281,10 +284,18 @@ async function main() {
     handlers.set("GET /v1/accuracy-record", recordHandler(deps));
     handlers.set("GET /v1/discount-curve", curveHandler(deps));
   }
+  // The payment pre-check's one chain read (pay/precheck.ts). Anything but a hex answer throws, and a throw
+  // sends the payment on to the Broker.
+  const payerHasCode = async (address: string): Promise<boolean> => {
+    const code = await rpcAny<unknown>(cfg.rpcs, "eth_getCode", [address, "latest"], 2_000);
+    if (typeof code !== "string" || !/^0x[0-9a-fA-F]*$/.test(code)) throw new Error("eth_getCode did not return hex");
+    return code.length > 2;
+  };
   const payments = new Payments({
     network: cfg.network, payTo: cfg.payTo, okx: cfg.okx, syncSettle: cfg.syncSettle,
     publicUrl: cfg.publicUrl, handlers, now, log, brokerDeadlines: { settleMs: cfg.okxSettleTimeoutMs },
     confirmSettlementTx: cfg.payTo ? makeChainConfirm((m, p) => rpcAny(cfg.rpcs, m, p), USDT0.address, cfg.payTo) : undefined,
+    payerHasCode,
   });
   // The payment ledger, and what a previous process left mid-settle. Chain reads get a shorter per-endpoint
   // timeout than the tick's: a paid request may be waiting on them.
@@ -295,11 +306,12 @@ async function main() {
     state, venues, payments, handlers, dataDir: cfg.dataDir, publicUrl: cfg.publicUrl, tickMs: cfg.tickMs,
     contracts: { chainId: cfg.chainId, clock: cfg.clock, scorecard: cfg.scorecard }, now, log,
     scorecard, closures, corporateActions, ledger, authChain,
+    relay: createBinanceRelay({ now, log, maxPerClientPerMinute: cfg.relayMaxPerClientPerMinute }),
   }), cfg.port, log);
   log("boot", {
     clock: cfg.clock, scorecard: cfg.scorecard, network: cfg.network, publicUrl: cfg.publicUrl,
     paymentsConfigured: payments.configured, payTo: cfg.payTo, syncSettle: cfg.syncSettle,
-    regimeIndex: closures.status(),
+    regimeIndex: closures.status(), relayMaxPerClientPerMinute: cfg.relayMaxPerClientPerMinute,
   });
   // Detached on purpose: the backfill takes the better part of an hour on a fresh volume, and nothing may wait on it.
   void closures.run();

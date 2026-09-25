@@ -32,6 +32,15 @@ test("an empty environment is a valid config with payments off, not an error", (
   assert.deepEqual(paymentIssues, ["PAY_TO is unset", "OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE unset"]);
 });
 
+test("the relay's per-client budget defaults to 30 a minute, can be switched off with 0, and cannot exceed the global 300", () => {
+  assert.equal(loadConfig({}).cfg.relayMaxPerClientPerMinute, 30);
+  assert.equal(loadConfig({ RELAY_MAX_PER_CLIENT_PER_MINUTE: "0" }).cfg.relayMaxPerClientPerMinute, 0);
+  assert.equal(loadConfig({ RELAY_MAX_PER_CLIENT_PER_MINUTE: "60" }).cfg.relayMaxPerClientPerMinute, 60);
+  for (const bad of ["-1", "301", "lots"]) {
+    assert.ok(loadConfig({ RELAY_MAX_PER_CLIENT_PER_MINUTE: bad }).errors.some((e) => e.startsWith("RELAY_MAX_PER_CLIENT_PER_MINUTE must be in [0,300]")), bad);
+  }
+});
+
 test("the settle deadline is bounded: long enough for a sync settle to mine, short enough not to hold a buyer for minutes", () => {
   assert.equal(loadConfig({ OKX_SETTLE_TIMEOUT_MS: "45000" }).cfg.okxSettleTimeoutMs, 45_000);
   for (const bad of ["4999", "120001", "soon"]) {

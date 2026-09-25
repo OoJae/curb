@@ -13,10 +13,12 @@ import { mkdtempSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { getAddress, toBeHex, zeroPadValue } from "ethers";
+import { Wallet, getAddress, toBeHex, zeroPadValue } from "ethers";
+import { privateKeyToAccount } from "viem/accounts";
 import { decodePaymentRequiredHeader, decodePaymentResponseHeader, decodePaymentSignatureHeader, encodePaymentSignatureHeader } from "@okxweb3/x402-core/http";
 import type { FacilitatorClient } from "@okxweb3/x402-core/server";
 import type { PaymentPayload, PaymentRequired, SettleResponse, SupportedResponse, VerifyResponse } from "@okxweb3/x402-core/types";
+import { ExactEvmScheme as ExactEvmClient } from "@okxweb3/x402-evm/exact/client";
 
 import { createApp } from "./app.ts";
 import type { AppState } from "./app.ts";
@@ -34,6 +36,7 @@ import { AUTHORIZATION_USED, TRANSFER, authorizationKey, settlementScope } from 
 import type { AuthorizationChain, SettlementExpectation } from "./pay/authorization.ts";
 import { AuthorizationLedger, PENDING_SCHEMA } from "./pay/ledger.ts";
 import { payloadDigestOf, receiptIdOf } from "./pay/receipt.ts";
+import { PRECHECK_REASONS } from "./pay/precheck.ts";
 import { silentLog } from "./log.ts";
 import type { Log } from "./log.ts";
 import { recordHandler, curveHandler } from "./scorecardRoutes.ts";
@@ -114,6 +117,8 @@ interface HarnessOptions {
   /** Wires the settlement-timeout hook (makeChainConfirm) to this receipt source. */
   confirmRpc?: (method: string, params: unknown[]) => Promise<unknown>;
   closures?: { status(): ClosureIndexStatus };
+  /** The pre-check's eth_getCode (pay/precheck.ts); left out, its signature rule is off, as without a chain. */
+  payerHasCode?: (address: string) => Promise<boolean>;
 }
 
 async function harness(o: HarnessOptions = {}) {
@@ -137,6 +142,7 @@ async function harness(o: HarnessOptions = {}) {
     // Short, so a silent Broker costs a test a fraction of a second instead of the production 10-30 s.
     brokerDeadlines: { supportedMs: 300, verifyMs: 300, settleMs: 2_000, statusMs: 100, ...o.deadlines },
     confirmSettlementTx: o.confirmRpc ? makeChainConfirm(o.confirmRpc, USDT0.address, PAY_TO) : undefined,
+    payerHasCode: o.payerHasCode,
   });
   await payments.ensureReady();
   // As main.ts does: the ledger is built, and whatever a previous process left pending is loaded.
@@ -636,4 +642,83 @@ test("FIXED: junk PAYMENT-SIGNATURE headers print no stack traces, cost one stru
   assert.equal(warned, 0, "the SDK never saw a header it could not decode");
   assert.equal(events.filter((e) => e === "payment-header-undecodable").length, 1);
   assert.ok(!h.broker.events.includes("verify"));
+});
+
+const EIP3009_TYPES = {
+  TransferWithAuthorization: [
+    { name: "from", type: "address" }, { name: "to", type: "address" }, { name: "value", type: "uint256" },
+    { name: "validAfter", type: "uint256" }, { name: "validBefore", type: "uint256" }, { name: "nonce", type: "bytes32" },
+  ],
+};
+
+test("FIXED: an authorization that cannot succeed never reaches the Broker: a 402 with the challenge and the reason, and the payment is not consumed", async () => {
+  const lookups: string[] = [];
+  // The chain as the pre-check asks it: BUYER is a plain account with no code.
+  const h = await harness({ payerHasCode: async (a) => { lookups.push(a); return false; } });
+  try {
+    const pr = await challengeFor(h.base, "/v1/closure-calendar", "symbol=wTCENTx");
+    const accepted = pr.accepts[0];
+    const nowS = Math.floor(T0 / 1000);
+    const header = (auth: Record<string, unknown>, signature = "0x" + "5e".repeat(65)) => encodePaymentSignatureHeader({
+      x402Version: 2, resource: pr.resource, accepted,
+      payload: { signature, authorization: { from: BUYER, to: accepted.payTo, value: accepted.amount, validAfter: "0", validBefore: String(nowS + 300), nonce: NONCE, ...auth } },
+    });
+    // A made-up authorization, validly signed -- by someone who is not BUYER.
+    const forgedAuth = { from: BUYER, to: accepted.payTo, value: accepted.amount, validAfter: "0", validBefore: String(nowS + 300), nonce: NONCE };
+    const forgedSig = await new Wallet("0x" + "5c".repeat(32)).signTypedData(
+      { name: accepted.extra.name as string, version: accepted.extra.version as string, chainId: 196, verifyingContract: USDT0.address }, EIP3009_TYPES, forgedAuth);
+    const cases: Array<[string, string, string]> = [
+      ["paid to someone else", header({ to: "0x3333333333333333333333333333333333333333" }), PRECHECK_REASONS.recipient],
+      ["one unit short", header({ value: String(BigInt(accepted.amount) - 1n) }), PRECHECK_REASONS.value],
+      ["expired", header({ validBefore: String(nowS - 1) }), PRECHECK_REASONS.validBefore],
+      ["not valid for an hour", header({ validAfter: String(nowS + 3_600) }), PRECHECK_REASONS.validAfter],
+      ["signed by someone else", header({}, forgedSig), PRECHECK_REASONS.signature],
+    ];
+    for (const [why, sig, reason] of cases) {
+      const r = await fetch(`${h.base}/v1/closure-calendar?symbol=wTCENTx`, { headers: { ...API, "payment-signature": sig } });
+      assert.equal(r.status, 402, why);
+      const challenge = decodePaymentRequiredHeader(r.headers.get("payment-required")!);
+      assert.equal(challenge.error, reason, `${why}: the SDK's own 402, naming the reason`);
+      assert.deepEqual(challenge.accepts[0], accepted, `${why}: with the terms to sign again`);
+      const body = await r.json();
+      assert.equal(body.error, "payment-invalid", why);
+      assert.equal(body.reason, reason, why);
+      assert.equal(typeof body.detail, "string", why);
+      assert.equal(h.ledger.lookup(authorizationKey({ payer: BUYER, nonce: NONCE })).state, "free", `${why}: nothing recorded`);
+    }
+    assert.deepEqual(lookups, [BUYER], "one chain read, for the forged signature only");
+    assert.ok(!h.broker.events.includes("verify") && !h.broker.events.includes("settle"), "the Broker was never asked");
+    assert.deepEqual(h.receipts(), []);
+
+    // A payment exactly as the SDK's client signs one (a viem account) goes through untouched.
+    const buyer = privateKeyToAccount(("0x" + "4b".repeat(32)) as `0x${string}`);
+    const realNow = Date.now;
+    Date.now = () => T0;   // the client reads the clock for validAfter/validBefore; this harness lives at T0
+    let signed: Awaited<ReturnType<ExactEvmClient["createPaymentPayload"]>>;
+    try { signed = await new ExactEvmClient(buyer).createPaymentPayload(2, accepted); } finally { Date.now = realNow; }
+    const honest = encodePaymentSignatureHeader({ x402Version: 2, resource: pr.resource, accepted, payload: signed.payload });
+    const ok = await fetch(`${h.base}/v1/closure-calendar?symbol=wTCENTx`, { headers: { ...API, "payment-signature": honest } });
+    assert.equal(ok.status, 200);
+    assert.equal(JSON.parse(Buffer.from(await ok.arrayBuffer()).toString("utf8")).schema, "curb.asp.calendar/1");
+    assert.deepEqual(h.broker.events.filter((e) => e === "verify" || e === "settle"), ["verify", "settle"]);
+    assert.deepEqual(lookups, [BUYER], "an honest signature recovers to its payer: no chain read");
+  } finally { await h.close(); }
+});
+
+test("FIXED: a payer with code (a smart account, or an EIP-7702 account like the OKX Agentic Wallet) is never judged on its signature here", async () => {
+  const h = await harness({ payerHasCode: async () => true });
+  try {
+    const pr = await challengeFor(h.base, "/v1/closure-calendar", "symbol=wTCENTx");
+    const accepted = pr.accepts[0];
+    const auth = { from: BUYER, to: accepted.payTo, value: accepted.amount, validAfter: "0", validBefore: String(Math.floor(T0 / 1000) + 300), nonce: NONCE };
+    // Not BUYER's key: an ERC-1271 wallet may still accept it, and only the Broker can ask.
+    const signature = await new Wallet("0x" + "5c".repeat(32)).signTypedData(
+      { name: accepted.extra.name as string, version: accepted.extra.version as string, chainId: 196, verifyingContract: USDT0.address }, EIP3009_TYPES, auth);
+    const r = await fetch(`${h.base}/v1/closure-calendar?symbol=wTCENTx`, {
+      headers: { ...API, "payment-signature": encodePaymentSignatureHeader({ x402Version: 2, resource: pr.resource, accepted, payload: { signature, authorization: auth } }) },
+    });
+    assert.equal(r.status, 200);
+    await r.arrayBuffer();
+    assert.deepEqual(h.broker.events.filter((e) => e === "verify" || e === "settle"), ["verify", "settle"]);
+  } finally { await h.close(); }
 });
