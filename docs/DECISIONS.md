@@ -739,20 +739,20 @@ historical backtests against the HKEX official open.
 - **Walk-forward.** Before each closure, β is refitted on the closures that reopened earlier, using the
   published rule. Over 87 closures (reopens 13 Aug to 22 Sep), mark/2's mean error was 68.9 bp and the last
   close's was 95.4 bp. mark/2 beat the last close on 55 of the 87. β ranged from 0.63 to 0.82.
-- **Named baselines.** Pooled, the ADR alone matched mark/2 (68.6 bp). The ADR alone was better on Meituan,
-  and the perp alone was better on Tencent. mark/2 hedges between two legs. It is not the best leg for
-  each name.
+- **Named baselines.** In the same walk-forward, pooled, the ADR alone matched mark/2 (68.6 against 68.9 bp).
+  The ADR alone was better on Meituan, and the perp alone was better on Tencent. mark/2 hedges between two
+  legs. It is not the best leg for each name.
 - **The band.** The committed band is 25 bp plus half of r. It held 47 of the 87 walk-forward closures, and
   the pooled p68 error is 77.8 bp. On chain, the 25 bp band on the first 15 rows held 8 of 15. The page states
   both numbers.
 
 **The first live mark/2 rows lost.** Three mark/2 rows were marked for the overnight closure that reopened at
-01:30Z on 25 Sep, and all three lost to the last print. The signal moved the marks up by 139, 44 and 11 bp
-(wTCENTx, wXIAOx, wMEITx). Each pool reopened below its last print, and the last print's own error was 13, 336 and
-193 bp. None of the three
-reopens landed inside its band. As of block 71,531,157 the record is 18 settled rows: 0 wins, 15 ties and
-3 losses. Three rows prove nothing either way, and the walk-forward lost 32 of its 87 closures. Both are
-shown as they are.
+01:30Z on 25 Sep, and all three lost to the last print (D-13 records their transactions). The signal moved the
+marks up by 139, 44 and 11 bp (wTCENTx, wXIAOx, wMEITx). Each pool reopened below its last print, and the last
+print's own error was 13, 336 and 193 bp. None of the three reopens landed inside its band. Against the HKEX
+official open, the target this backtest scores, the signal also pointed the wrong way: D-13 records all three
+names opening down. As of block 71,531,157 the record is 18 settled rows: 0 wins, 15 ties and 3 losses. Three
+rows prove nothing either way, and the walk-forward lost 32 of its 87 closures. Both are shown as they are.
 
 **Nothing in the keeper changes.** mark/2, its β and its band stay as D-13 set them while the first
 out-of-sample mark/2 rows accrue. Any change will get a new method id, and no row is ever re-marked.

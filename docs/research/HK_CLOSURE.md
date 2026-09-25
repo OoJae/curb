@@ -9,7 +9,7 @@ node tools/research/hk-closures/fit.mjs --check    # exits 1 unless results.json
 ```
 
 It reproduces D-13's published numbers exactly, and exits 1 if it does not. The Yahoo files were fetched on
-24 Sep 2026, and their last bars are from that day. A closed Binance minute does not change. The backtest was
+24 Sep 2026, and their last bars are from 23 or 24 Sep. A closed Binance minute does not change. The backtest was
 extended and run on 25 Sep 2026. Everything below is a **historical backtest**, unless a section says it is
 on chain.
 
@@ -17,9 +17,10 @@ on chain.
 
 ## The question
 
-While HKEX was shut, the wrapper pools on X Layer did not trade in any of the 15 closures D-11 graded, so
-every mark/1 mark equalled the last print. Other markets do trade: a Binance perpetual on the same share around the clock, and the
-US ADR during US hours. How much of the Hong Kong reopen gap do they predict, measured before the reopen?
+In the 15 closures D-11 graded, every `curb.scorecard.mark/1` mark equalled the last print, so every row tied
+it. The wrapper pools did trade during those closures (D-11's erratum of 25 Sep), but no mark/1 mark moved.
+Other markets trade while HKEX is shut: a Binance perpetual on the same share around the clock, and the US ADR
+during US hours. How much of the Hong Kong reopen gap do they predict, measured before the reopen?
 
 ## Sample
 
@@ -181,7 +182,8 @@ This is Scorecard v2 at block 71,531,157 (25 Sep 2026, 01:36:33Z). It holds 18 s
   the last print. Each row committed a 25 bp band, and the reopen print landed inside it on 8 of the 15.
 - **The first 3 rows under `curb.scorecard.mark/2`:** these are the first live out-of-sample marks, for the
   overnight closure that reopened at 01:30Z on 25 Sep. All three lost to the last print. The signal moved each
-  mark up. Every pool reopened below its last print.
+  mark up. Every pool reopened below its last print. The HKEX official open, the target this backtest scores,
+  was down on all three names too (D-13 records the opens), so there too the signal pointed the wrong way.
 
 | asset | mark moved | band | reopen vs last print | Curb error | last-print error | commit | settle |
 |---|---|---|---|---|---|---|---|
@@ -221,8 +223,9 @@ holds the snapshot the site was built with.
   walk-forward is out of sample for β, not for the design.
 - **The target is not the one Scorecard grades.** The backtest predicts the HKEX official open (the opening
   auction) from the official close. Scorecard grades a mark against the wrapper pool's TWAP-guarded price
-  at least 300 s after the reopen, from the pool's last print before the cut. D-11 found that pool reopens
-  move 30 to 105 bp. D-13 replayed its six overnight rows the way Scorecard grades them: mark/2 won 4 of 6
+  at least 300 s after the reopen, from the pool's last print before the cut. On the 15 mark/1 rows, the
+  settled reopen print was 0 to 104 bp from the last print (the contract's `lastPrintErrorBps`), and 30 bp or
+  more on 7 of them. D-13 replayed its six overnight rows the way Scorecard grades them: mark/2 won 4 of 6
   with a slightly worse mean error (47.0 against 44.3 bp). Only the live record can settle this.
 - **The lunch recess is not tested here, and it has weight 0 in mark/2.** D-13 set the recess weight to
   zero after 23 recesses in which the perp-adjusted mark lost to the last print on all three names. That

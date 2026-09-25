@@ -511,7 +511,7 @@ function renderBacktest(lb: Leaderboard): void {
   const isBody = $('[data-sc-bench-is]');
   if (isBody) render(isBody, rowsOf(is.groups));
   set('[data-sc-bench-is-caption]', `Historical backtest, not on chain. ${fmtInt(is.n)} closures, cut ${day(bt.sample.firstCut)} to reopen ${day(bt.sample.lastReopen)}. Same metric as above.`);
-  set('[data-sc-bench-is-note]', `β ${is.beta} was fitted on these same ${fmtInt(is.n)} closures, so this table flatters mark/2. The walk-forward table above is the fairer test. These are D-13's published numbers, reproduced exactly.`);
+  set('[data-sc-bench-is-note]', `β ${is.beta} was fitted on these same ${fmtInt(is.n)} closures, so this table flatters mark/2. The walk-forward table above is the fairer test. The last-close and mark/2 errors for each name are D-13's published numbers, reproduced exactly.`);
   set('[data-sc-bench-is-q]', quantileLine(is));
 
   const src = $('[data-sc-bench-src]');
