@@ -2,7 +2,7 @@
 <html
   lang="en"
   data-composition-variables='[
-    {"id":"instruments","type":"enum","label":"Beat 7 variant","default":"A","options":[{"value":"A","label":"A · live on mainnet"},{"value":"B","label":"B · in build (specimens)"}]},
+    {"id":"instruments","type":"enum","label":"Beat 7 variant","default":"A","options":[{"value":"A","label":"A · live on mainnet"},{"value":"B","label":"B · specimen fallback"}]},
     {"id":"captions","type":"boolean","label":"V4 caption rail","default":true}
   ]'
 >
@@ -233,11 +233,11 @@
           <li id="sq1"><span class="k">Mon 09:30</span><span class="v">opens</span></li>
           <li id="sq2"><span class="k">11:55</span><span class="v">cap to zero</span></li>
           <li id="sq3"><span class="k">Fri 15:55 → Mon 09:30</span><span class="v">65 h 35 m</span></li>
-          <li id="sq4"><span class="k">This week</span><span class="v">141 h 20 m</span></li>
+          <li id="sq4"><span class="k">Shut this week</span><span class="v">141 h 20 m of 168</span></li>
         </ul>
         <div class="big">
-          <div class="rv"><span class="num" id="big-num">141 h 20 m</span></div>
-          <div class="rv"><span class="of" id="big-of">of every 168, the exchange is <em>shut</em>.</span></div>
+          <div class="rv"><span class="num" id="big-num">84%</span></div>
+          <div class="rv"><span class="of" id="big-of">of every week, the exchange is <em>shut</em>.</span></div>
         </div>
         <div class="now-lbl" id="now-lbl">now · Fri 11:55 HKT</div>
         <div class="legend" id="ring-legend"><span><i style="background: var(--ivory)"></i>primary market open</span><span><i style="background: var(--amber)"></i>shut, still trading</span></div>
@@ -314,8 +314,8 @@
 
       <div id="pl-O3" class="clip plate split" data-s="90.5" data-d="6.3" data-start="90.5" data-duration="6.3" data-track-index="1">
         <div class="ledger callout"><div class="rule"></div>
-          <div class="say"><div class="rv"><span>Nobody supplies</span></div><div class="rv"><span>the answer.</span></div></div>
-          <div class="lbl">settle(id) takes no price. The contract reads the wrapper's pinned pool itself, five minutes after the reopen.</div>
+          <div class="say"><div class="rv"><span>The contract</span></div><div class="rv"><span>reads the pool.</span></div></div>
+          <div class="lbl">settle(id) takes no price. From five minutes after the reopen, the contract reads the wrapper's pinned pool itself, and refuses a spot more than 50 ticks (~0.5%) from the pool's own two-minute average.</div>
           <div class="meta">Scorecard v2 <b>0x3b40…Ef1f</b> · Sourcify exact match</div></div>
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">web3.okx.com/explorer/x-layer/address/0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f</span></div><div class="win-body"></div></div>
         <div class="win-cap">OKX explorer (OKLink data) · Scorecard v2 · captured Thu 24 Sep 14:02:12Z · commit + settle txs: live window</div>
@@ -331,7 +331,7 @@
       <div id="pl-S04s" class="clip plate split" data-s="103" data-d="6.8" data-start="103" data-duration="6.8" data-track-index="1">
         <div class="ledger callout"><div class="rule"></div>
           <div class="say"><div class="rv"><span>A tie is</span></div><div class="rv"><span>not a <em>win</em>.</span></div></div>
-          <div class="lbl">When nothing traded, the mark equalled the last print. The record counts those as ties, not wins.</div></div>
+          <div class="lbl">Under the first method, mark/1, every mark equalled the last print, so every row tied it. The record counts those as ties, not wins.</div></div>
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">curb.markets/scorecard</span></div>
           <div class="win-body"><div class="ph"><div class="id">PENDING: S04 (settle)</div><div class="what">/scorecard: the row is graded after the reopen; the ledger shows the ties.</div><div class="when">live window · Fri 25 Sep ~05:05Z</div></div></div></div>
         <div class="win-cap">curb.markets/scorecard · captured Fri 25 Sep 05:05Z (pending)</div>
@@ -391,25 +391,25 @@
         <div class="win-cap" data-term-cap="T3r">terminal · the receipt: responseDigest is the sha256 of the exact 2,256 bytes the buyer received</div>
       </div>
 
-      <!-- ═══ BEAT 7 · Instruments (152–178) — variant A (live) / B (in build) ════════════ -->
+      <!-- ═══ BEAT 7 · Instruments (152–178) — variant A (live captures, the default) / B (specimen fallback) ═══ -->
       <div id="pl-S06" class="clip plate wide v-A" data-s="152" data-d="13.3" data-start="152" data-duration="13.3" data-track-index="1">
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">curb.markets/notes</span></div>
           <div class="win-body"></div></div>
-        <div class="win-cap">curb.markets/notes · ReopenNote 0x7B2A…011B · note 1, lot 1 cleared at 5.5951 USDG · team wallets · captured Thu 24 Sep</div>
+        <div class="win-cap">curb.markets/notes · ReopenNote 0x7B2A…011B · note 1, lot 1 cleared at 5.5951 USDG, 03:24 HKT Fri 25 Sep · team wallets · captured Thu 24 Sep</div>
       </div>
-      <div class="slot wide v-A" id="sl-S06"><div class="cam" id="cam-S06" data-layout-allow-overflow><video id="v-S06" data-s="152" data-d="13.3" data-start="152" data-duration="13.3" data-media-start="14.5" data-track-index="0" src="media/clips/S06.mp4" muted playsinline></video></div></div>
+      <div class="slot wide v-A" id="sl-S06"><div class="cam" id="cam-S06" data-layout-allow-overflow><video id="v-S06" data-s="152" data-d="13.3" data-start="152" data-duration="13.3" data-media-start="15" data-track-index="0" src="media/clips/S06.mp4" muted playsinline></video></div></div>
       <div id="pl-S07" class="clip plate wide v-A" data-s="165" data-d="13" data-start="165" data-duration="13" data-track-index="1">
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">curb.markets/depth</span></div>
           <div class="win-body"></div></div>
-        <div class="win-cap">curb.markets/depth · CurbCredit 0x23c7…e339 · ltvFor read from chain · team wallets</div>
+        <div class="win-cap">curb.markets/depth · CurbCredit 0x23c7…e339 · ltvFor read from chain: 60% open, 30% shut, never above the bonded bids · team wallets</div>
       </div>
-      <div class="slot wide v-A" id="sl-S07"><div class="cam" id="cam-S07" data-layout-allow-overflow><video id="v-S07" data-s="165" data-d="13" data-start="165" data-duration="13" data-media-start="14.5" data-track-index="0" src="media/clips/S07.mp4" muted playsinline></video></div></div>
+      <div class="slot wide v-A" id="sl-S07"><div class="cam" id="cam-S07" data-layout-allow-overflow><video id="v-S07" data-s="165" data-d="13" data-start="165" data-duration="13" data-media-start="22" data-track-index="0" src="media/clips/S07.mp4" muted playsinline></video></div></div>
 
       <div id="sc-cert" class="clip v-B" data-s="152" data-d="13.3" data-start="152" data-duration="13.3" data-track-index="1">
         <div class="ledger callout"><div class="rule"></div>
           <div class="say"><div class="rv"><span>Reopen Note</span></div></div>
           <div class="lbl">A claim that settles at the verified reopen, sold through a falling-price auction.</div>
-          <div class="meta">Specimen · in build · not on mainnet</div></div>
+          <div class="meta">Specimen · an illustration of ReopenNote 0x7B2A…011B on X Layer mainnet</div></div>
         <div class="card" id="cert-card">
           <div class="rim"></div>
           <div class="tile"><svg viewBox="-22 -22 44 44" aria-hidden="true"><path class="mk-c" fill="none" stroke="#F4EFE6"></path><g class="mk-arc"><path class="mk-arc-p" fill="none" stroke="#F5A524"></path></g></svg></div>
@@ -419,7 +419,7 @@
             <dt>underlying</dt><dd>wTCENTx, one share-equivalent</dd>
             <dt>settles at</dt><dd>the reopen MarketClock verifies</dd>
             <dt>sold by</dt><dd>a falling-price auction</dd>
-            <dt>status</dt><dd>in build: not deployed</dd>
+            <dt>status</dt><dd>live on X Layer since 24 Sep</dd>
           </dl>
           <svg class="seal" id="cert-seal" viewBox="-170 -170 340 340" aria-hidden="true"></svg>
           <div class="cd"><span class="k">reopens in</span><span class="v" id="cert-cd">00:59:40</span></div>
@@ -427,9 +427,9 @@
       </div>
       <div id="sc-ltv" class="clip v-B" data-s="165" data-d="13" data-start="165" data-duration="13" data-track-index="1">
         <div class="ledger callout"><div class="rule"></div>
-          <div class="say"><div class="rv"><span>Bonded depth</span></div></div>
-          <div class="lbl">Market makers bond the depth they already quote. A faded fill is provable, and the bond is slashed to the trader.</div>
-          <div class="meta">Specimen · in build · the curve's shape, not live values</div></div>
+          <div class="say"><div class="rv"><span>One number</span></div></div>
+          <div class="lbl">A lender reads ltvFor: 60% while the primary market is open, 30% while it is shut, and never more than the bonded bids would pay.</div>
+          <div class="meta">Specimen · the curve's shape, not live values · CurbCredit 0x23c7…e339</div></div>
         <svg class="plot" id="ltv-plot" viewBox="0 0 1064 640" aria-hidden="true"></svg>
       </div>
 
@@ -447,18 +447,19 @@
         </svg>
         <div class="word"><div class="rv"><span id="end-word">Curb</span></div></div>
         <div class="tag"><div class="rv"><span id="end-tag">The market that trades when the exchange is <em>shut</em>.</span></div></div>
-        <div class="links" id="end-links"><b>curb.markets</b> · api.curb.markets · agent #13869 · X Layer</div>
+        <div class="links" id="end-links"><b>curb.markets</b> · MarketClock 0x160D…B09b: free to read, three lines · api.curb.markets · agent #13869</div>
       </div>
 
       <!-- ═══ V4 · caption rail (optional: variable "captions") ═══════════════════════════ -->
       <div id="rl1" class="clip rail" data-s="1.5" data-d="12.4" data-start="1.5" data-duration="12.4" data-track-index="4"><p>Fri 25 Sep 2026 · 11:55 HKT is 03:55 UTC · the issuer's primary cap for Tencent goes to zero until 13:00</p></div>
-      <div id="rl2" class="clip rail" data-s="14.5" data-d="25.3" data-start="14.5" data-duration="25.3" data-track-index="4"><p>Sessions 09:30–12:00 and 13:00–16:00 HKT; the issuer ends each 300 s early (measured 16 of 16), so 320 open minutes a day</p></div>
+      <div id="rl2" class="clip rail" data-s="14.5" data-d="25.3" data-start="14.5" data-duration="25.3" data-track-index="4"><p>Sessions 09:30–12:00 and 13:00–16:00 HKT; the issuer ends each 300 s early (measured 16 of 16): 320 open minutes a day, 141 h 20 m of 168 shut (84%)</p></div>
       <div id="rl3" class="clip rail" data-s="40.5" data-d="11.3" data-start="40.5" data-duration="11.3" data-track-index="4"><p>Curb: the market for the hours the exchange is shut</p></div>
       <div id="rl4" class="clip rail" data-s="52.5" data-d="31.3" data-start="52.5" data-duration="31.3" data-track-index="4"><p>MarketClock 0x160D…B09b on X Layer mainnet · free to read, MIT · Builder Code dd7u50nckt5e729f on every write</p></div>
-      <div id="rl5" class="clip rail" data-s="84.5" data-d="31.3" data-start="84.5" data-duration="31.3" data-track-index="4"><p>Scorecard v2 0x3b40…Ef1f · the mark is committed before the reopen and graded by the contract after it</p></div>
+      <div id="rl5" class="clip rail" data-s="84.5" data-d="31.3" data-start="84.5" data-duration="31.3" data-track-index="4"><p>Scorecard v2 0x3b40…Ef1f · the mark is committed before the reopen; after it, the contract reads the pool itself, guarded by the pool's own 2-minute average</p></div>
       <div id="rl6" class="clip rail" data-s="116.5" data-d="26.3" data-start="116.5" data-duration="26.3" data-track-index="4"><p>Agent #13869 · registered 24 Sep 2026, listing under review · x402 v2 on X Layer, paid in USD₮0</p></div>
       <div id="rl6b" class="clip rail" data-s="143.2" data-d="8.6" data-start="143.2" data-duration="8.6" data-track-index="4"><p>The paid call shown is Curb's own Agentic Wallet paying Curb: it proves the rail, not demand</p></div>
-      <div id="rl7" class="clip rail" data-s="152.5" data-d="25.3" data-start="152.5" data-duration="25.3" data-track-index="4"><p><span class="v-A">Reopen Note and bonded depth on X Layer mainnet</span><span class="v-B">Reopen Note and bonded depth are in build: shown as specimens, not live contracts</span></p></div>
+      <div id="rl7" class="clip rail" data-s="152.5" data-d="12.3" data-start="152.5" data-duration="12.3" data-track-index="4"><p><span class="v-A">Note 1, 0.1 wTCENTx: lot 1 sold for 5.5951 USDG at 03:24 HKT, Fri 25 Sep, 35 bp under the reference · seller and buyer are both team wallets</span><span class="v-B">A specimen: an illustration of the live ReopenNote 0x7B2A…011B and ClosedAuction 0xAc74…b80D, not their footage</span></p></div>
+      <div id="rl7b" class="clip rail" data-s="165.3" data-d="12.5" data-start="165.3" data-duration="12.5" data-track-index="4"><p><span class="v-A">CurbCredit ltvFor: 60% open, 30% shut, never above what bonded bids pay · a refused borrow is a Refusal event in a successful tx · no liquidation while shut</span><span class="v-B">A specimen: the curve's shape, not live values · CurbCredit 0x23c7…e339 on X Layer mainnet · no liquidation while shut</span></p></div>
 
       <!-- A1 · voiceover slot. The <audio id="vo"> element is inserted here by
            capture/align/add-vo.mjs once media/vo.wav exists (see capture/align/README.md). -->
@@ -585,7 +586,7 @@
         [["x", hx + 22], ["y", hy + 40], ["fill", "#F4EFE6"], ["font-family", "Libre Franklin"], ["font-size", 21]].forEach(([k, val]) => lab.setAttribute(k, val));
         lab.textContent = "you are here";
         g.appendChild(lab);
-        el("text", { x: 1040, y: 40, "text-anchor": "end", fill: "#8A96A3", "font-family": "Martian Mono", "font-size": 15 }, "specimen · in build");
+        el("text", { x: 1040, y: 40, "text-anchor": "end", fill: "#8A96A3", "font-family": "Martian Mono", "font-size": 15 }, "specimen · not live values");
       })();
 
       /* ── the Week Ring: 2,016 blades, ivory = open, amber = shut but trading; now at 3 o'clock ── */
@@ -760,8 +761,9 @@
       ["#sq1", "#sq2", "#sq3", "#sq4"].forEach((s, i) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.48, ease: CURB }, T(19.6 + i * 1.5)));
       fadeIn("#ring-legend", 20.6, 0.6);
       fadeIn("#now-lbl", 20.8, 0.48, CURB);
-      rise("#big-num", 26.0, 0, 0.9);
-      rise("#big-of", 26.6, 0, 0.9);
+      // The number rises as the voice says "eighty-four percent of every week" (v1.2: it opens the beat).
+      rise("#big-num", 20.8, 0, 0.9);
+      rise("#big-of", 21.4, 0, 0.9);
 
       /* ── BEAT 3: the name ── */
       fadeIn("#name-frame", 40.2, 0.9, CURB);
