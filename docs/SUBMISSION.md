@@ -86,7 +86,7 @@ https://github.com/OoJae/curb
 - MarketClock integration guide: https://github.com/OoJae/curb/blob/main/docs/MARKETCLOCK.md
 - W3/W4 contract spec (frozen 24 Sep; where it differs from the deployed code, the contracts' NatSpec governs):
   https://github.com/OoJae/curb/blob/main/docs/specs/W3W4-contracts.md
-- Verifier: https://github.com/OoJae/curb/blob/main/docs/VERIFY.md (`npx -y github:OoJae/curb tx <any Curb tx hash>`)
+- Verifier: https://github.com/OoJae/curb/blob/main/docs/VERIFY.md (`npx -y curb-verify tx <any Curb tx hash>`)
 - MarketClock round evidence: https://attestor-a-production.up.railway.app/healthz
 - Evidence archive: https://archive.curb.markets/index/latest.json (object-locked; host A, host B and the keeper
   have published every new bundle and witness statement since 24 Sep 20:32Z)
@@ -271,7 +271,7 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
 ## Before pressing submit
 
 - [ ] Repo is public, and `docs/HYGIENE.md` findings are resolved or accepted.
-- [ ] Every `github.com/OoJae/curb` link above opens logged-out, and `npx -y github:OoJae/curb selftest` passes
+- [ ] Every `github.com/OoJae/curb` link above opens logged-out, and `npx -y curb-verify selftest` passes
       from a clean directory (both need the public repo).
 - [ ] W3/W4 addresses and txs above match `docs/DEPLOYMENTS.md`, with Sourcify status.
 - [ ] "Live demo on mainnet" has the 01:30Z, ~04:00Z, 05:15Z and 07:55Z transactions appended from

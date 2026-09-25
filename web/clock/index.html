@@ -103,7 +103,7 @@
           <h3 class="t-h3">Check it yourself</h3>
           <p class="t-small muted">Rebuilds the root from the bundle, re-runs the derivation, and compares it with what the transaction wrote. Needs Node 22.18 or newer.</p>
           <div class="clk-cmd surface-ink">
-            <pre class="clk-cmd__code"><code data-round-cmd>npx -y github:OoJae/curb tx &lt;round transaction&gt;</code></pre>
+            <pre class="clk-cmd__code"><code data-round-cmd>npx -y curb-verify tx &lt;round transaction&gt;</code></pre>
             <button class="copy clk-cmd__copy" type="button" data-copy-cmd><span class="copy__label">Copy</span><span class="copy__done" aria-hidden="true">Copied</span></button>
           </div>
         </div>
@@ -175,7 +175,7 @@ contract UsesTheClock {
             <p class="t-body measure">For each round host A writes, host B fetches the bundle and re-derives it, checks that the calldata equals the committed claims, and compares them with its own reading of the issuer. Then it signs the result as EIP-712 typed data, pass or fail.</p>
             <dl class="ledger">
               <div class="ledger__row"><dt>Signer</dt><dd><a class="txlink" href="https://www.oklink.com/xlayer/address/0x50Fa162a1dE84D2719644DC45E44EC5D16e539fB" target="_blank" rel="noopener" title="0x50Fa162a1dE84D2719644DC45E44EC5D16e539fB">0x50Fa…39fB<span class="arrow arrow--ext" aria-hidden="true">→</span><span class="visually-hidden"> (opens OKLink)</span></a></dd></div>
-              <div class="ledger__row"><dt>Check a witness</dt><dd><code class="clk-inline-cmd" data-witness-cmd>npx -y github:OoJae/curb witness &lt;inputRoot&gt;</code></dd></div>
+              <div class="ledger__row"><dt>Check a witness</dt><dd><code class="clk-inline-cmd" data-witness-cmd>npx -y curb-verify witness &lt;inputRoot&gt;</code></dd></div>
             </dl>
           </article>
         </div>

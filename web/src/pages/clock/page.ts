@@ -189,7 +189,7 @@ function renderSummary(b: AssetBoard): void {
 
 // ── latest round ───────────────────────────────────────────────────────────────────────────────
 
-const roundCmd = { verify: 'npx -y github:OoJae/curb tx <round transaction>', witness: 'npx -y github:OoJae/curb witness <inputRoot>' };
+const roundCmd = { verify: 'npx -y curb-verify tx <round transaction>', witness: 'npx -y curb-verify witness <inputRoot>' };
 
 function renderRound(r: AttestationRound | null, b: AssetBoard): void {
   const txEl = $('[data-round-tx]');
@@ -215,8 +215,8 @@ function renderRound(r: AttestationRound | null, b: AssetBoard): void {
   );
   const syms = r.wrappers.map((w) => symbolOf(w));
   assetsEl.textContent = syms.length ? `${syms.length}: ${syms.join(', ')}` : '—';
-  roundCmd.verify = `npx -y github:OoJae/curb tx ${r.txHash}`;
-  roundCmd.witness = `npx -y github:OoJae/curb witness ${r.inputRoot}`;
+  roundCmd.verify = `npx -y curb-verify tx ${r.txHash}`;
+  roundCmd.witness = `npx -y curb-verify witness ${r.inputRoot}`;
   const cmd = $('[data-round-cmd]');
   if (cmd) cmd.textContent = roundCmd.verify;
   const wit = $('[data-witness-cmd]');

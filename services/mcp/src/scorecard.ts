@@ -218,6 +218,6 @@ export async function readScorecard(chain: ChainReader, limit = DEFAULT_ROWS, co
     skill: { ...skill, note: "skill() counts strict wins only: equal error is a tie, and a tie is not a win" },
     closureCount: count,
     rows,
-    verify: "Re-derive any row from its published evidence with its commit transaction: npx -y github:OoJae/curb tx <commitTx>",
+    verify: "Re-derive any row from its published evidence with its commit transaction: npx -y curb-verify tx <commitTx>",
   };
 }

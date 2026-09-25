@@ -158,7 +158,7 @@ export async function readPaidServices(fetchImpl: JsonFetch, now: () => number =
     ],
     verifyCurbData:
       `Paid answers are built from on-chain Curb data: MarketClock ${CONTRACTS.marketClock} and Scorecard ${CONTRACTS.scorecard}. ` +
-      "Any MarketClock round or Scorecard mark transaction can be re-derived from its published evidence with `npx -y github:OoJae/curb tx <hash>`.",
+      "Any MarketClock round or Scorecard mark transaction can be re-derived from its published evidence with `npx -y curb-verify tx <hash>`.",
     discovery: { x402: url, marketplace: "https://www.okx.ai/agents/13869 (agent #13869, listed 25 Sep 2026)" },
   };
 }

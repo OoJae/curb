@@ -102,7 +102,7 @@ published. `curb-verify` rebuilds the root and re-runs the method, then checks t
 transaction. It needs Node 22.18 or newer and nothing else:
 
 ```bash
-npx -y github:OoJae/curb tx <MarketClock or Scorecard transaction hash>
+npx -y curb-verify tx <MarketClock or Scorecard transaction hash>
 ```
 
 `curb_scorecard` gives each row's `commitTx`. Exit code 0 means verified, 1 not reproduced, 3 unavailable

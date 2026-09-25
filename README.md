@@ -37,11 +37,11 @@ onchainos payment pay --payment-id <paymentId from the quote> --yes
 
 # 4. Re-derive a Curb number instead of trusting it: the first Scorecard mark, from the chain and its archived
 #    evidence. Needs Node >= 22.18.
-npx -y github:OoJae/curb tx 0x1c839166a27d48e30a51da725b07e3b57bd00a6cc173395838e15d4b6481294e
+npx -y curb-verify tx 0x1c839166a27d48e30a51da725b07e3b57bd00a6cc173395838e15d4b6481294e
 ```
 
 Command 4 prints `REPRODUCED` and exits 0 when the evidence rebuilds what the transaction wrote, and exits 1 when
-it does not. It installs the verifier from this repository. The npm registry name `curb-verify` is not Curb's.
+it does not. `curb-verify` is Curb's own npm package (published 25 Sep 2026, built from `tools/curb-verify`); `npx -y github:OoJae/curb` runs the same code straight from this repository.
 More verbs and examples: [`docs/VERIFY.md`](docs/VERIFY.md).
 
 ## Why this matters now
@@ -373,7 +373,7 @@ The on-chain transactions and the Sourcify verification times can, and they are 
 | 24 Sep 11:56 | **First paid call** end to end through OKX's buyer CLI: $0.01 USD₮0, team wallet to curb-revenue, with a receipt | settlement tx [`0xe8740458…4de7`](https://www.oklink.com/xlayer/tx/0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7), block 71,481,945; [receipt](https://api.curb.markets/receipts/0xcee1ee75f7323746b96afa5f4056640507a96d02316ba40f9010ac2d58a9817c.json); commit `b70a75f` |
 | 24 Sep | W3/W4 contract spec frozen; shared scaffold merged; demo wallet disclosed before its first transaction | commits `b70a75f`, `0995f72` |
 | 24 Sep | **`curb.scorecard.mark/2`**: a mark that moves with the Binance perp and the US ADRs while Hong Kong is shut, with a byte-exact relay for the Binance leg; mark/1's range closes at block 71,486,953 | commits `c7e80b6`, `af68ee1`; [D-13](docs/DECISIONS.md) |
-| 24 Sep | **curb-verify `tx` and `range`**: start from any transaction hash; runs from this repository with `npx -y github:OoJae/curb` | commit `08f2a11` |
+| 24 Sep | **curb-verify `tx` and `range`**: start from any transaction hash; runs from this repository with `npx -y curb-verify` | commit `08f2a11` |
 | 24 Sep | Corporate actions as a free read-only feed in curb-asp; a fork replay of HONx's reverse split and spin-off against MarketClock | commits `5761957`, `8715db2` |
 | 24 Sep ~18:00 | **W3 on mainnet**: ReopenPointer, ReopenNote, ClosedAuction, EligibilityRegistry, all Sourcify `exact_match` | blocks 71,503,708–71,503,723; commit `424f4bf`; [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) |
 | 24 Sep ~19:15 | **W4 on mainnet**: DepthCert, CurbCredit and the maker allowlist, all Sourcify `exact_match` | blocks 71,507,846–71,507,867; commit `e0b8ae7` |
