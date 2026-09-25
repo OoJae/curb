@@ -85,6 +85,72 @@ require(!clock.isInMultiplierBlackout(wrapper), "corporate action in flight");
 uint256 shares = clock.rawToShares(wrapper, wrapperBalance);
 ```
 
+## Three lines to integrate
+
+Two read-only helpers sit on top of the clock. Neither holds funds or has an admin, and neither can change
+what the clock says.
+
+**In a contract: `MarketClockGuard`** (`src/lib/MarketClockGuard.sol`). Internal functions only, so there
+is nothing extra to deploy or trust. It depends only on `src/interfaces/IMarketClock.sol`, and both files
+are MIT: copy them in.
+
+```solidity
+import {IMarketClock, MarketClockGuard, MarketClockGuarded} from "./MarketClockGuard.sol";   // 1
+
+contract Pool is MarketClockGuarded(IMarketClock(MarketClockGuard.XLAYER_MARKET_CLOCK)) {     // 2
+    function borrow(address wrapper, uint256 amount) external whenPrimaryOpen(wrapper) {    // 3
+        // ... unchanged ...
+    }
+}
+```
+
+- `whenPrimaryOpen(w)` reverts `MarketShut(w, regime)` unless the regime is `OVERNIGHT`, `EXTENDED` or
+  `MARKET`, `primaryCapNow` is above zero, no blackout is running and the issuer has not halted. Put it in
+  front of anything that values the wrapper at a market price: a borrow, a liquidation, a mark.
+- `notDuringBlackout(w)` reverts `MultiplierBlackout(w)` only while a corporate action is being applied. Put
+  it in front of anything that settles in wrapper balances or share-equivalents. It does not refuse a shut
+  market.
+- Without inheriting: `MarketClockGuard.requireArbitraged(clock, w)`, `requireNotBlackout(clock, w)` and
+  `isArbitraged(clock, w)`. A worked example is in `src/examples/ExampleLendingGuard.sol` (not deployed).
+- The pinned address has code only on X Layer mainnet (196). On any other chain, testnet 1952 included,
+  every guarded call reverts, which is the closed direction. Read the clock off-chain there instead.
+
+**Off-chain, or from code written for Chainlink Data Streams: `MarketClockStatus`**
+(`src/adapters/MarketClockStatus.sol`). `marketStatus(wrapper)` returns a `uint32` in the numbering of the
+`marketStatus` field of Chainlink's RWA Advanced (v11) report. It is not a Chainlink product and reads no
+Chainlink feed. Not yet deployed (25 Sep 2026); `script/DeployStatus.s.sol` deploys it.
+
+```bash
+cast call <MarketClockStatus> "marketStatus(address)(uint32)" 0x41333Df9E7639188BBfca5522dC4844398Af9f9E \
+  --rpc-url https://rpc.xlayer.tech
+```
+
+| MarketClock says (through its fail-closed reads) | `marketStatus` |
+|---|---|
+| `UNKNOWN`: never attested, not registered, or last attestation older than 30 minutes | **0**, unknown: treat as shut |
+| `CLOSED`; any open label with a zero cap; a corporate-action blackout; an issuer halt | **5**, closed |
+| `MARKET` with a cap above zero | **2**, regular |
+| `EXTENDED` with a cap above zero | **3**, post-market. MarketClock does not split pre from post, so **1** is never returned |
+| `OVERNIGHT` with a cap above zero | **4**, overnight (US names) |
+
+`isArbitraged(w)` is true exactly when the code is 2, 3 or 4, the same predicate as the guard.
+`statusMany(address[])` batches. `secondsToNextTransition(w)` passes MarketClock's value through unchanged,
+with the caveat under "Design decisions" below. Two differences from a status built on the venue's calendar:
+
+- During the issuer's five-minute cut before each period end (`docs/DECISIONS.md`, D-4), the venue's
+  calendar still says open. This returns 5.
+- Hong Kong names read only 0, 2 or 5: they have no overnight session, and their extended sessions carry a
+  zero cap and are attested `CLOSED`. That matches v11's standard-hours feeds, which never use 1, 3 or 4.
+
+The deploy script's dry run (a simulation against mainnet; nothing deployed) on 25 Sep 2026 at 01:08Z,
+block 71,529,453, read 5 for the four Hong Kong wrappers (09:08 HKT, the pre-opening session) and 4 for
+wNVDAx and wAAPLx (US overnight session, cap $200,000).
+
+```bash
+forge test --match-path 'test/MarketClock*.t.sol'                     # guard + adapter, 29 tests, no fork
+forge test --match-path test/fork/MarketClockStatusFork.t.sol -vv     # 3 tests, live mainnet fork
+```
+
 ## Design decisions you should know about before depending on it
 
 - **It fails closed, always.** An attestation older than `MAX_ATTESTATION_AGE` (30 minutes)
