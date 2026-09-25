@@ -705,4 +705,12 @@ cannot prove it. The perp leg can be checked by refetching; the Yahoo leg cannot
 **Unchanged rule:** every existing row keeps the method that produced it. **No row is ever re-marked.**
 The mark/1 verification range closes at block 71,486,953 (`MARK2_CUTOVER_BLOCK`).
 
-First mark/2 row: TODO(lead) block, tx and closure id once committed, and its grade once settled.
+**First mark/2 rows (25 Sept 01:30Z reopen): three losses.** Committed 01:20:31–01:20:47Z (txs `0xebd87019…62f4`,
+`0x90125dac…3104`, `0x7e9104f8…9b29`, blocks 71,530,195–71,530,211), settled by the keeper at 01:35:26–01:35:30Z
+(`0x5ca722b5…ed0e`, `0x37f5b51b…a142`, `0x55d3a7c7…fb4c`). Curb error against the pool's own reopen price, against
+the last print's: wTCENTx 152 vs 13 bp, wXIAOx 381 vs 336 bp, wMEITx 204 vs 193 bp. `skill()` = (18, 0, 0).
+All three marks called the gap up (wTCENTx +139 bp); HKEX opened all three down (0700.HK −78 bp, 1810.HK −143 bp,
+3690.HK −76 bp at the 09:30 HKT open). So the signal pointed the wrong way: a real miss, not a grading artefact.
+A second finding: five minutes after the reopen, when the Scorecard reads it, the pool had moved far less than
+the market (wTCENTx pool −13 bp, 0700.HK −114 bp by 09:35), so a baseline of "no change" is favoured by a pool
+that lags the reopen. Both stay on the record; no row is ever re-marked.
