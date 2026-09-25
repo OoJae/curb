@@ -63,7 +63,7 @@ test("paid services: terms read live from /.well-known/x402, with the onchainos 
   ]);
   assert.match(r.howToPay.join(" "), /re-run it with `--yes`/);
   assert.match(r.verifyReceipt.join(" "), /keccak256\(transaction ‖ responseDigest\)/);
-  assert.match(r.verifyCurbData, /npx -y github:OoJae\/curb tx <hash>/);
+  assert.match(r.verifyCurbData, /npx -y curb-verify tx <hash>/);
 });
 
 test("paid services: with the asp unreachable, the listed terms are used and labelled as the fallback", async () => {
