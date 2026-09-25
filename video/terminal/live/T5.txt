@@ -1,0 +1,17 @@
+# T5 · started 2026-09-25T03:55:22.608Z · exit 0
+$ node decode-8021.mjs 0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff
+tx        0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff
+block     71,539,470  status 1
+from      0x842e9eee514c419183ca79d4cb0dc30ad29feec4
+to        0x160dc415902971a7a9b5ade7f43005b36fe5b09b
+selector  0xe42c6251
+calldata  1,350 bytes; the last 34 are the attribution suffix
+tail      …6464377535306e636b74356537323966100080218021802180218021802180218021
+
+  codes   6464377535306e636b74356537323966   "dd7u50nckt5e729f"
+  length  10                                 16 bytes
+  schema  00                                 schema 0
+  marker  80218021802180218021802180218021   ERC-8021
+
+ox        Attribution.fromData → {"codes":["dd7u50nckt5e729f"],"id":0}
+result    Builder Code dd7u50nckt5e729f attached

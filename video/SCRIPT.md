@@ -102,13 +102,13 @@ anchored on the first words of each beat above (beat 5: "Before a reopen"). The 
 but the read is not spread the same way: expect about 11 · 25 · 8 · 28 · 35 · 30 · 40 · 12 s, landing between
 3:00 and 3:15 (at 140 wpm it reaches about 3:17, still inside the 3:00–3:20 that `retime.mjs` accepts). The
 retime maps each beat's cues in proportion, so beat 3 compresses to about 0.7× and beat 7 stretches to about
-1.5×. The current clips only turn live partway in: `S06.mp4` shows the /notes first paint ("Specimen · in
-build") until 15.0 s, and `S07.mp4` shows the /depth first paint ("Specimen · in build", "reading…") until
-22.0 s. So v1.2 starts them there (`data-media-start` 15 and 22, previously 14.5 for both), which leaves
-13.0 s and 5.5 s of live footage. After the retime, S06 holds its last frame (the lot 1 auction at 5.5951
-USDG) for about 7 s and S07 holds its last frame (the live LTV read) for about 14 s, while the push-in
-continues. `retime.mjs --dry` prints both. A longer /depth capture, such as the S07 cert run after the
-bonded bid, fixes S07; its `data-media-start` must then be re-read from the new clip. The composition's beat 2
+1.5×. Both beat 7 clips only turn live partway in. `S06.mp4` (24 Sep 21:05Z) shows the /notes first paint
+("Specimen · in build") until about 15.2 s, so the film starts it at `data-media-start` 15.4, which leaves 12.6 s
+of live footage. S07 now plays `S07-cert.mp4` (25 Sep 05:19Z, after the bonded bid; the older `S07.mp4` is no
+longer used), which shows "Reading X Layer…" until 14.33 s, so the film starts it at `data-media-start` 14.4,
+which leaves 13.0 s of live footage (ltvFor 60.00%). After the retime to the expected read, S06 holds its last
+frame (the lot 1 auction at 5.5951 USDG) for about 7.9 s and S07 holds its last frame (the live LTV read) for
+about 7.0 s, while the push-in continues. `retime.mjs --dry` prints both. The composition's beat 2
 number now rises as "eighty-four percent" is said, about a quarter of the way into the beat, not at the half.
 
 *Beat 7 picture.* The film defaults to 7A, the live captures (`instruments` = "A"). The specimen picture

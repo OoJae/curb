@@ -89,7 +89,7 @@
       .slot.split { left: 721px; top: 239px; width: 1102px; height: 619px; }
       .cam { position: absolute; inset: 0; }
       #cam-S01 { transform-origin: 58% 48%; } #cam-S03 { transform-origin: 34% 42%; } #cam-S04c { transform-origin: 44% 48%; } #cam-S04s { transform-origin: 40% 50%; } #cam-S09 { transform-origin: 55% 50%; }
-      #cam-S06 { transform-origin: 70% 40%; } #cam-S07 { transform-origin: 72% 35%; } #cam-O1 { transform-origin: 38% 58%; } #cam-O2 { transform-origin: 63% 30%; } #cam-O3 { transform-origin: 40% 30%; } #cam-O4 { transform-origin: 45% 60%; }
+      #cam-S06 { transform-origin: 70% 40%; } #cam-S07 { transform-origin: 72% 35%; } #cam-O1 { transform-origin: 38% 58%; } #cam-O2 { transform-origin: 63% 30%; } #cam-O3 { transform-origin: 51% 94%; } #cam-O4 { transform-origin: 45% 60%; }
       .cam video { display: block; width: 100%; height: 100%; object-fit: cover; }
 
       /* placeholders: the frame is real, the footage is not yet */
@@ -215,7 +215,7 @@
 
       <!-- V3 · the chapter clock of beat 1: HKT, ticking through the cut -->
       <div id="clock1" class="clip" data-s="0" data-d="14" data-start="0" data-duration="14" data-track-index="3">
-        <div class="box"><div class="hkt" id="clock1-hkt">11:54:54 HKT</div><div class="utc" id="clock1-utc">Fri 25 Sep · 03:54:54Z</div></div>
+        <div class="box"><div class="hkt" id="clock1-hkt">11:56:01 HKT</div><div class="utc" id="clock1-utc">Fri 25 Sep · 03:56:01Z</div></div>
       </div>
 
       <!-- ═══ BEAT 1 · 11:55 (0–14) ═══════════════════════════════════════════════════════ -->
@@ -223,7 +223,7 @@
       <div id="pl-S01" class="clip plate wide" data-s="0.6" data-d="13.4" data-start="0.6" data-duration="13.4" data-track-index="1">
         <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">curb.markets</span></div>
           <div class="win-body"></div></div>
-        <div class="win-cap">curb.markets · the live hero flips paper → ink on MarketClock's cut round (attested 03:55:04Z) · captured Fri 25 Sep 03:56:08Z</div>
+        <div class="win-cap">curb.markets · MarketClock attested the cut at 11:55:04 HKT (03:55:04Z); the site, which polls the chain, flipped paper → ink at 11:56:08 HKT (03:56:08Z) · captured live, Fri 25 Sep</div>
       </div>
       <div class="slot wide" id="sl-S01"><div class="cam" id="cam-S01" data-layout-allow-overflow><video id="v-S01" data-s="0.6" data-d="13.4" data-start="0.6" data-duration="13.4" data-media-start="107" data-track-index="0" src="media/clips/S01.mp4" muted playsinline></video></div></div>
 
@@ -321,15 +321,15 @@
           <div class="say"><div class="rv"><span>The contract</span></div><div class="rv"><span>reads the pool.</span></div></div>
           <div class="lbl">settle(id) takes no price. From five minutes after the reopen, the contract reads the wrapper's pinned pool itself, and refuses a spot more than 50 ticks (~0.5%) from the pool's own two-minute average.</div>
           <div class="meta">Scorecard v2 <b>0x3b40…Ef1f</b> · Sourcify exact match</div></div>
-        <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">web3.okx.com/explorer/x-layer/address/0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f</span></div><div class="win-body"></div></div>
-        <div class="win-cap">OKX explorer (OKLink data) · Scorecard v2 · captured Thu 24 Sep 14:02:12Z · commit + settle txs: live window</div>
+        <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">web3.okx.com/explorer/x-layer/tx/0x4e689292459d50116f042f28ae0636ecc41d678c4cc2fa90014cb53e06722e49</span></div><div class="win-body"></div></div>
+        <div class="win-cap">OKX explorer (OKLink data) · settle(id), no price · tx 0x4e68…2e49, block 71,543,697, Fri 25 Sep 05:05:33Z · captured 05:06:16Z</div>
       </div>
-      <div class="slot split" id="sl-O3"><div class="cam" id="cam-O3" data-layout-allow-overflow><video id="v-O3" data-s="90.5" data-d="6.3" data-start="90.5" data-duration="6.3" data-media-start="291.6" data-track-index="0" src="media/clips/O3-contract.mp4" muted playsinline></video></div></div>
+      <div class="slot split" id="sl-O3"><div class="cam" id="cam-O3" data-layout-allow-overflow><video id="v-O3" data-s="90.5" data-d="6.3" data-start="90.5" data-duration="6.3" data-media-start="16" data-track-index="0" src="media/clips/O3-settle.mp4" muted playsinline></video></div></div>
 
       <div id="pl-T4s" class="clip plate wide" data-s="96.5" data-d="6.8" data-start="96.5" data-duration="6.8" data-track-index="1">
-        <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url" data-term-title="T4s">curb-verify</span></div>
+        <div class="win"><div class="win-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url" data-term-title="T4m">curb-verify</span></div>
           <div class="win-body"><div class="term" id="term-T4s"><pre></pre></div></div></div>
-        <div class="win-cap" data-term-cap="T4s">terminal · curb-verify selftest: real mainnet rounds, no network, and it catches a tampered bundle</div>
+        <div class="win-cap" data-term-cap="T4m">terminal · curb-verify re-derives the mark committed at 04:50Z from its archived evidence bundle</div>
       </div>
 
       <div id="pl-S04s" class="clip plate split" data-s="103" data-d="6.8" data-start="103" data-duration="6.8" data-track-index="1">
@@ -726,9 +726,17 @@
 
       /* ── V3: the corner mark and chapters ── */
       fadeIn("#cm", 0.15, 0.9, CURB);
-      // Beat 1: at 11:55:00 HKT the closed ring (cap > 0) opens into the C and the amber arc appears.
-      tl.to("#cm-gap", { opacity: 0, duration: 0.3, ease: EXIT }, T(6.0));
-      tl.to("#cm-arc", { opacity: 1, duration: 0.3, ease: CURB }, T(6.0));
+      // Beat 1 runs on the S01 footage's own wall clock. S01 was recorded from 03:54:15.458Z (S01.json
+      // recordedAt); MarketClock attested the cut at 11:55:04 HKT, and the site, which polls the chain, flipped
+      // paper → ink at 11:56:08 HKT (the "flip open→shut" mark, media 112.372 s). Read from the video's own
+      // data-start / data-media-start, so it stays true after capture/align/retime.mjs.
+      const S01v = $("#v-S01");
+      const S01_T0 = Number(S01v.dataset.start), S01_M0 = Number(S01v.dataset.mediaStart);
+      const S01_REC0 = 3 * 3600 + 54 * 60 + 15.458;          // 03:54:15.458Z, UTC seconds of day
+      const S01_FLIP = S01_T0 + (112.372 - S01_M0);            // the site's flip, in composition seconds
+      // At the site's flip the closed ring (cap > 0) opens into the C and the amber arc appears.
+      tl.to("#cm-gap", { opacity: 0, duration: 0.3, ease: EXIT }, S01_FLIP);
+      tl.to("#cm-arc", { opacity: 1, duration: 0.3, ease: CURB }, S01_FLIP);
       for (let b = 1; b < 8; b++) {
         tl.to("#cm-arc", { rotation: 30 * b, svgOrigin: "0 0", duration: 0.32, ease: CURB }, T(SCRIPTED[b]));
         rise(`#ch${b + 1} .lbl`, SCRIPTED[b] + 0.05, 0, 0.48);
@@ -736,10 +744,10 @@
       rise("#ch1 .lbl", 0.35, 0, 0.9);
       fadeOut("#cm, #ch8 .lbl", 184.2, 0.3);
 
-      // The chapter clock: real seconds, 11:55:00 HKT exactly on the cut cue.
+      // The chapter clock: the footage's real time, so it agrees with the hero's own chip (11:56:08 HKT at the flip).
       (function () {
-        const cutAt = span(0, 6.0), dur = span(0, 14);
-        const base = 11 * 3600 + 55 * 60 - cutAt;
+        const dur = span(0, 14);
+        const base = S01_REC0 + S01_M0 - S01_T0 + 8 * 3600;   // HKT seconds of day at t = 0
         const p2 = (n) => String(n).padStart(2, "0");
         const hms = (x) => `${p2(Math.floor(x / 3600) % 24)}:${p2(Math.floor(x / 60) % 60)}:${p2(Math.floor(x) % 60)}`;
         const hkt = $("#clock1-hkt"), utc = $("#clock1-utc");
@@ -806,9 +814,9 @@
       push("#cam-S04c", 84, 90.8, { s: 1.0 }, { s: 1.05 });
       plateIn("pl-O3", 90.5);
       rise("#pl-O3 .say .rv > span", 90.8);
-      push("#cam-O3", 90.5, 96.8, { s: 1.16 }, { s: 1.22 });
+      push("#cam-O3", 90.5, 96.8, { s: 1.36 }, { s: 1.42 });
       plateIn("pl-T4s", 96.5);
-      terminal("T4s", "T4s", 96.5, 103.3, { highlight: ["catches tampering", "selftest passed"] });
+      terminal("T4s", "T4m", 96.5, 103.3, { highlight: ["REPRODUCED"] });
       plateIn("pl-S04s", 103);
       push("#cam-S04s", 103, 109.8, { s: 1.0 }, { s: 1.05 });
       rise("#pl-S04s .say .rv > span", 103.3);

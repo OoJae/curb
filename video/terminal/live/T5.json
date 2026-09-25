@@ -1,0 +1,61 @@
+{
+  "schema": "curb.video.terminal/1",
+  "id": "T5",
+  "title": "node",
+  "show": "node decode-8021.mjs 0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff",
+  "command": "node capture/decode-8021.mjs 0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff",
+  "cwd": ".",
+  "startedAt": "2026-09-25T03:55:22.608Z",
+  "endedAt": "2026-09-25T03:55:25.179Z",
+  "durationMs": 2571,
+  "exitCode": 0,
+  "signal": null,
+  "output": "tx        0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff\nblock     71,539,470  status 1\nfrom      0x842e9eee514c419183ca79d4cb0dc30ad29feec4\nto        0x160dc415902971a7a9b5ade7f43005b36fe5b09b\nselector  0xe42c6251\ncalldata  1,350 bytes; the last 34 are the attribution suffix\ntail      …6464377535306e636b74356537323966100080218021802180218021802180218021\n\n  codes   6464377535306e636b74356537323966   \"dd7u50nckt5e729f\"\n  length  10                                 16 bytes\n  schema  00                                 schema 0\n  marker  80218021802180218021802180218021   ERC-8021\n\nox        Attribution.fromData → {\"codes\":[\"dd7u50nckt5e729f\"],\"id\":0}\nresult    Builder Code dd7u50nckt5e729f attached\n",
+  "chunks": [
+    {
+      "t": 2519,
+      "s": "tx        0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "block     71,539,470  status 1\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "from      0x842e9eee514c419183ca79d4cb0dc30ad29feec4\nto        0x160dc415902971a7a9b5ade7f43005b36fe5b09b\nselector  0xe42c6251\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "calldata  1,350 bytes; the last 34 are the attribution suffix\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "tail      …6464377535306e636b74356537323966100080218021802180218021802180218021\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "  codes   6464377535306e636b74356537323966   \"dd7u50nckt5e729f\"\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "  length  10                                 16 bytes\n",
+      "stream": "stdout"
+    },
+    {
+      "t": 2566,
+      "s": "  schema  00                                 schema 0\n  marker  80218021802180218021802180218021   ERC-8021\n\nox        Attribution.fromData → {\"codes\":[\"dd7u50nckt5e729f\"],\"id\":0}\nresult    Builder Code dd7u50nckt5e729f attached\n",
+      "stream": "stdout"
+    }
+  ]
+}

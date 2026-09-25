@@ -1,0 +1,84 @@
+{
+  "dryRun": false,
+  "day": "2026-09-25",
+  "startedAt": "2026-09-25T00:44:40.342Z",
+  "site": "https://curb.markets",
+  "shots": {
+    "HZ": {
+      "at": "2026-09-25T03:55:17.810Z",
+      "path": "terminal/live/HZ.json"
+    },
+    "T1": {
+      "at": "2026-09-25T03:55:22.607Z",
+      "path": "terminal/live/T1.json"
+    },
+    "T5": {
+      "at": "2026-09-25T03:55:25.180Z",
+      "path": "terminal/live/T5.json",
+      "tx": "0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff"
+    },
+    "T4": {
+      "at": "2026-09-25T03:55:27.883Z",
+      "path": "terminal/live/T4.json",
+      "root": "0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7"
+    },
+    "S01": {
+      "at": "2026-09-25T03:56:44.110Z",
+      "path": "media/clips/S01.mp4"
+    },
+    "O2": {
+      "at": "2026-09-25T03:58:39.009Z",
+      "path": "media/clips/O2.mp4",
+      "tx": "0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff"
+    },
+    "S03": {
+      "at": "2026-09-25T03:58:56.939Z",
+      "path": "media/clips/S03.mp4"
+    },
+    "S04-commit": {
+      "at": "2026-09-25T04:50:46.061Z",
+      "path": "media/clips/S04-commit.mp4"
+    },
+    "O3-commit": {
+      "at": "2026-09-25T04:54:17.952Z",
+      "path": "media/clips/O3-commit.mp4",
+      "tx": "0x3f26b6d7fa9264b5e350c3adb4450348db2d861b6238eb4eaa49bf8e9f7efb97"
+    },
+    "S04-settle": {
+      "at": "2026-09-25T05:05:59.612Z",
+      "path": "media/clips/S04-settle.mp4"
+    },
+    "O3-settle": {
+      "at": "2026-09-25T05:06:44.627Z",
+      "path": "media/clips/O3-settle.mp4",
+      "tx": "0x4e689292459d50116f042f28ae0636ecc41d678c4cc2fa90014cb53e06722e49"
+    },
+    "S09": {
+      "at": "2026-09-25T05:15:54.587Z",
+      "path": "media/clips/S09.mp4"
+    }
+  },
+  "cutRound": {
+    "root": "0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7",
+    "kind": "diff",
+    "tx": "0x5d0ca4ad51e277f4630feb3989e930afce2bf83d2e04af917928be5bf13ee1ff",
+    "atMs": 1790308504461
+  },
+  "commit": {
+    "tx": "0x3f26b6d7fa9264b5e350c3adb4450348db2d861b6238eb4eaa49bf8e9f7efb97",
+    "block": 71542809,
+    "id": "0xdf8720dabff40077330a65d5d661bc9d15b5d450fc951ec16e9a7095c895eab7",
+    "inputRoot": "0xafa10cb0fb2c3b88889378f5a87d3da1ec4ab7f8b2bd40708ea391ce1c77f1a5",
+    "index": 20,
+    "count": 21
+  },
+  "settle": {
+    "tx": "0x4e689292459d50116f042f28ae0636ecc41d678c4cc2fa90014cb53e06722e49",
+    "block": 71543697,
+    "id": "0x1bb417e48720de8e6873a79c80358384c87e9f8d671c69f5f32bfc49ec40149c",
+    "inputRoot": null,
+    "index": 19,
+    "count": 21
+  },
+  "finishedAt": "2026-09-25T05:15:54.587Z"
+}

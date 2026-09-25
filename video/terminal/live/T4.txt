@@ -1,0 +1,9 @@
+# T4 · started 2026-09-25T03:55:25.180Z · exit 0
+$ node tools/curb-verify/src/cli.ts bundle https://attestor-a-production.up.railway.app/rounds/0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7.json
+round bundle 0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7
+  source     https://attestor-a-production.up.railway.app/rounds/0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7.json
+  root       0x4750913db81b87e313235499d36744a5c3c2604f6c132d2a41fc3b89fd1398b7
+  kind       diff
+  evaluated  2026-09-25T03:55:04Z
+  claims     6
+  REPRODUCED
