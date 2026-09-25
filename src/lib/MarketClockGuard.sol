@@ -24,8 +24,8 @@ library MarketClockGuard {
     error MultiplierBlackout(address wrapper);
     error NoMarketClock();
 
-    /// @dev The deployed MarketClock on X Layer (chain 196). On any other chain this address has no code and
-    ///      every guard call reverts, which is the closed direction.
+    /// @dev The deployed MarketClock on X Layer (chain 196). On a chain with no code at this address (X Layer
+    ///      testnet 1952 had none on 25 Sep 2026), every guard call reverts, which is the closed direction.
     address internal constant XLAYER_MARKET_CLOCK = 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b;
 
     /// @notice True when primary creation and redemption are live for `wrapper`. See the library notes.

@@ -112,8 +112,9 @@ contract Pool is MarketClockGuarded(IMarketClock(MarketClockGuard.XLAYER_MARKET_
   market.
 - Without inheriting: `MarketClockGuard.requireArbitraged(clock, w)`, `requireNotBlackout(clock, w)` and
   `isArbitraged(clock, w)`. A worked example is in `src/examples/ExampleLendingGuard.sol` (not deployed).
-- The pinned address has code only on X Layer mainnet (196). On any other chain, testnet 1952 included,
-  every guarded call reverts, which is the closed direction. Read the clock off-chain there instead.
+- The pinned address is MarketClock on X Layer mainnet (196). On a chain with no code there (testnet 1952
+  had none on 25 Sep 2026), every guarded call reverts, which is the closed direction. Read the clock
+  off-chain there instead.
 
 **Off-chain, or from code written for Chainlink Data Streams: `MarketClockStatus`**
 (`src/adapters/MarketClockStatus.sol`). `marketStatus(wrapper)` returns a `uint32` in the numbering of the
