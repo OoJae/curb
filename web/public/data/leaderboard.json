@@ -1,6 +1,6 @@
 {
  "schema": "curb.leaderboard/1",
- "generatedAt": "2026-09-25T02:22:51.556Z",
+ "generatedAt": "2026-09-25T20:55:58.727Z",
  "generatedBy": "tools/leaderboard/build.ts",
  "inputs": {
   "tools/research/hk-closures/out/results.json": "036d16d0560c1c2a54be810ebcef8a25417c3920ca3e06e5b5b97c850a6bd3eb",
@@ -18,45 +18,45 @@
   "chainId": 196,
   "scorecard": "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f",
   "block": {
-   "number": 71533891,
-   "hash": "0x487655420dfe46e7bedaf5acdabd3524b8f43dab3a42d0b1def8b98b8ab7d17b",
-   "timestamp": 1790302927
+   "number": 71600679,
+   "hash": "0x4f3be3a7db8b53e6276421f8e551f5e34de969c716c0f9f636fd823cc9e65bb9",
+   "timestamp": 1790369715
   },
-  "closureCount": 18,
+  "closureCount": 21,
   "skill": {
-   "settled": 18,
+   "settled": 21,
    "beatLast": 0,
    "beatVwap": 0
   },
   "recount": {
-   "settled": 18,
+   "settled": 21,
    "beatLast": 0,
    "beatVwap": 0
   },
   "recountMatchesSkill": true,
   "all": {
-   "rows": 18,
-   "settled": 18,
+   "rows": 21,
+   "settled": 21,
    "pending": 0,
    "expired": 0,
    "vsLastPrint": {
     "wins": 0,
-    "ties": 15,
+    "ties": 18,
     "losses": 3
    },
    "vsClosingVwap": {
     "wins": 0,
-    "ties": 15,
+    "ties": 18,
     "losses": 3
    },
-   "meanCurbErrorBps": 66.9,
-   "meanLastPrintErrorBps": 56.1,
+   "meanCurbErrorBps": 58.2,
+   "meanLastPrintErrorBps": 49,
    "markMoved": 3,
    "band": {
     "minBps": 25,
     "maxBps": 113,
-    "covered": 8,
-    "settled": 18
+    "covered": 11,
+    "settled": 21
    }
   },
   "byMethod": {
@@ -86,28 +86,28 @@
     }
    },
    "curb.scorecard.mark/2": {
-    "rows": 3,
-    "settled": 3,
+    "rows": 6,
+    "settled": 6,
     "pending": 0,
     "expired": 0,
     "vsLastPrint": {
      "wins": 0,
-     "ties": 0,
+     "ties": 3,
      "losses": 3
     },
     "vsClosingVwap": {
      "wins": 0,
-     "ties": 0,
+     "ties": 3,
      "losses": 3
     },
-    "meanCurbErrorBps": 245.7,
-    "meanLastPrintErrorBps": 180.7,
+    "meanCurbErrorBps": 125.8,
+    "meanLastPrintErrorBps": 93.3,
     "markMoved": 3,
     "band": {
-     "minBps": 32,
+     "minBps": 25,
      "maxBps": 113,
-     "covered": 0,
-     "settled": 3
+     "covered": 3,
+     "settled": 6
     }
    }
   },
@@ -118,11 +118,110 @@
     {
      "address": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
      "label": "Curb keeper",
-     "rows": 18
+     "rows": 21
     }
    ]
   },
   "rows": [
+   {
+    "index": 20,
+    "id": "0xdf8720dabff40077330a65d5d661bc9d15b5d450fc951ec16e9a7095c895eab7",
+    "asset": "wMEITx",
+    "wrapper": "0xad1b65C8556957cf23d1B5e9accdc449b415fA97",
+    "method": "curb.scorecard.mark/2",
+    "methodDigest": "0x8bcd8a87d98cbe436e70be4a5ece5276c096c6b717baa63111ed8b7bb181d8b6",
+    "reopenAt": "2026-09-25T05:00:00Z",
+    "committedAt": "2026-09-25T04:50:45Z",
+    "committedBlock": 71542809,
+    "commitTx": "0x3f26b6d7fa9264b5e350c3adb4450348db2d861b6238eb4eaa49bf8e9f7efb97",
+    "mark": "9.043434184821826472",
+    "lastPrint": "9.043434184821826472",
+    "closingVwap": "9.043434184821826472",
+    "markE18": "9043434184821826472",
+    "lastPrintE18": "9043434184821826472",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-25T05:05:36Z",
+    "settledBlock": 71543700,
+    "settleTx": "0x0d81bf20a964d1d49359d04c0f86604dc1e53e13dc28e30e441b8e2ee0646f6b",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "9.043441022958304174",
+    "reopenPrintE18": "9043441022958304174",
+    "curbErrorBps": 0,
+    "lastPrintErrorBps": 0,
+    "closingVwapErrorBps": 0,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 19,
+    "id": "0x1bb417e48720de8e6873a79c80358384c87e9f8d671c69f5f32bfc49ec40149c",
+    "asset": "wXIAOx",
+    "wrapper": "0x076CF393E701839FC7a5832D2c68AaFA235682AE",
+    "method": "curb.scorecard.mark/2",
+    "methodDigest": "0x8bcd8a87d98cbe436e70be4a5ece5276c096c6b717baa63111ed8b7bb181d8b6",
+    "reopenAt": "2026-09-25T05:00:00Z",
+    "committedAt": "2026-09-25T04:50:39Z",
+    "committedBlock": 71542803,
+    "commitTx": "0xcab842adc7f5ba011b0ca65119e8ed46b361489dcca809d3e0d4df67fa7f779e",
+    "mark": "3.292824076311082889",
+    "lastPrint": "3.292824076311082889",
+    "closingVwap": "3.292824076311082889",
+    "markE18": "3292824076311082889",
+    "lastPrintE18": "3292824076311082889",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-25T05:05:33Z",
+    "settledBlock": 71543697,
+    "settleTx": "0x4e689292459d50116f042f28ae0636ecc41d678c4cc2fa90014cb53e06722e49",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "3.298780563025846767",
+    "reopenPrintE18": "3298780563025846767",
+    "curbErrorBps": 18,
+    "lastPrintErrorBps": 18,
+    "closingVwapErrorBps": 18,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
+   {
+    "index": 18,
+    "id": "0xc655281430bc8aa47465eee1ca4f2f26628a385ae0b62a4d1390b5e994af3719",
+    "asset": "wTCENTx",
+    "wrapper": "0x41333Df9E7639188BBfca5522dC4844398Af9f9E",
+    "method": "curb.scorecard.mark/2",
+    "methodDigest": "0x8bcd8a87d98cbe436e70be4a5ece5276c096c6b717baa63111ed8b7bb181d8b6",
+    "reopenAt": "2026-09-25T05:00:00Z",
+    "committedAt": "2026-09-25T04:50:34Z",
+    "committedBlock": 71542798,
+    "commitTx": "0x9292c62d3b814feef3e9bd2127e59d077982206ade571c41fea279c5d181deaf",
+    "mark": "55.736236132689297604",
+    "lastPrint": "55.736236132689297604",
+    "closingVwap": "55.736236132689297604",
+    "markE18": "55736236132689297604",
+    "lastPrintE18": "55736236132689297604",
+    "markMovedBps": 0,
+    "bandBps": 25,
+    "status": "settled",
+    "settledAt": "2026-09-25T05:05:30Z",
+    "settledBlock": 71543694,
+    "settleTx": "0x3f1275c13613fa8f6b021b7c98991c93f8800855b318857d37151b2fd6026a81",
+    "settler": "0xd3D9Bf9Ff2A80Aa13D9C0299fadc9775343a1AF6",
+    "settlerLabel": "Curb keeper",
+    "reopenPrint": "55.737473344316380423",
+    "reopenPrintE18": "55737473344316380423",
+    "curbErrorBps": 0,
+    "lastPrintErrorBps": 0,
+    "closingVwapErrorBps": 0,
+    "vsLastPrint": "tie",
+    "vsClosingVwap": "tie",
+    "bandCovered": true
+   },
    {
     "index": 17,
     "id": "0xcd161214966862de8368e77d233df1ca276085f083e6e7f24ed010b4c3834e0a",
@@ -724,8 +823,8 @@
   "committed": {
    "minBps": 25,
    "maxBps": 113,
-   "covered": 8,
-   "settled": 18
+   "covered": 11,
+   "settled": 21
   },
   "backtest": {
    "walkForward": {

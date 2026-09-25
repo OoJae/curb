@@ -5,10 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Depth · Curb</title>
     <meta name="description" content="Bond depth and watch the loan-to-value move: CurbCredit lends only what a bonded bid would pay for the collateral, and a faded bid pays its bond to the trader in the same transaction.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Curb">
+    <meta property="og:url" content="https://curb.markets/depth">
     <meta property="og:title" content="Depth · Curb">
     <meta property="og:description" content="Bond depth and watch the loan-to-value move.">
     <meta property="og:image" content="https://curb.markets/og/depth.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="DepthCert and CurbCredit: loan-to-value follows bonded depth and the regime cap">
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://curb.markets/og/depth.png">
   </head>
   <body data-page="depth">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
@@ -19,8 +26,8 @@
           <div class="col-ledger dp-hero__text">
             <p class="t-label">Depth · DepthCert, CurbCredit</p>
             <h1 class="t-h1 vt-title-depth" id="dp-title" data-reveal>Lend what a bonded bid will pay, even while Hong Kong is <em>shut</em>.</h1>
-            <p class="t-lede measure dp-lede">For 140 hours a week a Hong Kong share token trades with its creation and redemption switched off. The only honest collateral value then is what someone has committed, with money at risk, to pay for it. CurbCredit’s loan-to-value is published, and it never lends more than the bonded bids would pay.</p>
-            <p class="dp-status" data-dp-status><span class="tag">Reading X Layer…</span></p>
+            <p class="t-lede measure dp-lede">For more than 140 hours a week a Hong Kong share token trades with its creation and redemption switched off. The only honest collateral value then is what someone has committed, with money at risk, to pay for it. CurbCredit’s loan-to-value is published, and it never lends more than the bonded bids would pay.</p>
+            <p class="dp-status" data-dp-status><span class="tag">Reading X Layer from your browser, about 20 s…</span></p>
             <p class="t-small muted dp-disclose">Demo counterparties are team wallets: curb-desk posts the bonds and funds the reserve, the Agentic Wallet borrows and takes.</p>
           </div>
           <div class="col-instrument">
@@ -141,6 +148,7 @@
           <div class="col-ledger">
             <h2 class="t-h2 nt-h2" id="dp-act-h">Post, take, deposit, borrow, repay</h2>
             <p class="t-body measure">Every step is one transaction you sign in your own wallet, simulated first and sent with Curb’s Builder Code attached. The plot above only does maths; these send.</p>
+            <p class="t-small muted measure">Visiting? Everything on this page reads live from X Layer without a wallet, and a cert that names no credit line is open to anyone. Depositing, borrowing and certs that name CurbCredit need an address on the eligibility registries, which list team wallets only for this demo. The full team-wallet run, every transaction linked, is in <a href="https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md#live-demo-on-mainnet--team-wallets-only-2425-sept-2026" rel="noopener">DEPLOYMENTS</a> and the <a href="https://youtu.be/JInFSx2d3Qk" rel="noopener">demo video</a>.</p>
           </div>
         </div>
         <div class="dp-act__wallet" id="dp-wallet" data-dp-wallet></div>

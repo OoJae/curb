@@ -34,6 +34,10 @@ export const EXTERNAL = {
   oklink: 'https://www.oklink.com/xlayer',
   builderCode: 'dd7u50nckt5e729f',
   agentId: '13869',
+  repo: 'https://github.com/OoJae/curb',
+  video: 'https://youtu.be/JInFSx2d3Qk',
+  marketplace: 'https://www.okx.ai/agents/13869',
+  mcp: 'https://mcp.curb.markets/mcp',
 } as const;
 
 export function isPageId(v: string | undefined | null): v is PageId {
@@ -108,7 +112,8 @@ export function footerHTML(page: PageId): string {
     <dl class="ledger footer-ledger__rows">
       <div class="ledger__row"><dt>Now</dt><dd class="t-ledger" data-footer-now>wTCENTx · reading MarketClock</dd></div>
       <div class="ledger__row"><dt>Instruments</dt><dd>${instruments}</dd></div>
-      <div class="ledger__row"><dt>For agents</dt><dd><a href="${EXTERNAL.api}" rel="noopener">api.curb.markets${arrowHTML('ext')}</a><span class="ledger__dot" aria-hidden="true"> · </span>OKX AI marketplace, agent #${EXTERNAL.agentId}</dd></div>
+      <div class="ledger__row"><dt>For agents</dt><dd><a href="${EXTERNAL.api}" rel="noopener">api.curb.markets${arrowHTML('ext')}</a><span class="ledger__dot" aria-hidden="true"> · </span><a href="${EXTERNAL.marketplace}" rel="noopener">OKX AI marketplace, agent #${EXTERNAL.agentId}${arrowHTML('ext')}</a><span class="ledger__dot" aria-hidden="true"> · </span>MCP <code>${EXTERNAL.mcp.replace('https://', '')}</code></dd></div>
+      <div class="ledger__row"><dt>Source</dt><dd><a href="${EXTERNAL.repo}" rel="noopener">github.com/OoJae/curb, MIT${arrowHTML('ext')}</a><span class="ledger__dot" aria-hidden="true"> · </span><a href="${EXTERNAL.video}" rel="noopener">Demo video, 2 min 24 s${arrowHTML('ext')}</a></dd></div>
       <div class="ledger__row"><dt>Chain</dt><dd>X Layer, chain 196<span class="ledger__dot" aria-hidden="true"> · </span>Builder Code <code>${EXTERNAL.builderCode}</code></dd></div>
       <div class="ledger__row"><dt>Identity</dt><dd><a href="/brand"${page === 'brand' ? ' aria-current="page"' : ''}>Colours, type and the mark${arrowHTML('int')}</a></dd></div>
     </dl>

@@ -129,6 +129,8 @@ function noteCertificate(n: NoteView | null, loaded = true): SafeHTML {
     ? loaded
       ? html`No note has been minted yet. The first demo note is minted while Hong Kong is shut, after the contracts are deployed.`
       : html`Settles at the verified reopen, expected <strong>${DATE_DASH}</strong> by the published schedule. The pointer’s witnessed epoch decides, not the timetable.`
+    : n.reopened && BigInt(n.outstandingRaw) === 0n && !n.specimen
+      ? html`Reopen witnessed at epoch ${n.epochNow}. <strong>Redeemed in full:</strong> all ${fmtShares(n.shares)} ${n.symbol} delivered to the holder, share for share.`
     : n.reopened
       ? html`Reopen witnessed: the pointer is at epoch ${n.epochNow}. <strong>Redeemable now</strong> for exactly ${fmtShares(n.shares)} ${n.symbol}, share for share.`
       : html`Settles at the verified reopen, expected <strong>${n.expectedReopenMs ? hktDate(n.expectedReopenMs) : 'at the next reopen'}</strong> by the published schedule. The pointer’s witnessed epoch decides, not the timetable.`;
@@ -370,7 +372,7 @@ function drawLots(lots: LotView[]): void {
       body,
       html`${lots.map((l) => {
         const live = l.status === 'LIVE' && now <= l.endAtMs;
-        const nowPrice = l.status === 'SOLD' && l.clearedPrice !== null ? `${l.clearedPrice.toFixed(4)} paid` : live ? `${usdgFixed(lotPriceAt(lotBig(l), Math.floor(now / 1000)), 4)}` : '—';
+        const nowPrice = l.status === 'SOLD' && l.clearedPrice !== null ? `${usdgFixed(BigInt(Math.round(l.clearedPrice * 1e6)), 4)} paid` : live ? `${usdgFixed(lotPriceAt(lotBig(l), Math.floor(now / 1000)), 4)}` : '—';
         const status = l.status === 'SOLD' ? html`sold to ${whoHTML(l.buyer!, TEAM)}` : live ? 'live' : l.status === 'WITHDRAWN' ? 'withdrawn' : 'ended unsold';
         return html`<tr>
           <th scope="row" class="t-data">${l.lotId}</th>

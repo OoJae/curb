@@ -51,7 +51,7 @@ export const CLOSURE_COUNT_SELECTOR = "0xece527e2";
 
 async function post(url: string, body: unknown, signal?: AbortSignal): Promise<any> {
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 6000);
+  const timer = setTimeout(() => ctl.abort(), 12000);
   signal?.addEventListener("abort", () => ctl.abort(), { once: true });
   try {
     const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: ctl.signal });

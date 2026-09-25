@@ -5,10 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Notes · Curb</title>
     <meta name="description" content="Sell the reopen, not the asset: reopen notes on X Layer, sold on a descending clock while Hong Kong is shut and settled share for share after the verified reopen.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Curb">
+    <meta property="og:url" content="https://curb.markets/notes">
     <meta property="og:title" content="Notes · Curb">
     <meta property="og:description" content="Sell the reopen, not the asset.">
     <meta property="og:image" content="https://curb.markets/og/notes.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="A Curb Reopen Note: wrapper shares escrowed while Hong Kong is shut, delivered after the verified reopen">
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="https://curb.markets/og/notes.png">
   </head>
   <body data-page="notes">
     <!-- The shell (masthead, footer ledger, grain) is injected by the curb-shell plugin in vite.config.ts. -->
@@ -20,7 +27,7 @@
             <p class="t-label nt-kicker">Reopen notes · ReopenNote, ClosedAuction, ReopenPointer</p>
             <h1 class="t-h1 vt-title-notes" id="nt-title" data-reveal>Sell the <em>reopen,</em> not the asset.</h1>
             <p class="t-lede measure nt-lede">While Hong Kong is shut, a holder who needs out can only hit a thin pool. A reopen note lets them sell a claim instead: wrapper shares locked in escrow tonight, delivered share for share once the market has verifiably reopened. The buyer prices the reopen; the seller keeps the stock’s upside out of a fire sale.</p>
-            <p class="nt-status" data-nt-status><span class="tag">Reading X Layer…</span></p>
+            <p class="nt-status" data-nt-status><span class="tag">Reading X Layer from your browser, about 20 s…</span></p>
             <p class="t-small muted nt-disclose">Demo counterparties are team wallets: curb-desk sells, the Agentic Wallet buys. No third party has traded a note.</p>
           </div>
           <div class="col-instrument nt-hero__cert" data-nt-cert aria-live="off">
@@ -89,6 +96,7 @@
           <div class="col-ledger">
             <h2 class="t-h2 nt-h2" id="nt-flow-h">Mint, list, bid, redeem</h2>
             <p class="t-body measure nt-flow__lede">Every step is one transaction you sign in your own wallet. Each is simulated first, sent with Curb’s Builder Code attached, and linked to OKLink when it lands. A revert shows its reason.</p>
+            <p class="t-small muted measure">Visiting? Everything on this page reads live from X Layer without a wallet. Minting and listing need wTCENTx while Hong Kong is shut; bidding needs an address on the eligibility registry, which lists team wallets only for this demo. The full team-wallet cycle, every transaction linked, is in <a href="https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md#live-demo-on-mainnet--team-wallets-only-2425-sept-2026" rel="noopener">DEPLOYMENTS</a> and the <a href="https://youtu.be/JInFSx2d3Qk" rel="noopener">demo video</a>.</p>
           </div>
         </div>
         <div class="nt-flow__wallet" id="nt-wallet" data-nt-wallet></div>

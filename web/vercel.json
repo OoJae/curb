@@ -31,7 +31,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'sha256-Cf9HRNlvrDZ5BD10zmkI8IhK2InC6b3Z6C1QieFafHQ=' 'inline-speculation-rules'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.curb.markets https://rpc.xlayer.tech https://xlayer.drpc.org https://archive.curb.markets; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self' 'sha256-Cf9HRNlvrDZ5BD10zmkI8IhK2InC6b3Z6C1QieFafHQ=' 'sha256-X4QXqMNhEcD3zui6TNkXCQzVZGFjND/3gC5h9cByoKE=' 'inline-speculation-rules'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.curb.markets https://rpc.xlayer.tech https://xlayer.drpc.org https://archive.curb.markets; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },

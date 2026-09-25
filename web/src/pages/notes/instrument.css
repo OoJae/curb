@@ -296,6 +296,7 @@ select.nt-input {
 
 /* Horizontal scroll for wide tables, inside their own box (never the page). */
 .nt-scroll {
+  position: relative;
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }
