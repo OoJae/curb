@@ -64,7 +64,10 @@ for (let i = 0; i < 8; i++) {
   console.log(`${NAMES[i].padEnd(16)}${was.toFixed(1).padStart(10)}${now.toFixed(1).padStart(10)}   ${GRID[i].toFixed(2)}–${GRID[i + 1].toFixed(2)}${Math.abs(now - was) > 3 ? "  ←" : ""}`);
 }
 const total = GRID[8];
-console.log(`\ntotal ${SCRIPTED[8]}s → ${total.toFixed(2)}s (${Math.floor(total / 60)}:${String(Math.round(total % 60)).padStart(2, "0")}; target 3:00–3:20 ${total >= 180 && total <= 200 ? "✓" : "✗ OUTSIDE"})`);
+// The bound is the competition's 2–4 minute rule, not the 3:00–3:20 the script was paced for: the
+// recorded read (Clipchamp, 25 Sep) runs 2:23, so the cut compresses to it. Informational only.
+const [MIN_S, MAX_S] = [120, 240];
+console.log(`\ntotal ${SCRIPTED[8]}s → ${total.toFixed(2)}s (${Math.floor(total / 60)}:${String(Math.round(total % 60)).padStart(2, "0")}; allowed 2:00–4:00 ${total >= MIN_S && total <= MAX_S ? "✓" : "✗ OUTSIDE"})`);
 
 const T = (s) => {
   if (s <= 0) return 0;

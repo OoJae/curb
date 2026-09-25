@@ -36,6 +36,14 @@ in `media/transcript.json` and pin it by hand, e.g. beat 4 at 51.30 s:
 node capture/align/align-beats.mjs 4=51.30
 ```
 
+Even a full match can start early: Whisper stretches a short first word ("A", "If") back over the pause
+before it. Check each start against the real onsets and pin to them. The 25 Sep read was pinned with
+`2=8.76 3=26.94 4=33.28 5=55.16 6=81.24 7=103.33 8=133.76` (beats 3 and 7 had come out about 0.4 s early):
+
+```bash
+ffmpeg -hide_banner -nostats -i media/vo.wav -af silencedetect=noise=-50dB:d=0.25 -f null - 2>&1 | grep silence_end
+```
+
 ## 4 · Retime: dry run, then for real
 
 ```bash
@@ -43,7 +51,8 @@ node capture/align/retime.mjs --dry
 node capture/align/retime.mjs
 ```
 
-`--dry` prints scripted vs recorded length per beat, the new total (it must land in 3:00–3:20), and any
+`--dry` prints scripted vs recorded length per beat, the new total (the competition allows 2:00–4:00; the
+script was paced for 3:00–3:20, the 25 Sep read runs 2:23), and any
 video plate that would run past its footage. The real run rewrites `data-start`/`data-duration` of every
 timed element from its scripted `data-s`/`data-d`, the root `data-duration`, and `const GRID` in the
 script; the previous cut is saved to `index.html.bak`. It always maps from the scripted values, so it is

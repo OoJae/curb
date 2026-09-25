@@ -11,7 +11,8 @@ process.chdir(VIDEO_DIR);
 const src = process.argv[2] || "media/vo.wav";
 if (!fs.existsSync(src)) { console.error(`${src} not found`); process.exit(1); }
 let html = fs.readFileSync("index.html", "utf8");
-if (/<audio[^>]+id="vo"/.test(html)) { console.log("vo already on A1; nothing to do"); process.exit(0); }
+// Test outside comments: the A1 slot's own comment in index.html mentions `<audio id="vo">`.
+if (/<audio[^>]+id="vo"/.test(html.replace(/<!--[\s\S]*?-->/g, ""))) { console.log("vo already on A1; nothing to do"); process.exit(0); }
 const root = html.match(/data-composition-id="main"[^>]*?data-duration="([\d.]+)"/);
 const dur = root ? root[1] : "192";
 const tag = `<audio id="vo" src="${src}" data-s="0" data-d="192" data-start="0" data-duration="${dur}" data-track-index="10" data-volume="1"></audio>`;
