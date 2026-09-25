@@ -106,8 +106,8 @@ npx -y curb-verify tx <MarketClock or Scorecard transaction hash>
 ```
 
 `curb_scorecard` gives each row's `commitTx`. Exit code 0 means verified, 1 not reproduced, 3 unavailable
-(nothing concluded), 4 not a Curb write. Use `github:OoJae/curb`, not a bare `npx curb-verify`: that npm name is
-not Curb's yet.
+(nothing concluded), 4 not a Curb write. `curb-verify` is Curb's own npm package (maintainer `oojae`, built from
+`tools/curb-verify`); `npx -y github:OoJae/curb` runs the same code straight from the repository, more slowly.
 
 ## Without MCP
 

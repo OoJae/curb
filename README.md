@@ -2,6 +2,10 @@
 
 **The market that trades when the exchange is shut.**
 
+**[Demo video (2 min 24 s)](https://youtu.be/JInFSx2d3Qk)** · **[curb.markets](https://curb.markets)** ·
+[try it in 60 seconds](#try-curb-in-60-seconds) · [every transaction](docs/DEPLOYMENTS.md) ·
+[submission answers](docs/SUBMISSION.md). Everything below is live on X Layer mainnet (chain 196).
+
 A tokenized Hong Kong stock on X Layer keeps trading for **141 h 20 m of every 168-hour week** while its issuer
 caps creation and redemption at zero. For those hours the arbitrage that holds the token to the real share is
 switched off, but the pool keeps trading. The window is scheduled and published, yet invisible on chain unless
@@ -26,6 +30,8 @@ OKX Agentic Wallet that holds USD₮0 on X Layer.
 cast call 0x160Dc415902971a7a9B5ade7f43005b36FE5B09b "regime(address)(uint8)" \
   0x41333Df9E7639188BBfca5522dC4844398Af9f9E --rpc-url https://rpc.xlayer.tech
 #    0 UNKNOWN (never attested, or stale > 30 min) · 1 CLOSED · 2 OVERNIGHT · 3 EXTENDED · 4 MARKET
+#    No Foundry? The same call with curl; the last hex digit of "result" is the regime:
+curl -s https://rpc.xlayer.tech -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"0x160Dc415902971a7a9B5ade7f43005b36FE5B09b","data":"0x1b05a66000000000000000000000000041333df9e7639188bbfca5522dc4844398af9f9e"},"latest"]}'
 
 # 2. Ask the paid API without paying: HTTP 402, the x402 challenge in PAYMENT-REQUIRED, a free preview in the body.
 curl -si "https://api.curb.markets/v1/closure-calendar?symbol=wTCENTx"
@@ -41,8 +47,20 @@ npx -y curb-verify tx 0x1c839166a27d48e30a51da725b07e3b57bd00a6cc173395838e15d4b
 ```
 
 Command 4 prints `REPRODUCED` and exits 0 when the evidence rebuilds what the transaction wrote, and exits 1 when
-it does not. `curb-verify` is Curb's own npm package (published 25 Sep 2026, built from `tools/curb-verify`); `npx -y github:OoJae/curb` runs the same code straight from this repository.
+it does not. The first run downloads the package and can take a minute; on an older Node, prefix it with
+`npx -y -p node@22 -p curb-verify --` to borrow a Node 22 for the run. `curb-verify` is Curb's own npm package (published 25 Sep 2026, built from `tools/curb-verify`); `npx -y github:OoJae/curb` runs the same code straight from this repository.
 More verbs and examples: [`docs/VERIFY.md`](docs/VERIFY.md).
+
+**For AI agents:** `claude mcp add --transport http curb https://mcp.curb.markets/mcp` adds six free read-only tools
+(the regime, the next reopen, the graded record, the credit line, corporate actions, the paid services).
+
+**What a visitor can and can't do.** With no wallet, everything on [curb.markets](https://curb.markets) reads live
+from X Layer in your browser, and every number above can be checked on chain or re-derived with `curb-verify`.
+The write side of W3 and W4 is gated: bidding in a `ClosedAuction`, depositing or borrowing in `CurbCredit`, and a
+`DepthCert` that names the credit line all require an address on an `EligibilityRegistry`, which for this demo
+lists team wallets only. Minting a note needs wTCENTx while Hong Kong is shut, and a `DepthCert` that names no
+credit line is open to anyone. The full team-wallet run of both flows, with every transaction, is in
+[`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md) ("Live demo on mainnet") and in the [demo video](https://youtu.be/JInFSx2d3Qk).
 
 ## Why this matters now
 
@@ -65,15 +83,15 @@ More verbs and examples: [`docs/VERIFY.md`](docs/VERIFY.md).
 
 ## Live
 
-Status as of **25 Sep 2026, 01:00Z**.
+Status as of **25 Sep 2026, 19:15Z**.
 
 | what | where | status |
 |---|---|---|
 | Site | [curb.markets](https://curb.markets) | live since 24 Sep: the Week Ring, the live regime (the site turns to paper while Hong Kong is open), `/clock`, `/scorecard`, `/api`, `/notes`, `/depth`, `/brand` |
 | MCP server (free, for AI agents) | `https://mcp.curb.markets/mcp` (Streamable HTTP): six read-only tools, `curb_regime`, `curb_next_reopen`, `curb_scorecard`, `curb_credit`, `curb_corporate_actions`, `curb_paid_services`. Add it with `claude mcp add --transport http curb https://mcp.curb.markets/mcp`; agent skill in [`skills/curb/SKILL.md`](skills/curb/SKILL.md) | live since 25 Sep 02:28Z, a separate Railway project from the writers |
 | Paid API (x402) | [api.curb.markets](https://api.curb.markets) · [`/healthz`](https://api.curb.markets/healthz) · [`/.well-known/x402`](https://api.curb.markets/.well-known/x402) | live since 24 Sep |
-| OKX AI marketplace | [okx.ai/agents/13869](https://www.okx.ai/agents/13869): agent **#13869** "Curb", role ASP, three A2MCP services | registered 24 Sep ([`0xe2420407…ccc7`](https://www.oklink.com/xlayer/tx/0xe2420407a65b51a468f060a52496e15587ce13d1c23fccff30330d8ab293ccc7)) and **listed 25 Sep** ("Listed — eligible for task recommendations"). Check it with `onchainos agent get-agents --agent-ids 13869` |
-| Evidence archive | [`archive.curb.markets/index/latest.json`](https://archive.curb.markets/index/latest.json) (the bare domain serves no page; objects sit under `rounds/`, `marks/`, `witness/`) | object-locked since 22 Sep; host A, host B and the keeper publish every new bundle and witness statement since 24 Sep 20:32Z, and the history was backfilled after a check against the chain |
+| OKX AI marketplace | [okx.ai/agents/13869](https://www.okx.ai/agents/13869): agent **#13869** "Curb", role ASP, three A2MCP services | registered 24 Sep ([`0xe2420407…ccc7`](https://www.oklink.com/xlayer/tx/0xe2420407a65b51a468f060a52496e15587ce13d1c23fccff30330d8ab293ccc7)) and **listed 25 Sep** ("Listed — eligible for task recommendations"). The public page lists the three services and their prices |
+| Evidence archive | [`archive.curb.markets/index/latest.json`](https://archive.curb.markets/index/latest.json) (the bare domain serves no page; objects sit under `rounds/`, `marks/`, `witness/`; the index is a snapshot the backfill rebuilds, and new bundles land as they are written, see host A `/healthz`) | object-locked since 22 Sep; host A, host B and the keeper publish every new bundle and witness statement since 24 Sep 20:32Z, and the history was backfilled after a check against the chain |
 | MarketClock round evidence | [host A `/healthz`](https://attestor-a-production.up.railway.app/healthz), `/rounds/<inputRoot>.json` | live since 14 Sep |
 
 ## Contracts — X Layer mainnet (chain 196)
@@ -119,7 +137,7 @@ Every transaction and verification record is in [`docs/DEPLOYMENTS.md`](docs/DEP
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TB
   ISS["xStocks issuer API<br/>per-asset cap, schedule, multiplier"]
 
   subgraph hosts["Off-chain: two providers, two continents"]
@@ -246,7 +264,7 @@ Nothing here asks to be trusted. Every step below uses only public endpoints.
 ```bash
 # Contracts: unit tests, then fork tests against live X Layer state (RPC: rpc.xlayer.tech, set in foundry.toml)
 forge test --no-match-path 'test/fork/*'
-forge test --match-path 'test/fork/*' -vv
+forge test --match-path 'test/fork/*' -vv          # slow on the public RPC (15-25 min); one suite: --match-path test/fork/MarketClock.t.sol
 
 # Services: Node >= 22.18 (TypeScript runs directly). Each suite runs under four host timezones.
 (cd services/attestor && npm ci && npm test)
@@ -258,7 +276,7 @@ node tools/curb-verify/src/cli.ts selftest            # two real mainnet rounds,
 ROOT=$(curl -s https://attestor-a-production.up.railway.app/healthz | jq -r .lastRound.root)
 node tools/curb-verify/src/cli.ts bundle "https://attestor-a-production.up.railway.app/rounds/$ROOT.json"
 node tools/curb-verify/src/cli.ts tx <any MarketClock or Scorecard tx hash>   # starts from the chain
-node tools/curb-verify/src/cli.ts range 71231806..latest                        # every row in a block range
+node tools/curb-verify/src/cli.ts range 71530190..71530220   # the three 25 Sep mark/2 rows, ~10 s (a long range scans 100 blocks per query)
 
 # Read the chain directly
 RPC=https://rpc.xlayer.tech
@@ -306,9 +324,10 @@ Curb never holds or moves the raw rebasing token. If you compare a wrapper price
   `curb.scorecard.mark/1`, whose only input is the pool: the mark *is* the last print, so every one tied by
   construction. The reopens were not quiet: they moved 0 to 105 bp. The fix is `curb.scorecard.mark/2`, which adds
   a signal that trades while Hong Kong is shut ([D-13](docs/DECISIONS.md)). Its first three rows (25 Sep 01:30Z
-  reopen) **all lost**: the signal called Tencent, Xiaomi and Meituan up and HKEX opened all three down, so as of
-  25 Sep 01:36Z `skill()` reads (18, 0, 0). Old rows keep the method that produced them, and no row is ever
-  re-marked. Two more things the record shows: the pools **do** trade while primary capacity is off (15, 63 and
+  reopen) **all lost**: the signal called Tencent, Xiaomi and Meituan up and HKEX opened all three down. Its next
+  three rows (the 25 Sep lunch recess) tied, because the method gives the one-hour recess no weight. As of 25 Sep
+  19:14Z `skill()` reads (21, 0, 0): 21 settled, no wins. Old rows keep the method that produced them, and no row
+  is ever re-marked. Two more things the record shows: the pools **do** trade while primary capacity is off (15, 63 and
   141 swaps in the 22–24 Sep lunch recesses, most of them on wXIAOx), and five minutes after a reopen, when the
   Scorecard reads it, a pool can lag the real market (wTCENTx's pool −13 bp against 0700.HK −114 bp on 25 Sep).
 - **Every demo counterparty is a team wallet, and says so.** The first paid call (24 Sep, $0.01) was the team's
@@ -360,7 +379,7 @@ The on-chain transactions and the Sourcify verification times can, and they are 
 | 18 Sep | The recess rule settled. Over 15–18 Sep the issuer ended every period 300 s early, 16 of 16 times, seen from three vantage points | CLOSED rounds in blocks 70,675,471 · 70,761,870 · 70,848,267 · 70,934,670; [D-4](docs/DECISIONS.md) |
 | 20 Sep 22:23 | `derive/3`: cohort coherence and confirm-before-open, after a CDN race found on 17 Sep; both hosts redeployed | first round tx [`0x20dd8be0…df5c`](https://www.oklink.com/xlayer/tx/0x20dd8be052b58035e38a3c0cdc8ca2e4f7986fecb6aa596f66f495b7f6c1df5c), block 71,173,967; [D-9](docs/DECISIONS.md) |
 | 21 Sep 14:27 | **Scorecard v2**: `settle(id)` takes no price; pinned, write-once, cardinality-checked price sources | deploy tx [`0x01325c45…d30d`](https://www.oklink.com/xlayer/tx/0x01325c45c9d221820914ecd5534e22b7b89d4239e14d7de48b44eea77921d30d), block 71,231,806; Sourcify verified 14:31; [D-10](docs/DECISIONS.md) |
-| 21 Sep 15:17 | **curb-keeper** live: a mark committed before every eligible reopen, settled after it | `setKeeper` tx [`0xb9f80b25…37ce`](https://www.oklink.com/xlayer/tx/0xb9f80b25297ccb42b1127c72ac38f5591270eacdf56cd7a8aec4f154f3e837ce); `services/keeper` |
+| 21 Sep 15:17 | **curb-keeper** live: a mark committed before every eligible reopen, settled after it | `setKeeper` tx [`0xb9f80b25…37ce`](https://www.oklink.com/xlayer/tx/0xb9f80b25297ccb42b1127c72ac38f5591270eacdf56cd7a8aec4f154f3e837ce) (14:27, block 71,231,807); `services/keeper` |
 | 21 Sep | Liveness checks and emergency paging for all hosts | [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md), "Monitoring" |
 | 21 Sep | **curb-verify**, and `checkMarkRound` (a row checked against the chain, not just itself) | commits `12ab284`, `1467312` |
 | 21 Sep | Aave ARFC and LP outreach drafted | commits `ebcaa13`, `87b75f4` |
@@ -381,19 +400,22 @@ The on-chain transactions and the Sourcify verification times can, and they are 
 | 24 Sep 19:20 / 19:24 | **W3 demo, cycle 1** (team wallets): note 1 minted on 0.1 wTCENTx while Hong Kong was shut, listed, and sold to the team's Agentic Wallet at 03:24 HKT for 5.595137 USDG, 35 bp under the reference | mint tx [`0xcf3dfa55…1c40`](https://www.oklink.com/xlayer/tx/0xcf3dfa55bc02bf0cec35422cc3561a98e7bb79bb779d13c27f51f3df277a1c40) (block 71,508,619); bid tx [`0xf23e727c…d3d3`](https://www.oklink.com/xlayer/tx/0xf23e727c1a37c111e339f480caf15bf67cf2671139f355d11853ec1188cfd3d3) (block 71,508,807); [`docs/DEPLOYMENTS.md`](docs/DEPLOYMENTS.md), "Live demo on mainnet" |
 | 24 Sep 20:32 | **Archive publisher live** on host A, host B and the keeper; history backfilled, each object checked against the chain first | commit `66d7b89` |
 | 24 Sep 21:30 | **W4 demo** (team wallets): a 1.4 USDG borrow with no bonded depth emits `Refusal(NoDepth)` inside a successful transaction, and nothing moves | tx [`0x8bd873d7…5c7a`](https://www.oklink.com/xlayer/tx/0x8bd873d77176dab81ad860c1496937d2e7535c8a6b91f0be5902936b408b5c7a) (block 71,516,369) |
+| 25 Sep 01:30 | **W3 cycle 1 graded**: the reopen witnessed on chain, the Agentic Wallet redeems note 1 for exactly 0.1 wTCENTx, and the reopen print grades what it paid: `realisedDiscountBps(1)` = **−38** (Tencent reopened lower) | redeem tx [`0xd102eca8…e383`](https://www.oklink.com/xlayer/tx/0xd102eca8ef75190302419edf008ecbb9117a71c67e9978a4179473d9be29e383) (block 71,530,833); print tx [`0xce7b9189…fb66`](https://www.oklink.com/xlayer/tx/0xce7b9189f3cf83ffbeb79f52096869aa3ded77e489f18f84d0a8674914b9fb66) (block 71,531,111) |
+| 25 Sep 01:30 | **First `curb.scorecard.mark/2` rows**: three marks committed before the reopen, and all three lost (see Honest limits) | `skill()`; [D-13](docs/DECISIONS.md) |
+| 25 Sep 02:28 | **MCP server** at `mcp.curb.markets`: six free read-only tools for AI agents, and an agent skill | `services/mcp`, `skills/curb/SKILL.md` |
+| 25 Sep 04:02–05:05 | **W3 cycle 2** in the lunch recess: note 2 minted, auctioned and bought at 12:07 HKT, redeemed after the 05:00 reopen: `realisedDiscountBps(2)` = **+80** | bid tx [`0x3a92efa7…7c31`](https://www.oklink.com/xlayer/tx/0x3a92efa702207705c0d8a8e041232f34b59bd39e6cb015ee1b543e878c467c31) (block 71,540,238); print tx [`0x988f3e9b…aa95`](https://www.oklink.com/xlayer/tx/0x988f3e9b9bf913b425447b92994cdb64c104db01635d98661b3c78bd97eaaa95) (block 71,543,710) |
+| 25 Sep 05:16 | **W4: one bonded bid moves the LTV.** A DepthCert naming CurbCredit takes `ltvFor(wTCENTx)` from 0 to 60%; the Agentic Wallet then borrows the 1.4 USDG it was refused the night before | cert tx [`0x19c80f58…bd43`](https://www.oklink.com/xlayer/tx/0x19c80f58740a4ebb37b07613023d314a5a43119e3e8c754054f6983e40ebbd43) (block 71,544,327); borrow tx [`0x438c26de…d0a4`](https://www.oklink.com/xlayer/tx/0x438c26de55074b10ccce9b45341203a071e21482d91d3257ccc5e291d78fd0a4) (block 71,544,372) |
+| 25 Sep ~05:30 | **A fade proved on chain**: the maker's payment fails, `Faded(reason ALLOWANCE)` fires in the same transaction, the whole 0.2 USDG bond goes to the taker and its shares come back | tx [`0x6dd0bd29…f470`](https://www.oklink.com/xlayer/tx/0x6dd0bd29ebc5335ec8a68a4e9799c5d4c7fe5edf4dd6d954ca3d4b14aeebf470) (block 71,545,313) |
+| 25 Sep 07:55 / 07:56 | **The shut, priced**: the issuer's cut drops `ltvFor` from 60% to 30% with no transaction; `flagBreach` starts a cure clock that counts only open-market time, so it stays frozen until Hong Kong reopens | tx [`0xd598c4fb…2e57`](https://www.oklink.com/xlayer/tx/0xd598c4fb42ed4883df6067968758ef30b8e955641b15f325888e605700de2e57) (block 71,553,967) |
+| 25 Sep 08:12 | **MarketClockStatus**: MarketClock's answer in Chainlink Data Streams' `marketStatus` codes, plus the `MarketClockGuard` library, so a protocol already reading Chainlink can switch with three lines | tx [`0xe778bcc2…f5e3`](https://www.oklink.com/xlayer/tx/0xe778bcc28c587aad06b0e2877084b5e1e263ebd23543eed0cd922c1f333af5e3) (block 71,554,818); [`docs/MARKETCLOCK.md`](docs/MARKETCLOCK.md) |
+| 25 Sep | **OKX AI marketplace**: agent #13869 listed | [okx.ai/agents/13869](https://www.okx.ai/agents/13869) |
+| 25 Sep 14:22 | **LP outreach**: three on-chain messages to live wTCENTx liquidity providers, each checked in range at send time | [`docs/OUTREACH.md`](docs/OUTREACH.md) |
+| 25 Sep 14:44 | **`curb-verify` on npm** (`npx -y curb-verify`) | [npmjs.com/package/curb-verify](https://www.npmjs.com/package/curb-verify) |
+| 25 Sep ~15:40 | **Aave governance forum**: a risk framework for tokenized equities on Aave V3 X Layer, with wTCENTx as the worked example; awaiting the forum's moderator approval for new accounts | [`docs/AAVE_ARFC.md`](docs/AAVE_ARFC.md) |
+| 25 Sep | **Demo video** | [youtu.be/JInFSx2d3Qk](https://youtu.be/JInFSx2d3Qk) |
 
-**Still to come (25 Sep, UTC).** Each step is added to `docs/DEPLOYMENTS.md` with its transaction when it lands.
-
-- ~01:20 / 01:35: the first `curb.scorecard.mark/2` rows, committed before the 01:30 Hong Kong reopen and settled
-  after it.
-- 01:30: cycle 1 ends. The reopen is observed, `recordPrint` runs at +300 s, the Agentic Wallet redeems note 1,
-  and `realisedDiscountBps(1)` grades the price it paid.
-- ~04:00: cycle 2, a second note minted and auctioned during the lunch recess, redeemed after the 05:00 reopen.
-- 05:15: a bonded bid (DepthCert) naming CurbCredit lifts `ltvFor(wTCENTx)` from 0; the Agentic Wallet borrows
-  1.4 USDG.
-- 07:55: the issuer's cut shuts the market and the LTV cap falls to 30%; `flagBreach` starts a cure clock that
-  stays frozen while Hong Kong is shut.
-- The demo video.
+Next: the cure clock can count again from the Monday 28 Sep 01:30Z Hong Kong reopen, and the keeper keeps marking
+and settling every eligible closure.
 
 ---
 
@@ -402,7 +424,9 @@ The on-chain transactions and the Sourcify verification times can, and they are 
 ```
 src/                 Solidity (MIT): MarketClock, Scorecard, ReopenPointer, ReopenNote, ClosedAuction,
                      EligibilityRegistry, DepthCert, CurbCredit
-  interfaces/ lib/   frozen interfaces, MulDiv, SafeTransfer, ERC1155Min
+  adapters/          MarketClockStatus (Chainlink Data Streams marketStatus codes)
+  examples/          ExampleLendingGuard, the three-line integration
+  interfaces/ lib/   frozen interfaces, MarketClockGuard, MulDiv, SafeTransfer, ERC1155Min
 test/                unit tests; test/fork/ runs against live X Layer state; test/mocks/
 script/              Deploy.s.sol, DeployScorecardV2.s.sol, DeployW3.s.sol, DeployW4.s.sol
   hostb/deploy.sh    idempotent deploy of host B, the keeper and the W0 observer to the VPS
@@ -413,7 +437,9 @@ services/
   attestor/          MarketClock writer (host A) and witness/standby (host B)
   keeper/            Scorecard mark producer and settler
   asp/               curb-asp, the x402 API behind agent #13869
-tools/curb-verify/   the verifier CLI
+  mcp/               the free MCP server at mcp.curb.markets
+skills/curb/         the agent skill (SKILL.md) for Claude Code and other MCP clients
+tools/curb-verify/   the verifier CLI (published on npm as curb-verify)
 tools/archive/       the archive backfill (checks every object against the chain before upload)
 docs/                DECISIONS, DEPLOYMENTS, WALLETS, MARKETCLOCK, specs/, the ARFC and outreach drafts,
                      SUBMISSION, HYGIENE

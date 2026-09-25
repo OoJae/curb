@@ -191,8 +191,8 @@ checked byte-for-byte against the hand formula `utf8(code) ‖ 0x10 ‖ 0x00 ‖
 0x6464377535306e636b74356537323966100080218021802180218021802180218021
 ```
 
-It round-trips through `Attribution.fromData` to `{codes: ["dd7u50nckt5e729f"], id: 0}`. **Not yet
-attached to any Curb transaction.** It goes inside `Sender.prepare()` before the `eth_call`
+It round-trips through `Attribution.fromData` to `{codes: ["dd7u50nckt5e729f"], id: 0}`. **Not attached
+at mint;** attached to every Curb transaction from 24 Sep 06:27Z (see "Builder Code attribution" below). It goes inside `Sender.prepare()` before the `eth_call`
 simulation, after one mainnet `eth_call` confirms the target functions ignore trailing calldata.
 Attribution is visible on OKLink next to each transaction hash.
 
@@ -412,7 +412,6 @@ reverted on chain (`0xba096762…4333`, AlreadyPrinted): poke's print had landed
 | list lot 2: 5.57 → 5.40 USDG over 20 min, ends at MarketClock's 05:00:00Z cutoff | K | `0x97ff93d190438978ade1cccb5cf67eb7db9f4bee0900e12ff71fe6b5329d8455` | 71,539,949 |
 | approve exactly 5.57 USDG to ClosedAuction | A | `0x116f41c80dfd711105df6f7a8c0312559277ef8f8342962476a0c45df2d79dd5` | 71,540,214 |
 | bid: lot 2 sold to A at **5.529059 USDG** at 04:07:54Z (12:07 HKT, mid-recess), priceNow at listing 55.7362 | A | `0x3a92efa702207705c0d8a8e041232f34b59bd39e6cb015ee1b543e878c467c31` | 71,540,238 |
-
 | `observe`: the 05:00Z reopen witnessed, epoch 2 opened at 05:00:31Z (the backup witness from D again) | D | `0x8228690c084def9ddb4e71096ab723236ffdb15f229deb6f537937cf8b9eb03e` | 71,543,395 |
 | `redeem(2, 0.1e18, A)`: note 2 burned, 0.1 wTCENTx delivered to A | A | `0x483a3a01bc3046808199be8d2fbb954574216676a2641af94e8383f979468f05` | 71,543,421 |
 | `recordPrint(wTCENTx, 2)` at openedAt + 303 s: **55.7375 USDG a share** | K | `0x988f3e9b9bf913b425447b92994cdb64c104db01635d98661b3c78bd97eaaa95` | 71,543,710 |

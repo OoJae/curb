@@ -38,12 +38,10 @@ every transaction, and x402 through the OKX Broker.
 ### Product link
 
 https://curb.markets
-<!-- If the site is not serving by submission time, use https://api.curb.markets and say "site launching". -->
 
 ### Repository
 
 https://github.com/OoJae/curb
-<!-- It must be PUBLIC before submitting. On 24 Sep it returned 404 to an anonymous request. See docs/HYGIENE.md first. -->
 
 ### Demo video (2–4 min)
 
@@ -181,7 +179,8 @@ https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md, section "Live demo 
 
 **The first rows under the new mark method (25 Sep 01:30Z reopen): three losses.** Curb's `curb.scorecard.mark/2`
 called Tencent, Xiaomi and Meituan up; HKEX opened all three down. The contract graded all three as losses against
-the last print, and `skill()` reads (18, 0, 0). They stay on the record; no row is ever re-marked.
+the last print, and `skill()` read (18, 0, 0) after them; three lunch-recess rows then tied, so it reads (21, 0, 0).
+They stay on the record; no row is ever re-marked.
 
 ### Features and integrations added during the build period (17–25 Sep)
 
@@ -196,7 +195,7 @@ Dates are UTC.
    block 71,173,967 (D-9).
 3. **Scorecard v2, 21 Sep 14:27.** Settlement reads the pool itself and takes no price. Deploy tx
    `0x01325c45…d30d`, block 71,231,806; Sourcify verified 14:31 (D-10).
-4. **Keeper live, 21 Sep 15:17.** Marks committed before each eligible reopen. `setKeeper` tx `0xb9f80b25…37ce`.
+4. **Keeper live, 21 Sep 15:17.** Marks committed before each eligible reopen. `setKeeper` tx `0xb9f80b25…37ce` (14:27, block 71,231,807).
 5. **curb-verify and checkMarkRound, 21 Sep.** Commits `12ab284` and `1467312`.
 6. **First Scorecard rows, 22 Sep.** Committed 04:50 (tx `0x1c839166…294e`), settled 05:05 (tx `0x84b5ccb1…fb4c`),
    commit `3e82808`.
@@ -222,6 +221,19 @@ Dates are UTC.
 20. **curb.markets, 24 Sep.** The site, with the Week Ring and the live regime. Foundation commit `35b9854`.
 21. **Live W3/W4 demo on mainnet, from 24 Sep 19:20Z.** Team wallets only; every transaction is listed under
     "Live demo on mainnet" above.
+22. **W3 graded at two reopens, 25 Sep.** Note 1 redeemed after the 01:30Z reopen, `realisedDiscountBps(1)` = −38;
+    note 2 (lunch recess) redeemed after 05:00Z, `realisedDiscountBps(2)` = +80. Print txs `0xce7b9189…fb66`,
+    `0x988f3e9b…aa95`.
+23. **W4 end to end, 25 Sep.** One bonded bid took `ltvFor(wTCENTx)` from 0 to 60% (tx `0x19c80f58…bd43`), the
+    refused borrow then went through (`0x438c26de…d0a4`), a fade was proved and the bond paid to the taker
+    (`0x6dd0bd29…f470`), the 07:55Z cut dropped the cap to 30% with no transaction, and `flagBreach` started a cure
+    clock frozen while Hong Kong is shut (`0xd598c4fb…2e57`).
+24. **MarketClockStatus adapter, 25 Sep 08:12Z.** MarketClock in Chainlink Data Streams `marketStatus` codes, plus
+    the `MarketClockGuard` library. Tx `0xe778bcc2…f5e3`, Sourcify exact_match.
+25. **MCP server, 25 Sep.** Six free read-only tools at https://mcp.curb.markets/mcp, and an agent skill.
+26. **curb-verify on npm, 25 Sep.** `npx -y curb-verify tx <hash>` re-derives any Curb write.
+27. **Marketplace listed, LP outreach sent, Aave forum post, 25 Sep.** Agent #13869 listed; three on-chain messages
+    to live wTCENTx LPs; the risk-framework post awaits the forum's moderator approval.
 
 Full table with links: https://github.com/OoJae/curb/blob/main/README.md, section "Built during the 17–25 Sep
 build window".
@@ -230,7 +242,7 @@ build window".
 
 A tokenized stock's price only means something while creation and redemption are on. On X Layer the Hong Kong
 names are shut 84% of the week, and a lending market's static parameters can't express that. Curb makes the closure a first-class
-on-chain fact, publishes a falsifiable record of its own prices (18 graded so far: 15 ties and 3 losses, no wins),
+on-chain fact, publishes a falsifiable record of its own prices (21 graded so far: 18 ties and 3 losses, no wins),
 sells the data per call to agents, and builds the instruments that the fact makes possible. They are a note that
 settles at the verified reopen, and a credit line whose LTV follows the regime and the bonded depth behind it.
 Any X Layer protocol listing xStocks can read MarketClock for free today. Why now: Ondo's 24/7 minting covers
@@ -247,7 +259,8 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
 - Published integrator traps: wrapper units versus raw units, a non-monotonic multiplier, rebases that emit no
   event, and `stateOf()` not failing closed (https://github.com/OoJae/curb/blob/main/docs/MARKETCLOCK.md).
 - A risk-framework draft for listing tokenized equities on Aave V3 X Layer
-  (https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md, not yet posted).
+  (https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md; posted to the Aave governance forum on 25 Sep,
+  awaiting moderator approval).
 - Measured findings about X Layer infrastructure: `eth_getLogs` is capped at 100 blocks; cardinality-1 pools make
   `observe()` return spot; OKX's buyer CLI re-serialises paid bodies
   (https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md).

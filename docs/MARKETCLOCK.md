@@ -1,6 +1,6 @@
 # MarketClock — integration guide
 
-**MIT. Unlicensed. No key. Free to read.**
+**MIT. No licence fee. No key. Free to read.**
 If you are building anything on tokenized equities on X Layer, you need this and you should not
 write it yourself. Curb depends on it; it is deliberately useful without Curb.
 
@@ -185,7 +185,8 @@ forge test --match-path test/fork/MarketClockStatusFork.t.sol -vv     # 3 tests,
 - **Attestation today is single-signer, not quorum-signed.** The verified contract's NatSpec says
   "quorum-signed off-chain". That describes the intended design, **not what runs now**, and the
   deployed source cannot be edited. One host (A, Railway Singapore, `0x842e…eEC4`) signs and sends
-  every round. A second attestor key (`0x4c3e…7fb8`) is enabled as a cold spare.
+  every round. Two more attestor keys are enabled: host B (`0x50Fa…39fB`), which writes only if host A
+  goes silent, and a cold spare (`0x4c3e…7fb8`). Any one of the three can write a round alone.
 - **Every round is witnessed by a second, independent host.** Host B (Tencent, Silicon Valley,
   `0x50Fa…39fB`) runs on a different provider, continent and CDN edge. For each onchain write it:
   - fetches the bundle and re-derives it;

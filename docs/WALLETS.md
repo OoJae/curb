@@ -29,18 +29,15 @@ Chain: X Layer mainnet, chain ID 196.
 | 2026-09-13 | deployer | keeper | 0.02 OKB | [`0x966f7882…8ed5`](https://www.oklink.com/xlayer/tx/0x966f7882f0e9dafd33ca320afd1d0f62fffe37cbe8f27dbcdb1227afef798ed5) (block 70,543,716) |
 | 2026-09-14 | team, via contract `0xccc88a9d1b4ed6b0eaba998850414b24f1c315be` (internal transfer; relayed by `0xf70da978…dbef`, selector `0x0a2b8f36`) | host A | 0.04339953752875328 OKB | [`0x5fdc5f6a…c6af`](https://www.oklink.com/xlayer/tx/0x5fdc5f6a3163b3eeb7287a7913e08791b18c632cd2062ac108ba908cf904c6af) (block 70,617,100) |
 | 2026-09-14 | attestor (cold spare) | host A | 0.04 OKB | [`0x2dbebb58…b793`](https://www.oklink.com/xlayer/tx/0x2dbebb58d50fe775f4d058788725f48ec00413aaa3c32cd9fe4c828e9abcb793) (block 70,617,162) |
-
 | 2026-09-14 | deployer | host B | 0.02 OKB | [`0x60db8141…d205`](https://www.oklink.com/xlayer/tx/0x60db81418d8b9122261f61b2d1b80a2aa59a9dd6f344a90b7f0764f82122d205) (block 70,647,370) |
-
 | 2026-09-21 | deployer | host B | 0.012 OKB | [`0x814729a7…6895`](https://www.oklink.com/xlayer/tx/0x814729a7a735e26630b8727a5f8b014da91ce56ce089a7c2ce5bbef0a1066895) (block 71,217,976) — top-up to clear 6 Oct |
-
 | 2026-09-21 | keeper (retired) | keeper, live | 0.019 OKB | [`0x4cf89f5e…9852`](https://www.oklink.com/xlayer/tx/0x4cf89f5e2ee5d6c918e92afa89d05679bbfd15f7e6bedcb97cde4a67cb849852) (block 71,232,127) — consolidating a superseded wallet rather than stranding it |
 
 **Gas economics, so nobody over-funds these wallets.** At 0.02 gwei flat and ~253k gas, one round costs
 **0.0000051 OKB (~$0.0006 at $115/OKB)**; a full day of continuous writing is **~0.0014 OKB (~$0.16)**.
 Host A therefore holds ~52 days and host B ~22 days of *worst-case* writing (B spends nothing unless it
 takes over, and has spent nothing so far). The original contract deploys — two contracts, nine
-transactions — cost 0.0000578 OKB in total, about half a cent. All five wallets together hold ~$16.
+transactions — cost 0.0000578 OKB in total, about half a cent. On 13–14 Sep the five wallets then in use held ~$16 together.
 
 **The live keeper was funded from the retired keeper, not the deployer.** The deployer held only
 0.0033 OKB after the Scorecard v2 deploy — too little — while the 13 Sep keeper wallet still held its
@@ -90,7 +87,6 @@ Every privileged call, signed by the deployer/admin from the team's Mac.
 | date | call | tx |
 |---|---|---|
 | 2026-09-14 11:43:32Z | `MarketClock.setAttestor(0x842e…eEC4, true)` — enable host A | [`0x982af160…f817`](https://www.oklink.com/xlayer/tx/0x982af1608c30833a5cefedc9664033dc889162646da5d0f8c57f700fcc96f817) (block 70,617,176) |
-
 | 2026-09-14 20:02:43Z | `MarketClock.setAttestor(0x50Fa…39fB, true)`: enable host B | [`0x90f87de8…de9a`](https://www.oklink.com/xlayer/tx/0x90f87de8fa1e7c79101996108a83012540d80c9e4c45b0a9210800956b71de9a) (block 70,647,127) |
 
 Read back after the calls: `isAttestor(host A)` = true, `isAttestor(host B)` = true, `isAttestor(0x4c3e…)` = true
