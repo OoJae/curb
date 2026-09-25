@@ -397,11 +397,19 @@ reverted on chain (`0xba096762…4333`, AlreadyPrinted): poke's print had landed
 | approve 0.1 wTCENTx to ReopenNote | K | `0xb57566e6dc13c5f1580588d5c5530d1f7ebb024b116d9ad7ffa881f120614544` | 71,539,879 |
 | mint note 2 (0.1 wTCENTx escrowed), 04:02Z | K | `0x646922f0331dc7a63f1a05aa06edd7a7713bc64ada8ef7ddad439279f5e9bf94` | 71,539,903 |
 | list lot 2: 5.57 → 5.40 USDG over 20 min, ends at MarketClock's 05:00:00Z cutoff | K | `0x97ff93d190438978ade1cccb5cf67eb7db9f4bee0900e12ff71fe6b5329d8455` | 71,539,949 |
-| approve exactly 5.57 USDG to ClosedAuction | A | `0x116f41c80dfd711105df6f7a8c0312559277ef8f8342962476a0c45df2d79dd5` | |
-| bid: lot 2 sold to A at **5.529059 USDG** at 04:07:54Z (12:07 HKT, mid-recess), priceNow at listing 55.7362 | A | `0x3a92efa702207705c0d8a8e041232f34b59bd39e6cb015ee1b543e878c467c31` | |
+| approve exactly 5.57 USDG to ClosedAuction | A | `0x116f41c80dfd711105df6f7a8c0312559277ef8f8342962476a0c45df2d79dd5` | 71,540,214 |
+| bid: lot 2 sold to A at **5.529059 USDG** at 04:07:54Z (12:07 HKT, mid-recess), priceNow at listing 55.7362 | A | `0x3a92efa702207705c0d8a8e041232f34b59bd39e6cb015ee1b543e878c467c31` | 71,540,238 |
+
+| `observe`: the 05:00Z reopen witnessed, epoch 2 opened at 05:00:31Z (the backup witness from D again) | D | `0x8228690c084def9ddb4e71096ab723236ffdb15f229deb6f537937cf8b9eb03e` | 71,543,395 |
+| `redeem(2, 0.1e18, A)`: note 2 burned, 0.1 wTCENTx delivered to A | A | `0x483a3a01bc3046808199be8d2fbb954574216676a2641af94e8383f979468f05` | 71,543,421 |
+| `recordPrint(wTCENTx, 2)` at openedAt + 303 s: **55.7375 USDG a share** | K | `0x988f3e9b9bf913b425447b92994cdb64c104db01635d98661b3c78bd97eaaa95` | 71,543,710 |
+
+`realisedDiscountBps(2)` = **+80**: at the reopen print the lot was worth 5.5737 USDG and A paid 5.5291, so this time
+the buyer earned 80 bp for carrying the recess. With cycle 1's −38 bp, the first two graded prices for an hour of Hong
+Kong closure risk point in opposite directions, which is what a price for risk should do.
 
 Run by `script/w3/cycle2b.sh` (hardened after the pre-flight audit: ids found on chain, the listing retried through
-the cutoff refresh, A's effects checked on chain). The redeem and the grade follow the 05:00Z reopen.
+the cutoff refresh, A's effects checked on chain), with the redeem by `script/w3/redeem2.sh`.
 
 ### W4 — before the reopen, 24 Sept ~21:30Z (HK shut)
 
@@ -412,6 +420,18 @@ the cutoff refresh, A's effects checked on chain). The redeem and the grade foll
 | approve exactly 0.05 wTCENTx to CurbCredit | A | `0xd75527290def9c5ac8878b77b54630960c70de5af2edca0c5825890154b04619` | |
 | deposit 0.05 wTCENTx | A | `0xeb927854b5580c55350ebda8206cec05a5925cdcb73fdc01e548f4524df65b8b` | |
 | borrow 1.4 USDG → **`Refusal(NoDepth)`, requested 1,400,000, allowed 0, in a successful transaction** (nothing moved) | A | `0x8bd873d77176dab81ad860c1496937d2e7535c8a6b91f0be5902936b408b5c7a` | 71,516,369 |
+
+### W4 — the afternoon session, 25 Sept (HK open 05:00Z → 07:55Z)
+
+| step | who | tx | block |
+|---|---|---|---|
+| `DepthCert.post`: cert 1, 0.028 wTCENTx at 52 USDG a share naming CurbCredit, bond 1 USDG, expiry Sat 17 Oct 06:00Z | K | `0x19c80f58740a4ebb37b07613023d314a5a43119e3e8c754054f6983e40ebbd43` | 71,544,327 |
+| → `ltvFor(wTCENTx)` **0 → 6,000 bps (60%, the open cap) in that one transaction**; `ltvEffective` 6,000 | — | | |
+| `borrow(wTCENTx, 1.4 USDG)` → `Borrowed(1,400,000, debt 1,400,000, ltv 6,000)` | A | `0x438c26de55074b10ccce9b45341203a071e21482d91d3257ccc5e291d78fd0a4` | 71,544,372 |
+
+The same borrow was refused with `Refusal(NoDepth)` at 21:30Z the night before (above). What changed between them is
+one bonded bid. At the 07:55Z cut the regime cap drops to 30% with no transaction at all; `script/w4/friday2.sh` then
+flags the breach and the cure clock freezes while Hong Kong is shut.
 
 ## Builder Code attribution — live on all three writers, 24 Sept 2026
 
