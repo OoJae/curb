@@ -1,8 +1,8 @@
 # OKX Dev Day — submission answers
 
 Ready to paste. The form closes **25 Sep 2026 23:59 UTC**, and the finale is in Singapore on **7 Oct 2026**.
-Facts are as of **24 Sep 2026, 13:00Z** unless dated otherwise. Before pasting, the lead fills every `⟨…⟩`
-and ticks the checklist at the end.
+Facts are as of **25 Sep 2026, 01:00Z** unless dated otherwise. Before pasting, the lead fills every `⟨…⟩`
+and ticks the checklist at the end. Every link below is a full URL, so it still works when pasted into the form.
 
 ---
 
@@ -21,16 +21,20 @@ creation and redemption at zero. For those hours nothing pins the token to the r
 those hours. **MarketClock** is a free on-chain oracle that says when each stock's primary market is really shut.
 **Scorecard** commits Curb's price before each eligible reopen and has the contract grade it against the pool.
 **curb-asp** sells both to agents over x402 on the OKX AI marketplace. **Reopen Notes** and **DepthCert-backed
-credit** let a holder exit or borrow without selling into a thin book. The users are lenders and protocols
-integrating xStocks, holders caught by a closure, market makers, and AI agents that need market-hours data. Core
-integrations: contracts on X Layer, the Builder Code on every transaction, and x402 through the OKX Broker.
+credit** let a holder exit or borrow without selling into a thin book (live on mainnet, demonstrated between
+team wallets). The users are lenders and protocols integrating xStocks, holders caught by a closure, market
+makers, and AI agents that need market-hours data. Core integrations: contracts on X Layer, the Builder Code on
+every transaction, and x402 through the OKX Broker.
 
-*(147 words)*
+*(154 words)*
 
-### Track(s)
+### Track and route
 
-- **Primary:** X Layer, RWA (tokenized equities).
-- **Also:** OKX AI (a paid agent service on the OKX AI marketplace, agent #13869, paid over x402).
+- **Track:** Build a Market. Curb's contracts are live on X Layer mainnet, and the video shows the working flow.
+- **Route:** ⟨lead: "Singapore Finale" if the team can be in Singapore for the finale, otherwise "Remote Build"⟩
+- **Also relevant:** curb-asp is a paid service published through OKX AI (agent #13869, paid over x402, listing
+  review pending), which is what the Build a Company track asks for. ⟨lead: select it as well only if the form
+  allows a second track⟩
 
 ### Product link
 
@@ -44,7 +48,7 @@ https://github.com/OoJae/curb
 
 ### Demo video (2–4 min)
 
-⟨video link⟩ (target length 3:12; script in `video/SCRIPT.md`)
+⟨video link⟩ (target length 3:12; script: https://github.com/OoJae/curb/blob/main/video/SCRIPT.md)
 
 ### Contract addresses (X Layer mainnet, chain 196)
 
@@ -69,25 +73,73 @@ https://github.com/OoJae/curb
 
 ### Technical links
 
-- Deployments, every transaction: `docs/DEPLOYMENTS.md`
-- Design decisions, measurements and errata: `docs/DECISIONS.md`
-- Wallets and funding graph, published in advance: `docs/WALLETS.md`
-- MarketClock integration guide: `docs/MARKETCLOCK.md`
-- W3/W4 contract spec: `docs/specs/W3W4-contracts.md`
-- Verifier: `tools/curb-verify` (`node tools/curb-verify/src/cli.ts selftest`)
+- Start here (README, with "Try Curb in 60 seconds"): https://github.com/OoJae/curb/blob/main/README.md
+- Deployments, every transaction: https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md
+- Design decisions, measurements and errata: https://github.com/OoJae/curb/blob/main/docs/DECISIONS.md
+- Wallets and funding graph, published in advance: https://github.com/OoJae/curb/blob/main/docs/WALLETS.md
+- MarketClock integration guide: https://github.com/OoJae/curb/blob/main/docs/MARKETCLOCK.md
+- W3/W4 contract spec (frozen 24 Sep; where it differs from the deployed code, the contracts' NatSpec governs):
+  https://github.com/OoJae/curb/blob/main/docs/specs/W3W4-contracts.md
+- Verifier: https://github.com/OoJae/curb/blob/main/docs/VERIFY.md (`npx -y github:OoJae/curb tx <any Curb tx hash>`)
 - MarketClock round evidence: https://attestor-a-production.up.railway.app/healthz
-- Evidence archive: https://archive.curb.markets (the publisher lands during the window; see below)
+- Evidence archive: https://archive.curb.markets/index/latest.json (object-locked; host A, host B and the keeper
+  have published every new bundle and witness statement since 24 Sep 20:32Z)
 
 ### How it integrates with X Layer and OKX AI
 
-- **X Layer contracts.** MarketClock and Scorecard have been live since 13 and 21 Sep. W3/W4 deploy 25 Sep.
+- **X Layer contracts.** MarketClock and Scorecard have been live since 13 and 21 Sep. W3/W4 have been live since
+  24 Sep (blocks 71,503,708–71,507,867).
 - **X Layer Builder Code** `dd7u50nckt5e729f`. It is appended as an ERC-8021 suffix to every transaction
-  Curb's services send (host A, host B, keeper), and was first seen on chain 24 Sep 06:27Z.
+  Curb's services send (host A, host B, keeper), and was first seen on chain 24 Sep 06:27Z. The curb-desk demo
+  wallet appends it to its W3/W4 transactions; on the Agentic Wallet's ERC-4337 transactions it sits inside the
+  inner call.
 - **x402 through the OKX Broker.** Payments are USD₮0 on X Layer, scheme `exact`, verified and settled by OKX.
   Each paid answer gets a receipt bound to the exact bytes delivered.
 - **OKX AI marketplace.** Curb is registered as ASP agent #13869, from an OKX Agentic Wallet, with `onchainos`.
 - **OKX buyer path, tested end to end.** `onchainos payment quote`, then `pay`, then 200, then settlement
   [`0xe8740458…4de7`](https://www.oklink.com/xlayer/tx/0xe8740458e49025873da915705e05c8a1156882813e81411caea1d2f8ce1b4de7).
+
+### Live demo on mainnet (team wallets only)
+
+Every counterparty is a Curb team wallet, disclosed before its first transaction: K = curb-desk, A = the team's
+OKX Agentic Wallet (https://github.com/OoJae/curb/blob/main/docs/WALLETS.md). This demonstrates the mechanism; it
+is not usage. Every transaction below has status 1. The full ledger is in
+https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md, section "Live demo on mainnet".
+
+**W3 cycle 1: sell the reopen while Hong Kong is shut (the overnight closure ending 25 Sep 01:30Z)**
+
+- K approves 0.1 wTCENTx to ReopenNote (block 71,508,611):
+  https://www.oklink.com/xlayer/tx/0xa41ec8e3cf54901dfce11e8ebec645b268c8e3442cd6b9b8f9ef59626398c4e9
+- K mints note 1, escrowing 0.1 wTCENTx, 24 Sep 19:20Z (block 71,508,619):
+  https://www.oklink.com/xlayer/tx/0xcf3dfa55bc02bf0cec35422cc3561a98e7bb79bb779d13c27f51f3df277a1c40
+- K approves ClosedAuction for its notes (block 71,508,670):
+  https://www.oklink.com/xlayer/tx/0x56b91d1fe476aae48c7a0c755d8de6fd49be2774863d8870c87e037d30d9d072
+- K lists lot 1, descending 5.60 → 5.43 USDG, ending 01:00Z (09:00 HKT) (block 71,508,704):
+  https://www.oklink.com/xlayer/tx/0xaa7f91690bbba12d9291461545dc8a5a3f7c7a169076ec4ff5e7f1212f3af660
+- A approves 5.60 USDG to ClosedAuction (block 71,508,743):
+  https://www.oklink.com/xlayer/tx/0xad701253198a9f9a6796a7c1d0a02d4bb692def4d37f57c9a98ce6d6ae068e44
+- A buys lot 1 for 5.595137 USDG at 03:24:03 HKT, 35 bp under the reference (block 71,508,807):
+  https://www.oklink.com/xlayer/tx/0xf23e727c1a37c111e339f480caf15bf67cf2671139f355d11853ec1188cfd3d3
+
+**W4: a refused borrow is a transaction (24 Sep, Hong Kong shut)**
+
+- K approves USDG to DepthCert as a maker (block 71,516,056):
+  https://www.oklink.com/xlayer/tx/0x0594a5e45ec693ae3c9c98978d34627a95c7b71f862936c6687d901d022dd306
+- K funds the CurbCredit reserve with 3 USDG (block 71,516,155):
+  https://www.oklink.com/xlayer/tx/0x5e2a8be6bcf09bc1ea8b5f1f948402a2769c8621faae632de9b074edd76a25fa
+- A approves exactly 0.05 wTCENTx to CurbCredit (block 71,516,286):
+  https://www.oklink.com/xlayer/tx/0xd75527290def9c5ac8878b77b54630960c70de5af2edca0c5825890154b04619
+- A deposits 0.05 wTCENTx (block 71,516,299):
+  https://www.oklink.com/xlayer/tx/0xeb927854b5580c55350ebda8206cec05a5925cdcb73fdc01e548f4524df65b8b
+- A asks to borrow 1.4 USDG with no bonded depth, 24 Sep 21:30Z: `Refusal(NoDepth)`, requested 1,400,000,
+  allowed 0, inside a successful transaction, and nothing moves (block 71,516,369):
+  https://www.oklink.com/xlayer/tx/0x8bd873d77176dab81ad860c1496937d2e7535c8a6b91f0be5902936b408b5c7a
+
+**Appended here when they land (25 Sep, UTC):** 01:30Z, the reopen: `observe`, `recordPrint` at +300 s, A
+redeems note 1, and `realisedDiscountBps(1)` grades the price A paid. ~04:00Z, cycle 2 in the lunch recess.
+05:15Z, K's bonded bid naming CurbCredit lifts `ltvFor(wTCENTx)` from 0, and A borrows 1.4 USDG. 07:55Z, the
+issuer's cut: the LTV cap falls to 30%, `flagBreach` starts a cure clock, and the clock stays frozen while Hong
+Kong is shut.
 
 ### Features and integrations added during the build period (17–25 Sep)
 
@@ -126,8 +178,11 @@ Dates are UTC.
 18. **`curb-verify tx` and range verbs, 24 Sep.** Commit `08f2a11`.
 19. **Corporate actions feed and HONx replay, 24 Sep.** Commits `5761957` and `8715db2`.
 20. **curb.markets, 24 Sep.** The site, with the Week Ring and the live regime. Foundation commit `35b9854`.
+21. **Live W3/W4 demo on mainnet, from 24 Sep 19:20Z.** Team wallets only; every transaction is listed under
+    "Live demo on mainnet" above.
 
-Full table with links: README, "Built during the 17–25 Sep build window".
+Full table with links: https://github.com/OoJae/curb/blob/main/README.md, section "Built during the 17–25 Sep
+build window".
 
 ### Why it matters (optional: innovation, user value, growth)
 
@@ -136,28 +191,34 @@ names are shut 84% of the week, and a lending market's static parameters can't e
 on-chain fact, publishes a falsifiable record of its own prices (including the 15 ties it has scored so far),
 sells the data per call to agents, and builds the instruments that the fact makes possible. They are a note that
 settles at the verified reopen, and a credit line whose LTV follows the regime and the bonded depth behind it.
-Any X Layer protocol listing xStocks can read MarketClock for free today.
+Any X Layer protocol listing xStocks can read MarketClock for free today. Why now: Ondo's 24/7 minting covers
+six US names only, oracle market status follows the exchange calendar rather than the issuer's cap, and OKX's own
+tokenized stocks price off-hours as "the last close plus a market estimate". Sources:
+https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now".
 
-*(113 words)*
+*(157 words)*
 
 ### Ecosystem contribution (optional)
 
 - MarketClock is MIT, free to read, with no key and no fee. It is built for any protocol that touches xStocks on
   X Layer.
 - Published integrator traps: wrapper units versus raw units, a non-monotonic multiplier, rebases that emit no
-  event, and `stateOf()` not failing closed (`docs/MARKETCLOCK.md`).
-- A risk-framework draft for listing tokenized equities on Aave V3 X Layer (`docs/AAVE_ARFC.md`, not yet posted).
+  event, and `stateOf()` not failing closed (https://github.com/OoJae/curb/blob/main/docs/MARKETCLOCK.md).
+- A risk-framework draft for listing tokenized equities on Aave V3 X Layer
+  (https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md, not yet posted).
 - Measured findings about X Layer infrastructure: `eth_getLogs` is capped at 100 blocks; cardinality-1 pools make
-  `observe()` return spot; OKX's buyer CLI re-serialises paid bodies (`docs/DEPLOYMENTS.md`).
+  `observe()` return spot; OKX's buyer CLI re-serialises paid bodies
+  (https://github.com/OoJae/curb/blob/main/docs/DEPLOYMENTS.md).
 
 ### Declaration notes
 
 - **Prior work.** MarketClock and Scorecard v1 were deployed 13 Sep, and attestations began 14 Sep, all before
   the build window. The list above covers only what was added from 17 Sep.
 - **Team wallets.** Every demo wallet and the first paying wallet belong to the team. They are published with
-  their funding graph in `docs/WALLETS.md`. No third-party usage is claimed.
-- **Honest record.** As of 24 Sep, Scorecard shows 15 settled rows, 0 wins and 15 ties. Errata are published
-  (D-7), and no row is ever re-marked.
+  their funding graph in https://github.com/OoJae/curb/blob/main/docs/WALLETS.md. No third-party usage is claimed.
+- **Honest record.** As of 25 Sep 00:56Z, Scorecard's `skill()` reads (15, 0, 0): 15 settled rows, 0 wins and
+  15 ties, all under `curb.scorecard.mark/1`. The first `mark/2` rows are due to settle after the 01:30Z reopen.
+  Errata are published (D-7), and no row is ever re-marked.
 - **Third-party code.** forge-std (vendored), ethers, @openzeppelin/merkle-tree, canonicalize, and OKX's
   `@okxweb3/x402-core` and `x402-evm`.
 - **No token, no fundraising.** MarketClock use is free. Curb's only revenue is the per-call API.
@@ -168,7 +229,13 @@ Any X Layer protocol listing xStocks can read MarketClock for free today.
 ## Before pressing submit
 
 - [ ] Repo is public, and `docs/HYGIENE.md` findings are resolved or accepted.
+- [ ] Every `github.com/OoJae/curb` link above opens logged-out, and `npx -y github:OoJae/curb selftest` passes
+      from a clean directory (both need the public repo).
 - [ ] W3/W4 addresses and txs above match `docs/DEPLOYMENTS.md`, with Sourcify status.
+- [ ] "Live demo on mainnet" has the 01:30Z, ~04:00Z, 05:15Z and 07:55Z transactions appended from
+      `docs/DEPLOYMENTS.md`, each with its OKLink link and block.
+- [ ] The track and route labels match what the form offers ("Build a Market"; "Singapore Finale" or "Remote
+      Build"), and the finale date is confirmed on the official page.
 - [ ] If any commit history was rewritten (see HYGIENE), every commit hash in this file and the README is re-checked.
 - [ ] The Scorecard tally is re-read (`skill()`), and any number above that changed is re-dated.
 - [ ] `curb.markets` serves, or the product link is switched to the API.
