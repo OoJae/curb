@@ -32,8 +32,8 @@ every transaction, and x402 through the OKX Broker.
 
 - **Track:** Build a Market. Curb's contracts are live on X Layer mainnet, and the video shows the working flow.
 - **Route:** ⟨lead: "Singapore Finale" if the team can be in Singapore for the finale, otherwise "Remote Build"⟩
-- **Also relevant:** curb-asp is a paid service published through OKX AI (agent #13869, paid over x402, listing
-  review pending), which is what the Build a Company track asks for. ⟨lead: select it as well only if the form
+- **Also relevant:** curb-asp is a paid service published through OKX AI (agent #13869, paid over x402, listed
+  25 Sep), which is what the Build a Company track asks for. ⟨lead: select it as well only if the form
   allows a second track⟩
 
 ### Product link
@@ -69,7 +69,7 @@ https://github.com/OoJae/curb
 ### Service / listing URL
 
 - API: https://api.curb.markets (discovery: https://api.curb.markets/.well-known/x402)
-- OKX AI marketplace: agent **#13869** "Curb", https://www.okx.ai/agents/13869 (listing review pending as of 25 Sep: until OKX approves it the page reads "This ASP is under review"), three A2MCP services: Closure Calendar
+- OKX AI marketplace: agent **#13869** "Curb", https://www.okx.ai/agents/13869 (listed 25 Sep 2026: "Listed — eligible for task recommendations"), three A2MCP services: Closure Calendar
   $0.01, Reopen Price Accuracy Record $0.05, Closure Discount by Duration $0.10.
 - MCP server for AI agents (free, read-only, six tools over Streamable HTTP):
   https://curb-mcp-production.up.railway.app/mcp (`mcp.curb.markets` once its DNS is in). Any agent can ask whether a
@@ -281,5 +281,5 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
 - [ ] If any commit history was rewritten (see HYGIENE), every commit hash in this file and the README is re-checked.
 - [ ] The Scorecard tally is re-read (`skill()`), and any number above that changed is re-dated.
 - [ ] `curb.markets` serves, or the product link is switched to the API.
-- [ ] The agent #13869 listing status is checked (approved or still under review) and stated as it is.
+- [x] The agent #13869 listing status is checked: listed 25 Sep 2026.
 - [ ] The video link opens logged-out, and the video runs 2–4 minutes.

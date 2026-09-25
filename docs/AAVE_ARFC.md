@@ -162,7 +162,7 @@ We also publish our own errata. Six rounds at the very start of the record (bloc
 ## Disclosure
 
 - MarketClock and this framework were built by the Curb team. **Reading MarketClock is free:** MIT, no key, no fee, no token.
-- **Curb does earn revenue from the same data.** It sells a paid API over x402 (a closure calendar, the graded record of its reopen prices, and a closure-discount curve), offered through its agent on the OKX AI marketplace, [#13869](https://www.okx.ai/agents/13869), whose listing was still under OKX review on 24 Sept. Nothing in this proposal routes fees to Curb.
+- **Curb does earn revenue from the same data.** It sells a paid API over x402 (a closure calendar, the graded record of its reopen prices, and a closure-discount curve), offered through its agent on the OKX AI marketplace, [#13869](https://www.okx.ai/agents/13869), listed on 25 Sept 2026. Nothing in this proposal routes fees to Curb.
 - We are not compensated by Aave, by Backed, or by any party to this proposal.
 - We operate products that consume MarketClock, including the credit line described above. We therefore have an interest in the asset class being listable, and we state that plainly rather than presenting this as disinterested research.
 - The funding graph of **every** wallet we control is published in advance in the repository's [`docs/WALLETS.md`](https://github.com/OoJae/curb/blob/main/docs/WALLETS.md), including which addresses must be excluded from any claim about third-party usage.
@@ -222,7 +222,7 @@ Copyright and related rights waived via [CC0](https://creativecommons.org/public
    - CurbCredit `reserve()`, `ltvFor(wTCENTx)`, DepthCert `nextId()`, and both allowlists. "Today, two disclosed
      team wallet" must still be true (curb-desk left the borrower registry on 25 Sept, tx 0xc505987a…). "The first
      borrow was refused" stays true.
-   - OKX agent #13869: if the listing has cleared review, change "still under OKX review on 24 Sept".
+   - OKX agent #13869: listed 25 Sept 2026 (done).
    - Aave forum: no new tokenized-equity proposal on Aave V3 X Layer; the B20 Equities Hub Snapshot closes
      25 Sept 13:49 UTC (the post says only "proposed", which stays true); LlamaRisk's 25427/5 post still says what
      the post cites.

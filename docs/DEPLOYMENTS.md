@@ -220,7 +220,7 @@ Verified live from outside, 24 Sept 07:1xZ:
 
 Registered with `onchainos` 4.6.2 from the team's Agentic Wallet `0x055b…7105` (see `docs/WALLETS.md`)
 in [`0xe2420407…ccc7`](https://www.oklink.com/xlayer/tx/0xe2420407a65b51a468f060a52496e15587ce13d1c23fccff30330d8ab293ccc7),
-then submitted for listing review (`submitApproval.success: true`, under review). The exact text
+then submitted for listing review (`submitApproval.success: true`), and **listed on 25 Sept 2026** (`get-my-agents`: status active, "Listed — eligible for task recommendations"; public page https://www.okx.ai/agents/13869). The exact text
 submitted is `script/asp/agent-description.txt` and `script/asp/services.json`; the avatar is
 `script/asp/curb-avatar.png`. Three A2MCP services: Closure Calendar ($0.01), Reopen Price Accuracy
 Record ($0.05), Closure Discount by Duration ($0.10). No subscription and no free trial: A2MCP
