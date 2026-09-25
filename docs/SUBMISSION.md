@@ -77,6 +77,10 @@ https://github.com/OoJae/curb
   lends at; `curb_paid_services` hands it the exact onchainos command for the paid x402 routes. Agent skill:
   https://github.com/OoJae/curb/blob/main/skills/curb/SKILL.md
 
+- Aave governance post, "[Discussion] A risk framework for tokenized equities on Aave V3 X Layer, with wTCENTx as
+  the worked example", posted 25 Sep ~15:40Z in Risk > General (awaiting moderator approval; add its link here once
+  approved). Text: https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md
+
 ### Technical links
 
 - Start here (README, with "Try Curb in 60 seconds"): https://github.com/OoJae/curb/blob/main/README.md

@@ -1,6 +1,6 @@
 # [Discussion] A risk framework for tokenized equities on Aave V3 X Layer, with wTCENTx as the worked example
 
-**Status: FINAL DRAFT. Not posted.** Fact-checked after approval in principle; every change since is listed in `docs/AAVE_ARFC_CHANGES.md`. It goes to governance.aave.com only after the user approves this revision and the checklist at the end is complete. *Last revised 25 Sept 2026.*
+**Status: POSTED 25 Sept 2026 ~15:40Z** to https://governance.aave.com as a [Discussion] in Risk > General by user OoJae; held for moderator approval (new account, pending post 1406). The posted body is this file from "## Summary" to the CC0 line, fetched from the public repo at commit f3e9fc7.
 
 ---
 
