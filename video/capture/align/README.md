@@ -59,6 +59,14 @@ script; the previous cut is saved to `index.html.bak`. It always maps from the s
 safe to run again. Options: `--tail 1.2` (hold after the last word), `--pre 0.12` (cut this long before
 each beat's first word).
 
+The proportional map only lands a beat's inner cuts if the read is spread like the script. Where it is not,
+place the plate by hand: take the word onset (`media/transcript.json`, checked against `silencedetect`),
+subtract 0.12 s, invert the beat's map (`s = SCRIPTED[b] + (t − GRID[b]) × (SCRIPTED[b+1] − SCRIPTED[b]) /
+(GRID[b+1] − GRID[b])`), and write that `s` into the plate's `data-s`/`data-d`, its video's, and its timeline
+cues, then re-run `retime.mjs`. For the 25 Sep read this was done for all five beat-5 plates (S04c, O3,
+T4s, S04s, sc-method) and for the beat-7 /notes → /depth cut on "A lender" (S07 at scripted 168.23 =
+122.205 s). A new read has to re-place them.
+
 Then put the voice on track A1 (idempotent):
 
 ```bash
