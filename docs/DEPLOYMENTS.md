@@ -329,7 +329,10 @@ curb-desk and the deployer. **Correction (25 Sept, found in review):** the two l
 disjoint. curb-desk is on both: the notes/borrower registry `0xd725…e938` since block 71,503,711 (for the cycle-2
 bid it was to make) and the maker registry since block 71,507,852. So one team wallet can both borrow and set the
 LTV. No position depends on it (curb-desk has never borrowed; the Agentic Wallet, the only borrower, is not a
-maker), and the plan is to remove curb-desk from the borrower registry once the 25 Sept demo is over. An earlier
+maker), and curb-desk was removed from the borrower registry once the 25 Sept demo was over: `setEligible(curb-desk, false,
+keccak256("curb-desk removed from the borrower and bidder allowlist after the 25 Sep 2026 demo: a maker must not also
+borrow"))` from D at 08:17Z, tx `0xc505987a875c78e43d222bfa498b4f84d63e008b45933ee6aca205996a33b0a6` (block 71,555,260). Read back:
+curb-desk borrower false, maker true; the Agentic Wallet borrower true. The two lists are now disjoint. An earlier
 version of this paragraph said a borrower "must never be able to post one"; that was the intent, not the state.
 
 **Three adversarial review rounds changed the design before deploy.** Each finding was independently
