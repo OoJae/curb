@@ -323,8 +323,14 @@ three are verified **Sourcify `exact_match`**.
 | DepthCert | `0x702b1a988765f85162F4829175EF4232197e9C6D` | `0x0b1d619895c378e2288100684c6a2359885f997b5a7f497175c44c5f0ca3fd0f` | 71,507,861 |
 | CurbCredit | `0x23c778c88C3ABf0Ad750f703C5F04cB3129ee339` | `0x8ad640d0ed4a9e07d47bb532f59c153621c6714c427c1ceb382def061a868543` | 71,507,867 |
 
-**Makers and borrowers are on separate allowlists.** A maker's bid sets every borrower's LTV, so a borrower
-must never be able to post one. The maker registry holds only curb-desk and the deployer.
+**Makers and borrowers are on separate allowlists.** A maker's bid sets every borrower's LTV, so the right to
+post a bid naming CurbCredit is granted separately from the right to borrow. The maker registry holds only
+curb-desk and the deployer. **Correction (25 Sept, found in review):** the two lists are separate contracts but not
+disjoint. curb-desk is on both: the notes/borrower registry `0xd725…e938` since block 71,503,711 (for the cycle-2
+bid it was to make) and the maker registry since block 71,507,852. So one team wallet can both borrow and set the
+LTV. No position depends on it (curb-desk has never borrowed; the Agentic Wallet, the only borrower, is not a
+maker), and the plan is to remove curb-desk from the borrower registry once the 25 Sept demo is over. An earlier
+version of this paragraph said a borrower "must never be able to post one"; that was the intent, not the state.
 
 **Three adversarial review rounds changed the design before deploy.** Each finding was independently
 verified with a PoC, then fixed and regression-tested.
@@ -371,8 +377,18 @@ not show the attribution for A's rows. K's and D's transactions end in the suffi
 | approve 5.60 USDG to ClosedAuction | A | `0xad701253198a9f9a6796a7c1d0a02d4bb692def4d37f57c9a98ce6d6ae068e44` | 71,508,743 |
 | bid: lot 1 sold to A at **5.595137 USDG** (03:24:03 HKT), 35 bp under the reference | A | `0xf23e727c1a37c111e339f480caf15bf67cf2671139f355d11853ec1188cfd3d3` | 71,508,807 |
 
-Still to come: `observe` at the 01:30Z reopen (`script/w3/poke.sh`), A's `redeem` (`script/w3/redeem-after-reopen.sh`),
-`recordPrint` at +300 s, then `realisedDiscountBps(1)`.
+Completed at the 25 Sept 01:30Z reopen:
+
+| step | who | tx | block |
+|---|---|---|---|
+| `observe`: the reopen witnessed, epoch 1 opened at 01:30:32Z (the backup witness from D landed first) | D | `0xeb01d9f84355aec74ac3e75033d68f40930033d1d234d631e1790f46b32d991c` | 71,530,796 |
+| `redeem(1, 0.1e18, A)`: note 1 burned, 0.1 wTCENTx delivered to A | A | `0xd102eca8ef75190302419edf008ecbb9117a71c67e9978a4179473d9be29e383` | 71,530,833 |
+| `recordPrint(wTCENTx, 1)` at openedAt + 303 s: **55.7357 USDG a share** | K | `0xce7b9189f3cf83ffbeb79f52096869aa3ded77e489f18f84d0a8674914b9fb66` | 71,531,111 |
+
+`realisedDiscountBps(1)` = **−38**: at the reopen print the lot was worth 5.5736 USDG, and A had paid 5.5951, so the
+buyer paid 38 bp more than the reopen was worth. Tencent reopened lower (HKEX open −78 bp on the previous close).
+The seller, holding the stock, would have done 38 bp worse by waiting. A backup `recordPrint` from D at +310 s
+reverted on chain (`0xba096762…4333`, AlreadyPrinted): poke's print had landed first, as designed.
 
 ### W4 — before the reopen, 24 Sept ~21:30Z (HK shut)
 

@@ -32,6 +32,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeHttpAdapter, bufferBody, BodyTooLarge } from "./http/adapter.ts";
+import { clientKey } from "./http/client.ts";
 import { send, sendJson } from "./http/respond.ts";
 import { BINANCE_KLINES_PATH, createBinanceRelay, serveRelay } from "./relay.ts";
 import type { BinanceRelay } from "./relay.ts";
@@ -72,7 +73,7 @@ export interface AppDeps {
   /** For /healthz only; null when SCORECARD is unset. */
   scorecard?: { status(nowMs: number): ScorecardStatus } | null;
   closures?: { status(): ClosureIndexStatus } | null;
-  /** The Binance klines relay (relay.ts); left out, one is built over the real fetch and `now`. */
+  /** The Binance klines relay (relay.ts); left out, one is built over the real fetch and `now`, with default budgets. */
   relay?: BinanceRelay;
   /** The corporate-actions feed. Its routes and /healthz block read memory only; null serves 503 on its routes. */
   corporateActions?: Pick<CorporateActionsFeed, "health" | "versionsRoute" | "lineageRoute"> | null;
@@ -127,8 +128,9 @@ export function createApp(d: AppDeps): (req: IncomingMessage, res: ServerRespons
         return corporate(res, (f) => f.lineageRoute(adapter.getQueryParam("symbol"), d.state.cohort, d.now()));
       case "/.well-known/x402": return send(res, 200, wellKnown, { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" });
     }
-    // Free and GET-only (the method gate above): the relay's own query rules and upstream budget apply.
-    if (path === BINANCE_KLINES_PATH) return serveRelay(res, relay, adapter.url.searchParams);
+    // Free and GET-only (the method gate above): the relay's own query rules and upstream budgets apply,
+    // the per-client one keyed on the address Railway's edge reports (http/client.ts).
+    if (path === BINANCE_KLINES_PATH) return serveRelay(res, relay, adapter.url.searchParams, clientKey(req));
     const file = path.match(HASH_FILE);
     if (file) {
       const dir = join(d.dataDir, file[1]);

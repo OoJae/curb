@@ -12,7 +12,9 @@
  *                       nobody signs anything for a request that cannot succeed.
  *   4. challenge/verify the SDK answers 402 (challenge in PAYMENT-REQUIRED, truthful preview in the body),
  *                       or the Broker confirms the signed payment is valid. Verifying moves no money; a
- *                       Broker that errors or stalls here is a 503, and nothing was charged.
+ *                       Broker that errors or stalls here is a 503, and nothing was charged. A payment the
+ *                       local pre-check can already see is unusable (precheck.ts) is a 402 naming why,
+ *                       before the Broker is asked.
  *   5. build            the paid answer, serialised to its exact bytes, BEFORE any money moves. If it
  *                       cannot be built -- the issuer went dark while the payment was being verified --
  *                       the answer is 503 and the payment is simply never settled.
@@ -47,6 +49,8 @@ import type { AuthorizationChain, Eip3009Authorization } from "./authorization.t
 import { askChain, chainSettlementHeaders, PENDING_SCHEMA } from "./ledger.ts";
 import type { AuthorizationLedger, ChainVerdict, PendingSettlement } from "./ledger.ts";
 import { BrokerError } from "./broker.ts";
+import { precheckScope } from "./precheck.ts";
+import type { PrecheckRefusal } from "./precheck.ts";
 import type { NodeHttpAdapter } from "../http/adapter.ts";
 import { applyInstructions, send, sendJson } from "../http/respond.ts";
 import type { Log } from "../log.ts";
@@ -236,11 +240,12 @@ async function verifyBuildSettle(res: ServerResponse, adapter: HTTPAdapter, quer
   const { route, handler: h } = d;
   const http = d.payments.http!;
 
-  // 4. Verify.
+  // 4. Verify: the local pre-check (precheck.ts, run by the SDK's onBeforeVerify hook), then the Broker.
   const ctx: HTTPRequestContext = { adapter, path: adapter.getPath(), method: adapter.getMethod(), paymentHeader: adapter.getHeader("payment-signature") };
+  const precheck: { refusal: PrecheckRefusal | null } = { refusal: null };
   let processed: HTTPProcessResult;
   try {
-    processed = await http.processHTTPRequest(ctx);
+    processed = await precheckScope.run(precheck, () => http.processHTTPRequest(ctx));
   } catch (e) {
     d.log("verify-error", { route: route.key, error: describe(e) });
     if (e instanceof BrokerError) {
@@ -248,7 +253,12 @@ async function verifyBuildSettle(res: ServerResponse, adapter: HTTPAdapter, quer
     }
     return sendJson(res, 502, { error: "facilitator-error" });
   }
-  if (processed.type === "payment-error") return applyInstructions(res, processed.response);
+  if (processed.type === "payment-error") {
+    // Refused here, not by the Broker: the SDK's 402 and challenge, with the reason and detail in the body.
+    const r = precheck.refusal;
+    if (r) return applyInstructions(res, { ...processed.response, body: { error: "payment-invalid", reason: r.reason, detail: r.detail } }, { "content-type": CONTENT_TYPE });
+    return applyInstructions(res, processed.response);
+  }
   if (processed.type !== "payment-verified") {
     // The SDK thinks this path is free. It is in our priced table, so something disagrees about the
     // route: fail closed rather than serve a priced answer for nothing.

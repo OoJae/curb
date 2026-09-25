@@ -548,6 +548,17 @@ something that does trade while HKEX is shut (Hang Seng index futures in HKEX's 
 US-listed ADRs and China ETFs during US hours, USD/CNH) — introduced as `curb.scorecard.mark/2`, with
 every existing row keeping the method that produced it. No row is ever re-marked.
 
+> **Erratum, 25 Sept 2026 (found by an independent fact-check of the Aave ARFC, confirmed on chain).** The claim
+> above that "the pools did not trade while primary capacity was off", and that the pool "carries no
+> information while the market is shut", is **wrong**. The three Scorecard price pools printed 15 swaps in the
+> 22 Sept lunch recess, 63 in the 23 Sept recess and 141 in the 24 Sept recess (most on wXIAOx's USDC pool;
+> wTCENTx had 1), and in 14 of the 15 closures the pool price one second before the reopen differed from its
+> price at the cut. The 15 ties stand, but for a different reason: `mark/1` *is* the last print, so a mark/1
+> row can only tie the last-print baseline, whatever the pool does. The keeper's `no-drift` flag on those
+> marks therefore did not detect trades that did happen; it is to be investigated after the finale (the
+> keeper is not changed while the first mark/2 rows are being recorded). The reopen range is 0 to 105 bp,
+> not 30 to 105.
+
 The public record says so already: `https://api.curb.markets/v1/accuracy-record` previews
 `{"settled": 15, "beatLastPrint": 0, "beatClosingVwap": 0}`. That is the honest number.
 
@@ -705,7 +716,15 @@ cannot prove it. The perp leg can be checked by refetching; the Yahoo leg cannot
 **Unchanged rule:** every existing row keeps the method that produced it. **No row is ever re-marked.**
 The mark/1 verification range closes at block 71,486,953 (`MARK2_CUTOVER_BLOCK`).
 
-First mark/2 row: TODO(lead) block, tx and closure id once committed, and its grade once settled.
+**First mark/2 rows (25 Sept 01:30Z reopen): three losses.** Committed 01:20:31–01:20:47Z (txs `0xebd87019…62f4`,
+`0x90125dac…3104`, `0x7e9104f8…9b29`, blocks 71,530,195–71,530,211), settled by the keeper at 01:35:26–01:35:30Z
+(`0x5ca722b5…ed0e`, `0x37f5b51b…a142`, `0x55d3a7c7…fb4c`). Curb error against the pool's own reopen price, against
+the last print's: wTCENTx 152 vs 13 bp, wXIAOx 381 vs 336 bp, wMEITx 204 vs 193 bp. `skill()` = (18, 0, 0).
+All three marks called the gap up (wTCENTx +139 bp); HKEX opened all three down (0700.HK −78 bp, 1810.HK −143 bp,
+3690.HK −76 bp at the 09:30 HKT open). So the signal pointed the wrong way: a real miss, not a grading artefact.
+A second finding: five minutes after the reopen, when the Scorecard reads it, the pool had moved far less than
+the market (wTCENTx pool −13 bp, 0700.HK −114 bp by 09:35), so a baseline of "no change" is favoured by a pool
+that lags the reopen. Both stay on the record; no row is ever re-marked.
 
 ---
 

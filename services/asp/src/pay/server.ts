@@ -21,6 +21,11 @@
  * times out, the SDK polls the Broker's status endpoint for five seconds and then asks
  * `onSettlementTimeout`, which we answer from the chain itself (makeChainConfirm) -- for THIS payment's
  * authorization, not for any transfer that happens to reach PAY_TO.
+ *
+ * Before any verify reaches the Broker, the SDK's onBeforeVerify hook runs the local pre-check
+ * (precheck.ts): an authorization that cannot pay the price -- wrong recipient, short value, expired, or an
+ * ECDSA signature that does not recover to its payer when that payer has no code -- is a 402 naming why,
+ * and costs no Broker call.
  */
 import { x402ResourceServer, x402HTTPResourceServer } from "@okxweb3/x402-core/server";
 import type {
@@ -35,7 +40,10 @@ import { DEFAULT_BROKER_DEADLINES, withDeadlines } from "./broker.ts";
 import type { BrokerDeadlines } from "./broker.ts";
 import { receiptPays, settlementScope } from "./authorization.ts";
 import type { RpcCall, TxReceipt } from "./authorization.ts";
+import { createPaymentPrecheck, precheckScope } from "./precheck.ts";
+import type { PayerHasCode } from "./precheck.ts";
 import type { PricedRoute } from "./routes.ts";
+import { throttledLog } from "../log.ts";
 import type { Log } from "../log.ts";
 
 export type BilledQuery = Record<string, string | number>;
@@ -75,6 +83,8 @@ export interface PaymentsOptions {
   /** Per-call Broker deadlines; DEFAULT_BROKER_DEADLINES for any left out. */
   brokerDeadlines?: Partial<BrokerDeadlines>;
   confirmSettlementTx?: OnSettlementTimeoutHook;
+  /** eth_getCode for the pre-check's signature rule (precheck.ts); absent, that one rule is skipped. */
+  payerHasCode?: PayerHasCode | null;
   now: () => number;
   log: Log;
   /** Minimum gap between attempts to read the Broker's /supported. */
@@ -153,6 +163,18 @@ export class Payments {
     // Only the one network we settle on. A wildcard registration would let a route typo'd onto another
     // chain build a challenge the Broker then refuses.
     const core = new x402ResourceServer(facilitator).register(o.network, new ExactEvmScheme());
+    // The SDK calls this after it has matched the payload to one of our routes' terms and before it asks
+    // the Broker. An abort becomes the SDK's own 402, with the reason in PAYMENT-REQUIRED.
+    const precheck = createPaymentPrecheck({ network: o.network, asset: USDT0.address, payTo: o.payTo, now: o.now, payerHasCode: o.payerHasCode ?? null });
+    const noteRefused = throttledLog(o.log, "payment-precheck-refused", 60_000, o.now);
+    core.onBeforeVerify(async ({ paymentPayload, requirements }) => {
+      const refusal = await precheck(paymentPayload, requirements);
+      if (!refusal) return;
+      noteRefused({ reason: refusal.reason });
+      const slot = precheckScope.getStore();
+      if (slot) slot.refusal = refusal;
+      return { abort: true, reason: refusal.reason, message: refusal.detail };
+    });
     this.http = new x402HTTPResourceServer(core, buildRoutesConfig(o, o.payTo));
     if (o.confirmSettlementTx) this.http.onSettlementTimeout(o.confirmSettlementTx);
   }
