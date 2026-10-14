@@ -75,8 +75,8 @@ https://youtu.be/JInFSx2d3Qk (2:24; script: https://github.com/OoJae/curb/blob/m
   https://github.com/OoJae/curb/blob/main/skills/curb/SKILL.md
 
 - Aave governance post, "[Discussion] A risk framework for tokenized equities on Aave V3 X Layer, with wTCENTx as
-  the worked example", posted 25 Sep ~15:40Z in Risk > General (awaiting moderator approval; add its link here once
-  approved). Text: https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md
+  the worked example", posted 25 Sep ~15:40Z in Risk > General and approved 28 Sep:
+  https://governance.aave.com/t/25724 (one reply so far, 1 Oct). Text: https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md
 
 ### Technical links
 
@@ -300,3 +300,6 @@ https://github.com/OoJae/curb/blob/main/README.md, section "Why this matters now
 - [x] `curb.markets` serves, or the product link is switched to the API.
 - [x] The agent #13869 listing status is checked: listed 25 Sep 2026.
 - [x] The video link opens logged-out (YouTube oEmbed 200, "CURB DEMO"), and the video runs 2:24.
+- [x] Remote-track confirmation (OKX email of 14 Oct): the "Remote Track Submissions Update" form was submitted
+  14 Oct 2026 ~09:45Z ("Your response has been recorded"), as Team Azura, with the repo, the demo link and the
+  demo MP4 attached. OKX says winners are contacted 16-18 Oct and have 72 hours to reply.
