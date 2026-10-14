@@ -76,7 +76,8 @@ https://youtu.be/JInFSx2d3Qk (2:24; script: https://github.com/OoJae/curb/blob/m
 
 - Aave governance post, "[Discussion] A risk framework for tokenized equities on Aave V3 X Layer, with wTCENTx as
   the worked example", posted 25 Sep ~15:40Z in Risk > General and approved 28 Sep:
-  https://governance.aave.com/t/25724 (one reply so far, 1 Oct). Text: https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md
+  https://governance.aave.com/t/25724 (a reader asked on 1 Oct who controls the xStock's upgrades; answered 14 Oct with the on-chain
+  signer set and roles: https://governance.aave.com/t/25724/3). Text: https://github.com/OoJae/curb/blob/main/docs/AAVE_ARFC.md
 
 ### Technical links
 
