@@ -475,6 +475,43 @@ open market; a `tick` while shut leaves `openSecondsUsed` at 0.
 block 71,462,192, 32 s after the deploy finished — carries the suffix; OKX's `ox` decodes its calldata to
 `{"codes":["dd7u50nckt5e729f"],"id":0}`, and host B's signed witness for it reads `reproduced: true`.
 
+## All three writers redeployed with the publisher fix — 14 Nov 2026
+
+The publisher change of 25 Sep (`5084983`: a 409 `ObjectLockedByBucketPolicy` on a write-once key means the
+object is already archived, as a 412 does) was held back until after the finale; until now all three writers
+ran the build of 24 Sep (`bf07536`). Deployed from `8b52f29`, which adds two operational changes and no service
+code:
+
+- **The Node base image is pinned by digest**, `node:26-slim@sha256:14bf3eac…4239` (Node 26.8.2), the image the
+  VPS cached on 9 Sep and host B and the keeper have run on since. A bare tag is re-resolved at build time, on
+  Railway and by the VPS's containerd image store, so a code deploy would also have changed Node (host A had been
+  built on 26.10.0; the tag now points at 26.13.1) and pulled a new base onto a disk that was 99 % full. All three
+  writers now run 26.8.2.
+- **`deploy.sh` takes `SERVICES`** (default `attestor-b keeper w0`, as before), and tags the image each running
+  container came from as `<repo>:prev-<image id>` before rebuilding it.
+
+| writer | deployed | code digest | first round or check on the new build |
+|---|---|---|---|
+| host B | 17:08Z, `SERVICES="attestor-b keeper"` | `sha256:557d2851…ef64` | witnessed host A's rounds of 17:12:02Z and 17:17:04Z, `reproduced: true` |
+| keeper | 17:08Z, same run | `sha256:53bf436f…23b5` | reloaded its five open weekend closures from `keeper-state.json`; no `closure-open` or `closure-unwitnessed` at boot |
+| host A | 17:22:35Z, `railway up services/attestor --path-as-root --service attestor-a --ci` (deployment `150d4859`) | `sha256:557d2851…ef64` | round evaluated 17:27:35Z, [`0x04dd7aeb…d368`](https://www.oklink.com/xlayer/tx/0x04dd7aeb5fbc3cdb251081739a92efa887bdb95f7a7ec0f431fdaf9c0929d368), block 75,908,221, archived, witnessed `reproduced: true` |
+
+Both keys were loaded, not created (`"created":false`), and host B's witness cursor continued from where it
+stopped. Host A missed no heartbeat across either restart, and host B wrote nothing (its nonce stayed 184). The W0
+observer was not restarted: its code did not change.
+
+**Host A's volume, 2,048 → 5,000 MB.** Every round keeps its ~83 kB bundle in `/data/outbox`; the volume was
+81 % full (1,656.6 MB) and would have filled around 30 Nov, after which host A cannot persist a bundle and so
+cannot sign. Applied from `.railway/railway.ts` with `railway config apply`, which also redeployed host A
+(deployment `9f1bb97b`, 17:29:58Z, same build); its first round after that, evaluated 17:33:07Z
+([`0x65d14dc2…1a92`](https://www.oklink.com/xlayer/tx/0x65d14dc2a27b7503450ddd14b886e262bd7628775a3069236df8753debca1a92)),
+was witnessed `reproduced: true`. At about 25 MB a day, 5,000 MB lasts to around April 2027.
+
+**Rollback.** On the VPS the old images are tagged `curb-attestor:rollback-bf07536` and
+`curb-keeper:rollback-bf07536` (and `:prev-<id>`); the keeper state, host B's witness state, the two non-secret
+env files and all three container logs were saved to `/root/curb-predeploy-20261114T170451Z` first. Host A's
+September deployment `016bc550` can be restored with `deploymentRollback` until about 17 Nov 17:22Z.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below

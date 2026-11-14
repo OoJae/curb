@@ -30,11 +30,14 @@ export default defineRailway(() => {
     deploy: { restartPolicyType: "ALWAYS" },
   });
 
+  // Every round persists one ~83 kB bundle under /data/outbox and nothing deletes it (each is also in the locked
+  // archive): about 22-27 MB a day. 2,048 MB was 81% full on 14 Nov 2026 and would have filled around 30 Nov, and
+  // at 100% host A cannot persist a bundle, so it cannot sign. 5,000 MB (the Hobby maximum) lasts to about April 2027.
   const attestorAData = volume("attestor-a-data", {
     alerts: { usage: { "100": {}, "80": {}, "95": {} } },
     allowOnlineResize: true,
     region: "sin",
-    sizeMB: 2048,
+    sizeMB: 5000,
   });
   const attestorA = service("attestor-a", {
     replicas: { sin: 1 },
