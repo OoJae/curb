@@ -26,6 +26,15 @@ HOST="${HOST:-Sonar-VPS2}"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 CURB_UID=10001
 
+# Which services this run touches. Default: all three, exactly as before. A code change to one service should
+# not restart the other two:   SERVICES=keeper KEEPER_MODE=live SCORECARD=0x... bash script/hostb/deploy.sh
+SERVICES="${SERVICES:-attestor-b keeper w0}"
+for s in $SERVICES; do
+  case "$s" in attestor-b|keeper|w0) ;; *) echo "unknown service '$s' in SERVICES (attestor-b, keeper, w0)" >&2; exit 1 ;; esac
+done
+want() { case " $SERVICES " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+echo "==> services: $SERVICES"
+
 # ERC-8021 attribution. DATA_SUFFIX is the X Layer Builder Code BUILDER_CODE as an ERC-8021 suffix, appended
 # to every transaction host B and the keeper sign. It is public by design (it is in the calldata), so it
 # lives here, not in a secret file, and both env files below take this one value. Set DATA_SUFFIX= (empty)
@@ -61,24 +70,31 @@ DATA_SUFFIX="$(node --experimental-strip-types --input-type=module -e '
 # keeper.env is rewritten on every run. Since 21 Sep the keeper is live on Scorecard v2, so a run without both
 # variables would quietly demote it to a shadow keeper with no Scorecard and stop the marks. Say them out loud:
 #   KEEPER_MODE=live SCORECARD=0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f bash script/hostb/deploy.sh
-: "${KEEPER_MODE:?set KEEPER_MODE (live since 21 Sep; shadow only on purpose)}"
-if [[ "$KEEPER_MODE" == "live" ]]; then : "${SCORECARD:?set SCORECARD (Scorecard v2 0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f)}"; fi
+if want keeper; then
+  : "${KEEPER_MODE:?set KEEPER_MODE (live since 21 Sep; shadow only on purpose)}"
+  if [[ "$KEEPER_MODE" == "live" ]]; then : "${SCORECARD:?set SCORECARD (Scorecard v2 0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f)}"; fi
+fi
 
 echo "==> sync source to $HOST"
-rsync -a --delete --exclude node_modules --exclude 'src/fixtures' --exclude '*.test.ts' \
-  "$REPO/services/attestor/" "$HOST:/tmp/curb-src-attestor/"
-rsync -a --delete --exclude node_modules --exclude '*.test.ts' \
-  "$REPO/services/keeper/" "$HOST:/tmp/curb-src-keeper/"
-rsync -a --delete "$REPO/script/w0/" "$HOST:/tmp/curb-src-w0/"
+if want attestor-b; then
+  rsync -a --delete --exclude node_modules --exclude 'src/fixtures' --exclude '*.test.ts' \
+    "$REPO/services/attestor/" "$HOST:/tmp/curb-src-attestor/"
+fi
+if want keeper; then
+  rsync -a --delete --exclude node_modules --exclude '*.test.ts' \
+    "$REPO/services/keeper/" "$HOST:/tmp/curb-src-keeper/"
+fi
+if want w0; then rsync -a --delete "$REPO/script/w0/" "$HOST:/tmp/curb-src-w0/"; fi
 
 echo "==> install and (re)start containers"
 # DATA_SUFFIX is safe inside single quotes: the check above leaves it empty or 0x-prefixed hex.
-ssh "$HOST" "sudo CURB_UID=$CURB_UID SCORECARD='${SCORECARD:-}' KEEPER_MODE='${KEEPER_MODE:-shadow}' DATA_SUFFIX='$DATA_SUFFIX' bash -s" <<'REMOTE'
+ssh "$HOST" "sudo CURB_UID=$CURB_UID SERVICES='$SERVICES' SCORECARD='${SCORECARD:-}' KEEPER_MODE='${KEEPER_MODE:-shadow}' DATA_SUFFIX='$DATA_SUFFIX' bash -s" <<'REMOTE'
 set -euo pipefail
+want() { case " $SERVICES " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 install -d -m 755 /opt/curb
-rsync -a --delete /tmp/curb-src-attestor/ /opt/curb/attestor/
-rsync -a --delete /tmp/curb-src-keeper/   /opt/curb/keeper/
-rsync -a --delete /tmp/curb-src-w0/       /opt/curb/w0/
+if want attestor-b; then rsync -a --delete /tmp/curb-src-attestor/ /opt/curb/attestor/; fi
+if want keeper;     then rsync -a --delete /tmp/curb-src-keeper/   /opt/curb/keeper/; fi
+if want w0;         then rsync -a --delete /tmp/curb-src-w0/       /opt/curb/w0/; fi
 install -d -m 700 -o "$CURB_UID" -g "$CURB_UID" /var/lib/curb/attestor-b /var/lib/curb/w0 /var/lib/curb/keeper
 install -d -m 700 /etc/curb
 
@@ -96,6 +112,7 @@ done
 [ -f /etc/curb/w0-observer.alerts.env ] || (umask 077; printf 'HC_URL=\n' > /etc/curb/w0-observer.alerts.env)
 
 # DATA_SUFFIX in both env files is the one value checked on the Mac before this ran (top of the script).
+if want attestor-b; then
 (umask 077; cat > /etc/curb/attestor-b.env <<CONF
 MODE=standby
 HOST_ID=host-b
@@ -112,9 +129,11 @@ WITNESS_FROM_BLOCK=70617365
 DATA_SUFFIX=${DATA_SUFFIX}
 CONF
 )
+fi
 
 # SCORECARD is empty on the very first deploy: the keeper then only generates its key and reports
 # the address on /healthz, which is what the Scorecard is subsequently deployed with.
+if want keeper; then
 (umask 077; cat > /etc/curb/keeper.env <<CONF
 MODE=${KEEPER_MODE}
 HOST_ID=keeper
@@ -138,6 +157,7 @@ SIGNAL_RELAY_BASE=https://api.curb.markets
 SIGNAL_BINANCE_DIRECT=off
 CONF
 )
+fi
 
 # Archive (R2) credentials: created empty once and never overwritten, like the alerts files. Publishing
 # stays off until they are filled on the box; the values never pass through this script.
@@ -145,14 +165,23 @@ for f in attestor-b.r2.env keeper.r2.env; do
   [ -f "/etc/curb/$f" ] || (umask 077; : > "/etc/curb/$f")
 done
 
-docker build -q -t curb-attestor:latest   /opt/curb/attestor
-docker build -q -t curb-keeper:latest     /opt/curb/keeper
-docker build -q -t curb-w0-observer:latest /opt/curb/w0
+# The image each running container was started from stays reachable as <repo>:prev-<image id>: the build
+# below moves :latest, and `docker rm -f` drops the last reference to the old one. The tag carries the image
+# id, so a second run (a retry after a bad deploy) cannot overwrite the good one. Roll back with the same
+# `docker run` and that tag; `docker images curb-*` lists them, newest first.
+keep_prev() {
+  local id; id="$(docker inspect --format '{{.Image}}' "$1" 2>/dev/null)" || return 0
+  id="${id#sha256:}"; docker tag "$id" "$2:prev-${id:0:12}"
+}
+if want attestor-b; then keep_prev curb-attestor-b curb-attestor;      docker build -q -t curb-attestor:latest    /opt/curb/attestor; fi
+if want keeper;     then keep_prev curb-keeper curb-keeper;            docker build -q -t curb-keeper:latest      /opt/curb/keeper; fi
+if want w0;         then keep_prev curb-w0-observer curb-w0-observer;  docker build -q -t curb-w0-observer:latest /opt/curb/w0; fi
 
 HARDEN=(--restart always --user "$CURB_UID:$CURB_UID" --read-only --tmpfs /tmp:size=16m
         --cap-drop ALL --security-opt no-new-privileges --pids-limit 256
         --log-driver json-file --log-opt max-size=20m --log-opt max-file=5)
 
+if want attestor-b; then
 docker rm -f curb-attestor-b >/dev/null 2>&1 || true
 docker run -d --name curb-attestor-b "${HARDEN[@]}" \
   --memory 384m --memory-swap 384m --cpus 1 \
@@ -160,7 +189,9 @@ docker run -d --name curb-attestor-b "${HARDEN[@]}" \
   --env-file /etc/curb/attestor-b.r2.env \
   -v /var/lib/curb/attestor-b:/data -p 127.0.0.1:8091:8080 \
   curb-attestor:latest >/dev/null
+fi
 
+if want keeper; then
 docker rm -f curb-keeper >/dev/null 2>&1 || true
 docker run -d --name curb-keeper "${HARDEN[@]}" \
   --memory 384m --memory-swap 384m --cpus 1 \
@@ -168,15 +199,18 @@ docker run -d --name curb-keeper "${HARDEN[@]}" \
   --env-file /etc/curb/keeper.r2.env \
   -v /var/lib/curb/keeper:/data -p 127.0.0.1:8092:8080 \
   curb-keeper:latest >/dev/null
+fi
 
 # Recreated like the others so config changes take effect. The observer appends to the JSONL on its
 # volume, so a restart costs at most one poll interval of coverage and loses nothing already recorded.
+if want w0; then
 docker rm -f curb-w0-observer >/dev/null 2>&1 || true
 docker run -d --name curb-w0-observer "${HARDEN[@]}" \
   --memory 96m --memory-swap 96m --cpus 0.25 \
   --env-file /etc/curb/w0-observer.alerts.env \
   -e OUT=/data/hkex_flip.jsonl -e TZ=UTC \
   -v /var/lib/curb/w0:/data curb-w0-observer:latest >/dev/null
+fi
 
 rm -rf /tmp/curb-src-attestor /tmp/curb-src-keeper /tmp/curb-src-w0
 docker ps --filter name=curb- --format '{{.Names}}  {{.Status}}  {{.Image}}'
@@ -184,6 +218,7 @@ REMOTE
 
 # Both writers must answer before the deploy is called done; the observer has no HTTP surface.
 for svc in "host B:8091:curb-attestor-b" "keeper:8092:curb-keeper"; do
+  case "$svc" in "host B:"*) want attestor-b || continue ;; "keeper:"*) want keeper || continue ;; esac
   name="${svc%%:*}"; rest="${svc#*:}"; port="${rest%%:*}"; container="${rest#*:}"
   echo "==> waiting for $name to report healthy on $port"
   ok=""
