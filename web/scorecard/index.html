@@ -69,7 +69,7 @@
         <div class="sc-ledger__head">
           <div>
             <h2 id="sc-ledger-title" class="t-h2">The ledger</h2>
-            <p class="t-body muted measure">Newest first. Prices are USD per wrapper share. Errors are signed: plus means the estimate was above the reopen print. The three bars are the three errors on one scale, so a tie draws three identical bars.</p>
+            <p class="t-body muted measure">Newest first. Prices are USD per wrapper share. Errors are signed: plus means the estimate was above the reopen print. The three bars are the three errors on one scale, so a tie draws three identical bars. In rows committed before block ⟨N⟩ the Closing VWAP column repeats the last print: the keeper computed no VWAP (D-15).</p>
           </div>
           <div class="sc-filter" role="group" aria-label="Filter the ledger by asset" data-sc-filter>
             <button type="button" class="sc-chip" aria-pressed="true" data-asset="all">All</button>
@@ -112,6 +112,7 @@
             <p class="t-body">The last print before the cut, moved by half of what the wrapper's own pool did during the closure.</p>
             <div class="sc-formula surface-ink"><code>mark = lastPrint × (1 + 0.5 × poolDrift)</code></div>
             <p class="t-body muted">When the pool does not trade while the home market is shut, there is no drift. The mark is then exactly the last print, and the row can only tie.</p>
+            <p class="t-body muted">In every row committed before block ⟨N⟩ the keeper counted no swaps at all, because it failed to decode the pools' Swap logs (D-15). The pools did trade. The drift was recorded as zero anyway, so each of those marks is the last print.</p>
             <p class="t-body sc-m__live" data-sc-m1-live>&nbsp;</p>
           </article>
           <article class="col-half-right sc-m" aria-labelledby="sc-m2">
@@ -123,7 +124,7 @@
               <li><span class="sc-facts__k">r</span> The mean of the two returns from the cut to the commit. If one leg is missing, the other is used alone.</li>
               <li><span class="sc-facts__k">β 0.79</span> Fitted at 0.983 on 118 overnight and weekend closures, 22 Jul to 22 Sep, all before these rows. Published damped: round(0.8 × 0.983, 2).</li>
               <li><span class="sc-facts__k">Overnight, weekend</span> The signal applies.</li>
-              <li><span class="sc-facts__k">Lunch recess</span> Weight zero, so the mark stays the last print. In backtests over 23 recesses, the perp-adjusted mark lost to the last print on all three names, and half weight was still worse. The perp's move is still committed as evidence.</li>
+              <li><span class="sc-facts__k">Lunch recess</span> The signal has weight zero, so the mark is mark/1's: the last print moved by half the pool's own drift. In rows before block ⟨N⟩ that drift was recorded as zero (D-15), so every recess mark equalled the last print. In backtests over 23 recesses, the perp-adjusted mark lost to the last print on all three names, and half weight was still worse. The perp's move is still committed as evidence.</li>
               <li><span class="sc-facts__k">Nasdaq names</span> No proxy trades while they are shut, so mark/2 marks them as mark/1 would.</li>
             </ul>
           </article>

@@ -4,6 +4,7 @@ import { getAddress } from "ethers";
 import { buildRecord, recordPreviewOf, RECORD_SCHEMA, RECORD_PREVIEW_SCHEMA, EVIDENCE_BASE_URL } from "./accuracyRecord.ts";
 import { row, settlement, snapshot, hex32, TCENT, MARK1 } from "./fixtures/scorecard.ts";
 import { methodDigestOf } from "./sources/scorecard.ts";
+import { SWAP_EVIDENCE_FROM_BLOCK, isPreFix, swapEvidenceSet } from "./swapEvidence.ts";
 
 const OTHER = getAddress("0x076cf393e701839fc7a5832d2c68aafa235682ae");
 const SYMBOLS = new Map([[TCENT.toLowerCase(), "wTCENTx"], [OTHER.toLowerCase(), "wHKTWOx"]]);
@@ -73,7 +74,10 @@ test("shaped like the live record on 24 Sep: twelve settled ties, zero wins, and
   const a = buildRecord({ snapshot: snap, chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW });
   assert.deepEqual(a.skill, { settled: 12, beatLastPrint: 0, beatClosingVwap: 0 });
   assert.match(a.note, /12 of the 12 settled rows tie the last print exactly\./);
-  assert.match(a.note, /a closure in which the pool does not trade leaves the mark equal to the last print, so such a row can only tie it/);
+  assert.match(a.note, /Under curb\.scorecard\.mark\/1 the mark is the last print moved by half of what the pool did between the cut and the commit\./);
+  assert.match(a.note, /Rows committed before the keeper's swap-decoding fix were built by a keeper that decoded no pool Swap logs \(DECISIONS D-15\)/,
+    "the ties are explained by the defect, not by a pool that did not trade; with the block not yet set, no rows are counted");
+  assert.doesNotMatch(a.note, /can only tie/);
   assert.deepEqual(Object.keys(a.perSymbol), ["wHKTWOx", "wTCENTx"]);
   assert.equal(a.perSymbol.wHKTWOx.ties, 4);
   assert.equal(a.perSymbol.wHKTWOx.medianCurbErrorBps, 43, "median of 7, 73, 71, 15");
@@ -126,7 +130,7 @@ test("an empty record is a valid answer, not an error", () => {
   assert.deepEqual(recordPreviewOf(a).rowCount, 0);
 });
 
-test("mark/2 rows are named, and the note says plainly when mark/2 applies no move", () => {
+test("mark/2 rows are named, and the note says plainly when mark/2 applies no signal", () => {
   const MARK2 = methodDigestOf("curb.scorecard.mark/2").toLowerCase();
   const snap = snapshot([
     row({ settlement: s(53, 53, 53) }),                          // an old mark/1 row keeps its method
@@ -136,7 +140,29 @@ test("mark/2 rows are named, and the note says plainly when mark/2 applies no mo
   const a = buildRecord({ snapshot: snap, chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW });
   assert.deepEqual(a.rows.map((r) => r.method), [null, "curb.scorecard.mark/2", "curb.scorecard.mark/1"]);
   assert.match(a.note, /curb\.scorecard\.mark\/2 moves the last print by 0\.79 x the mean return/);
-  assert.match(a.note, /lunch recess, and whenever neither signal could be fetched, it applies no move/);
+  assert.match(a.note, /lunch recess, for the US names, and whenever neither signal could be fetched, its mark is mark\/1's\./);
+  assert.doesNotMatch(a.note, /applies no move|can only tie/, "a recess row moves with the pool once swaps are counted (D-15)");
   assert.match(a.note, /none is re-marked/);
   assert.match(a.note, /Under curb\.scorecard\.mark\/1/, "both methods are in scope, so both are explained");
+});
+
+test("rows before the swap-evidence block are named as pre-fix by block once it is set; later rows are not", () => {
+  const FROM = 75_800_000;
+  const snap = snapshot([
+    row({ committedBlock: FROM - 1, settlement: s(7, 7, 7) }),   // the old keeper: ties by the defect
+    row({ committedBlock: FROM + 10, settlement: s(5, 9, 6) }),  // the fixed keeper
+    row({ committedBlock: FROM + 20, settlement: null }),
+  ]);
+  const a = buildRecord({ snapshot: snap, chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW, swapEvidenceFromBlock: FROM });
+  assert.match(a.note, /Rows committed before block 75800000 \(1 of the 3 in scope\) were built by a keeper that decoded no pool Swap logs \(DECISIONS D-15\)\./);
+  assert.match(a.note, /closingVwapE18 equals lastPrintE18, so beatClosingVwap repeats beatLastPrint/);
+
+  const after = buildRecord({ snapshot: snapshot([row({ committedBlock: FROM, settlement: s(5, 9, 6) })]), chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW, swapEvidenceFromBlock: FROM });
+  assert.doesNotMatch(after.note, /D-15/, "no pre-fix claim about a row the fixed keeper wrote");
+});
+
+test("the swap-evidence block is the placeholder or a block after the last pre-fix row checked on 14 Nov", () => {
+  assert.ok(SWAP_EVIDENCE_FROM_BLOCK === Number.MAX_SAFE_INTEGER || SWAP_EVIDENCE_FROM_BLOCK >= 75_776_413, String(SWAP_EVIDENCE_FROM_BLOCK));
+  assert.equal(swapEvidenceSet(Number.MAX_SAFE_INTEGER), false);
+  assert.equal(isPreFix(75_776_412), true, "the 13 Nov rows are pre-fix whatever the constant holds");
 });
