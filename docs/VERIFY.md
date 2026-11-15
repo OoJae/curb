@@ -47,8 +47,14 @@ npx -y curb-verify tx 0x1c839166a27d48e30a51da725b07e3b57bd00a6cc173395838e15d4b
 ```
 
 To see the tool reject something, run `npx -y curb-verify selftest`. It verifies two real mainnet
-rounds that ship inside the package, then tampers with one byte of each and shows the check failing.
-It needs no network.
+rounds that ship inside the package, then replaces a committed preimage in each and shows the check
+failing. It needs no network. From 0.2.0 (and in this repository) it also verifies two real mainnet
+marks: the 2 Oct holiday row `0x3dafc1b6…`, whose reopen re-derives only from the commit instant (see
+"The six holiday rows" below), and the 13 Nov lunch-recess row `0x06a92e82…`, written by a keeper that
+decoded no swaps; it checks that each gets its `EVIDENCE` notes, changes the committed mark in the
+second and shows that failing, and prints the build's era cutover, `era cutover: block <N>` or
+`era cutover: NOT SET (pre-release build)`, before `selftest passed: <k> checks over 2 real mainnet
+rounds and 2 real mainnet marks, no network`.
 
 ## Exit codes
 
@@ -104,7 +110,10 @@ For a **mark** (`checkMarkRound`):
 - the mark was committed before the reopen it predicts, and after the cut it describes; if the row is
   settled, it settled no earlier than `settleAfter + 300 s`, and if it is not, whether its settle window is
   still open or has closed (a row whose window closed can never be graded);
-- the price source the bundle names for the wrapper is the one `Scorecard.priceSources(wrapper)` returns;
+- the price source the bundle names for the wrapper is the one `Scorecard.priceSources(wrapper)` returns
+  (one `eth_call` at `latest`). A mismatch fails the row (`REGISTRY entry for <symbol> (pool, equityIsToken0,
+  decimals) is not Scorecard.priceSources: …`). A read that fails, or answers no pool, is only a `warn`
+  line, because the comparison could not be made;
 - for a row whose evidence was read from block ⟨N⟩ on, the swap evidence itself: the committed swap lists
   lie inside the committed block ranges, the last print, the closing VWAP and the swap count follow from
   them, the last closing swap is the pool price at the cut, the last closure swap is the pool price at the
@@ -131,40 +140,63 @@ its era, decided from the block of the chain read its bundle commits (online, th
 most 1,800 blocks before the commit). A bundle with no usable chain read is checked as the newer era. With
 `--json`, the same notes are in an `evidence` field beside `ok`, which keeps its meaning.
 
+Each note is printed on one line, as `  EVIDENCE <note>`; the examples below are those lines verbatim,
+with `<…>` for the values. `tx` also prints, for every mark, `flags`, `drift <d> bp` and a `swaps` field:
+`not recorded (pre-fix keeper)` before block ⟨N⟩, and from it `closing <a> in <from>..<to>, closure <b> in
+<from>..<to>`, followed where they apply by `, gaps <from>..<to> …`, `, closing window not committed` or
+`, truncated (<n> total)`. `bundle` prints an `era` field, `<era> (offline: the era is bound to the commit block
+only by 'tx')`, and a bundle with no usable chain read gets the note `era unknown: checked as swap-evidence`.
+`range` adds `(<k> from evidence known to omit pool swaps: rows read before block <N>)` to its summary, and lists
+every row whose reopen re-derived from the commit instant.
+
 **Rows read before block ⟨N⟩** (every row committed until ⟨DATE⟩). The keeper that wrote them decoded no pool
 Swap logs, so every such row gets this line:
 
 ```
-EVIDENCE pre-fix row (evidence read at block <b>, before block ⟨N⟩): the keeper build that wrote it decoded
-         no pool Swap logs (DECISIONS D-15). Its swap lists are empty whether or not the pool traded; no-drift,
-         no-closing-vwap and closingVwap = lastPrint record what that keeper saw, not what the pool did.
+  EVIDENCE pre-fix row (evidence read at block <b>, before block ⟨N⟩): the keeper build that wrote it decoded no pool Swap logs (DECISIONS D-15). Its swap lists are empty whether or not the pool traded; no-drift, no-closing-vwap and closingVwap = lastPrint record what that keeper saw, not what the pool did.
 ```
 
-and, where the bundle's own numbers show it, one or both of these (215 and 27 of the first 233 rows):
+A build in which the era's first block is not yet set (a pre-release build: `selftest` prints `era cutover:
+NOT SET`) checks every row as pre-fix, and the parenthesis reads `(evidence read at block <b>; this build sets
+no first block for the swap-evidence era)` instead.
 
-- `the bundle's own pool reads moved <x> bp between the cut and the commit while it lists 0 swaps.` A V3
-  pool's price moves only on a swap.
-- `lastPrint is the keeper's last pre-cut reading, <x> bp from the pool mid at the cut block.`
+Where the bundle's own numbers show it, one or both of these follow (215 and 27 of the first 233 rows):
 
-The closing line then reads `REPRODUCED  (from the evidence as published; that evidence omits pool swaps --
-see EVIDENCE above)`, or `REPRODUCED  (pre-fix row: swap evidence was not recorded -- see EVIDENCE above)`
-when neither of the two applies. A pre-fix bundle that does list swaps (none of the archived rows) gets
-`swap lists present but not checked` and a line for each committed figure that does not follow from its
-lists. No row is ever re-marked, so these lines are permanent.
+```
+  EVIDENCE the bundle's own pool reads moved <±x.x> bp between the cut and the commit while it lists 0 swaps.
+  EVIDENCE lastPrint is the keeper's last pre-cut reading, <±x.x> bp from the pool mid at the cut block.
+```
+
+A V3 pool's price moves only on a swap. The closing line of such a row is `  REPRODUCED  (from the evidence as
+published; that evidence omits pool swaps -- see EVIDENCE above)`, and `  REPRODUCED  (pre-fix row: swap
+evidence was not recorded -- see EVIDENCE above)` when neither of the two applies.
+
+A pre-fix bundle that does list swaps (none of the archived rows; a rebuilt test round, say) gets
+`pre-fix row (…): swap lists present but not checked.` instead of the first line (a newer-format bundle with
+empty lists, `swap evidence present but not checked.`), plus a line for each committed
+figure that does not follow from its lists (`committed swapsDuringClosure=<n> but closureSwaps lists <m> rows.`,
+`committed closingVwap <x> is not the volume-weighted price of the <k> committed closing swaps (<y>).`,
+`committed lastPrint <x> is not the price after the last committed closing swap (<y>).`). Unless one of the two
+lines above applies, its closing line is `  REPRODUCED  (pre-fix row: its swap lists were not checked -- see
+EVIDENCE above)`. No row is ever re-marked, so these lines are permanent.
 
 **Rows read from block ⟨N⟩** are checked strictly (above). The keeper commits a degraded row rather than none
 when it cannot finish a scan before its deadline, and says so; each case gets a line:
 
-- `closure scan incomplete: gaps <ranges>; ...`: some blocks of the closure were not scanned. The swap count
-  covers the rest. The keeper commits such a row only when it recorded a swap or the pool price did not
-  move, so the mark is the one complete evidence would give.
-- `closing window not committed ...`: the 15 minutes before the cut were not scanned in full, or did not
-  match the pool price at the cut. The closing VWAP falls back to the last print, which is the pool price at
-  the cut block.
-- `closure list truncated: ...`: more than 10,000 swaps; the first and last 5,000 are committed, and a digest
-  commits all of them.
-- `the cut mid is not bound to a committed pool read ...`: the closure was opened by an earlier keeper build.
-- `... did not run at one block per second ...`: the 900-block closing window may not have been 15 minutes.
+```
+  EVIDENCE closure scan incomplete: gaps <ranges>; swapsDuringClosure counts the swaps recorded outside them
+  EVIDENCE closing window not committed (incomplete or inconsistent scan); closingVwap is null and falls back to the last print
+  EVIDENCE closure list truncated: the first 5,000 and last 5,000 of <n> are committed; closureDigest commits all <n>
+  EVIDENCE the cut mid is not bound to a committed pool read (closure opened before this keeper build)
+  EVIDENCE between the cut and the read the chain did not run at one block per second (<±d> s off); the 900-block closing window may not be 15 minutes
+```
+
+In order: some blocks of the closure were not scanned in time, and the swap count covers the rest (the keeper
+commits such a row only when it recorded a swap or the pool price did not move, so the mark is the one complete
+evidence would give); the 15 minutes before the cut were not scanned in full, or did not match the pool price at
+the cut, so the closing VWAP falls back to the last print, which is the pool price at the cut block; more than
+10,000 swaps, of which the first and last 5,000 are committed and a digest commits all; the closure was opened by
+an earlier keeper build; the chain's clock and block count drifted apart between the cut and the read.
 
 **The six holiday rows.** The three Hong Kong rows of the 30 Sep to 2 Oct closure and the three of the 16 Oct
 to 20 Oct closure commit the issuer's holiday list as it stood at the commit, after the issuer had dropped the
@@ -174,15 +206,21 @@ from the commit instant, which is how the keeper computed the reopen, and accept
 the committed `settleAfter`:
 
 ```
-EVIDENCE reopen re-derived from the commit instant: walked from the cut, the committed schedule gives <iso>,
-         before the commit at <iso>; walked from the commit instant it gives the committed settleAfter <iso>,
-         which is how the keeper computed it. The bundle does not show whether a holiday dropped from the
-         issuer's list or the closure was not continuous.
+  EVIDENCE reopen re-derived from the commit instant: walked from the cut, the committed schedule gives 2026-10-01T01:30:00.000Z, before the commit at <evaluatedAt>; walked from the commit instant it gives the committed settleAfter 2026-10-02T01:30:00.000Z, which is how the keeper computed it. The bundle does not show whether a holiday dropped from the issuer's list or the closure was not continuous.
 ```
+
+(the line for the three 2 Oct rows; `range` marks each such row `(D-16 holiday row)`, and any other row
+`NOT one of the six D-16 holiday rows: explain it in DECISIONS before any release`.)
 
 The line says only what the bytes show. They cannot prove the market stayed shut from the cut to the commit;
 the cause for these six rows, and the change that keeps a closure's holidays in the schedule it commits, are
 in [DECISIONS](DECISIONS.md) D-16. Rows read from block ⟨N⟩ never get this fallback.
+
+**A row that can never be graded.** For an unsettled row whose settle window has closed, `tx` prints the
+`settled` field as `not settled; settle window closed <deadline> (TooLate: this row can no longer be graded)`;
+for row 151 of 28 Oct
+([DECISIONS](DECISIONS.md) D-17) the deadline is `2026-10-28T07:35:00Z`. While the window is open it prints
+`not yet (window open until <deadline>)`, and if the latest block cannot be read, `not yet`.
 
 **What npm gives you today.** `curb-verify` 0.1.0 on npm (25 Sep 2026) predates all of this. It prints no
 `EVIDENCE` lines, it prints `NOT REPRODUCED` for the six holiday rows, and on a new row it re-derives the mark

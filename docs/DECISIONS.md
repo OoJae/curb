@@ -1031,8 +1031,10 @@ lists 24–25 Dec and 31 Dec, so without a fix the same would happen there.
 
 What `curb-verify` (0.1.0, and this repository before deploy 2) prints for each of them, here for row 41:
 
-    FAIL    reopen mismatch for wTCENTx: schedule gives 1790818200, row settles after 1790904600
-    NOT REPRODUCED
+```
+  FAIL    reopen mismatch for wTCENTx: schedule gives 1790818200, row settles after 1790904600
+  NOT REPRODUCED
+```
 
 The marks re-derive; only the reopen check fails. This was not caused by the swap defect of D-15, and nothing about it
 changes the grades: the rows settled after the reopens they predicted, and the contract read the reopen price itself.
@@ -1063,12 +1065,11 @@ no row. The keeper pages it as `closure-missed`.
 the committed reopen, the verifier in this repository walks the same committed schedule from the commit instant,
 which is how the keeper computed the reopen. It accepts the row if, and only if, the walk from the cut lands before
 the commit and the walk from the commit gives the committed reopen, and it prints `REPRODUCED` with a note that never
-changes the exit code:
+changes the exit code (one line; here for the 2 Oct rows):
 
-    EVIDENCE reopen re-derived from the commit instant: walked from the cut, the committed schedule gives
-             2026-10-01T01:30:00.000Z, before the commit at <iso>; walked from the commit instant it gives the
-             committed settleAfter 2026-10-02T01:30:00.000Z, which is how the keeper computed it. The bundle
-             does not show whether a holiday dropped from the issuer's list or the closure was not continuous.
+```
+  EVIDENCE reopen re-derived from the commit instant: walked from the cut, the committed schedule gives 2026-10-01T01:30:00.000Z, before the commit at <evaluatedAt>; walked from the commit instant it gives the committed settleAfter 2026-10-02T01:30:00.000Z, which is how the keeper computed it. The bundle does not show whether a holiday dropped from the issuer's list or the closure was not continuous.
+```
 
 The note is worded to say only what the bytes show. The rule cannot prove the market stayed shut from the cut to the
 commit: a keeper that was down across a reopen would write exactly such a row, and the rule would accept it. That is
@@ -1087,8 +1088,9 @@ be graded. It stays on chain, committed and unsettled, and `skill()` counts 232 
 14 Nov.**
 
 **What happened.** Row 151: wTCENTx, the 27→28 Oct overnight closure, committed 28 Oct at 01:20:09Z (block 74,381,373,
-tx `0x5b77fe39…28ff`, id `0xfc88b5db…2ecf`), mark 49.9415 against a last print of 49.2183, reopen 01:30:00Z. The
-keeper's settle,
+tx `0x5b77fe39…28ff`, id `0xfc88b5db…2ecf`), reopen 01:30:00Z. On chain its mark is `49941465598571907502` and its
+last print `49218252594941832220` (USD per share × 10¹⁸: 49.94146… and 49.21825…; `curb-verify` prints the mark
+truncated to four decimals, 49.9414), band 118 bp. The keeper's settle,
 [`0x287805da…9af5`](https://www.oklink.com/xlayer/tx/0x287805daf1ad38c0cfc6a89d53f75857475c53dd825b86db7e7c065f55ca9af5),
 was mined in block 74,382,270 at 01:35:06Z with status 0: reverted, 118,167 gas, no logs. Replayed at the block before
 it, `settle(id)` reverts `PriceDeviates(-237294, -237347)`: the pool's spot sat 53 ticks from its 120-second average,
@@ -1118,6 +1120,7 @@ and pages when they disagree. The guard trips on about 3% of settles (6 of 218 s
 simulation), because the keeper settles on the first tick after the reopen plus 300 s, when the pool is busiest; a
 retry inside the window removes the loss.
 
-**What the verifier says.** `curb-verify tx` on the commit transaction of such a row prints `not settled; settle
-window closed <iso> (TooLate: this row can no longer be graded)` (in this repository after deploy 2, on npm from
-0.2.0). No row is re-committed or re-marked; row 151 keeps its mark and has no grade.
+**What the verifier says.** `curb-verify tx` on the commit transaction of such a row prints, as its `settled`
+field, `not settled; settle window closed <deadline> (TooLate: this row can no longer be graded)`; for row 151 the
+deadline is `2026-10-28T07:35:00Z` (in this repository from the `curb-verify` 0.2.0 change, on npm once 0.2.0 is
+published). No row is re-committed or re-marked; row 151 keeps its mark and has no grade.
