@@ -19,8 +19,8 @@
  */
 import { createServer } from "node:http";
 import {
-  mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync, readdirSync,
-  renameSync, openSync, fsyncSync, closeSync, rmSync,
+  mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync,
+  renameSync, openSync, fsyncSync, closeSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
@@ -29,8 +29,15 @@ import { AbiCoder, Interface, getAddress, keccak256, toUtf8Bytes } from "ethers"
 
 import { pinLatest, multicallAt, clockAbi, balanceCall, decodeBalance, DEFAULT_RPCS } from "./sources/chain.ts";
 import type { Call, MulticallSnapshot } from "./sources/chain.ts";
-import { readPools, scanSwaps, swapsInRange, vwap } from "./sources/pools.ts";
-import type { PoolSpec, SwapRow } from "./sources/pools.ts";
+import { readPools, swapsInRange, vwap } from "./sources/pools.ts";
+import type { PoolSpec } from "./sources/pools.ts";
+import { readHeads, scanRange } from "./sources/logscan.ts";
+import type { ScanResult } from "./sources/logscan.ts";
+import { ClosureSwapStore, backfillJob, domainFrom, ingest } from "./swapstore.ts";
+import type { Coverage, IngestReport, Tracked } from "./swapstore.ts";
+import { blockCount, gapsWithin, normalizeRanges } from "./ranges.ts";
+import { cutReadOf } from "./swapEvidence.ts";
+import type { CutRead } from "./swapEvidence.ts";
 import { XStocksClient } from "./sources/xstocks.ts";
 import { MARK_METHODS, MARK_METHOD_VERSION, hasSignal } from "./mark.ts";
 import { buildMarkRound } from "./markRound.ts";
@@ -90,6 +97,11 @@ export function loadConfig() {
     if (["off", "0", "false"].includes(x)) return false;
     errors.push(`${name} must be on|off, got ${JSON.stringify(v)}`);
     return false;
+  };
+  const int = (name: string, v: string, min: number, max: number) => {
+    const n = Number(v.trim() === "" ? NaN : v);
+    if (!Number.isInteger(n) || n < min || n > max) { errors.push(`${name} must be in [${min},${max}], got ${JSON.stringify(v)}`); return min; }
+    return n;
   };
   const wei = (name: string, v: string, fallback: bigint) => {
     const x = v.trim();
@@ -161,6 +173,11 @@ export function loadConfig() {
     signalBinanceDirect: onOff("SIGNAL_BINANCE_DIRECT", env("SIGNAL_BINANCE_DIRECT", "on")!),
     /** Per request. A leg costs at most two (relay, then direct), all legs run in parallel. */
     signalFetchMs: num("SIGNAL_FETCH_MS", env("SIGNAL_FETCH_MS", "4000")!, 500, 20_000),
+    /**
+     * W2.7: at most this many 100-block chunks of backfill per tick (closing windows, and the closures open at a
+     * deploy), only in ticks with no commit, settle or send in progress. 0 disables the backfill.
+     */
+    backfillChunksPerTick: int("BACKFILL_CHUNKS_PER_TICK", env("BACKFILL_CHUNKS_PER_TICK", "20")!, 0, 60),
   };
   // Unset is legitimate exactly once: the first boot on a new host, whose only job is to generate
   // the key that the Scorecard is then deployed with. Live mode always needs it.
@@ -248,6 +265,13 @@ interface Closure {
   swapCount: number;
   plan?: CommitPlan;
   committed?: Committed;
+  // W2 (deploy 2). Optional: a closure opened by the old build has none of them, and the old build keeps them.
+  /** block.hash of the opening tick; null when unknown. */
+  cutBlockHash?: string | null;
+  /** The opening tick's slot0 read of this pool (cutReadOf); null when the read failed. */
+  cutRead?: CutRead | null;
+  /** Block ranges the closure file is known to cover, and its row count when last claimed (swapstore.ts). */
+  coverage?: Coverage;
   settleAttempts?: number;
   skipLogged?: boolean;
   settled?: { txHash: string; atMs: number };
@@ -265,7 +289,6 @@ interface State {
 }
 
 const statePath = () => join(CFG.dataDir, "keeper-state.json");
-const swapsPath = (c: Closure) => join(CFG.dataDir, "closures", `${c.wrapper.toLowerCase()}-${c.cutBlock}.jsonl`);
 
 function loadState(): State {
   const empty: State = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [] };
@@ -300,26 +323,6 @@ function persistOnce(path: string, content: string) {
   if (existsSync(path)) return;
   persistReplace(path, content);
 }
-
-const readSwapFile = (c: Closure): SwapRow[] => {
-  const p = swapsPath(c);
-  if (!existsSync(p)) return [];
-  const out: SwapRow[] = [];
-  for (const line of readFileSync(p, "utf8").split("\n")) {
-    if (!line) continue;
-    try {
-      const r = JSON.parse(line);
-      out.push({ blockNumber: r.b, logIndex: r.i, equityAbs: BigInt(r.q), priceE18: BigInt(r.p) });
-    } catch { /* a torn final line costs one swap, never the file */ }
-  }
-  return out;
-};
-
-const appendSwaps = (c: Closure, rows: SwapRow[]) => {
-  if (rows.length === 0) return;
-  appendFileSync(swapsPath(c), rows.map((r) =>
-    JSON.stringify({ b: r.blockNumber, i: r.logIndex, q: r.equityAbs.toString(), p: r.priceE18.toString() })).join("\n") + "\n");
-};
 
 // ---------------------------------------------------------------------------------------------
 // health and alarms
@@ -458,6 +461,222 @@ function healthBody(health: Health, ok: boolean): Record<string, unknown> {
   const body = { ok, ...health, archive: publisher.health() as PublishHealth & { backlogSinceMs?: number | null }, alarms: alarmsHealth };
   body.archive.backlogSinceMs = watch.archiveBacklogSinceMs;   // health() returns a fresh object each call
   return body;
+}
+
+// ---------------------------------------------------------------------------------------------
+// swap evidence (W2): the per-tick scan, the closure store, the backfill
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * One closure store and one block-hash memory for the process (W2.4). Every closure's file holds every Swap of its
+ * pool from `cutBlock - 900` on; `coverage` in the state says which blocks it is known to hold. The store never
+ * raises alarms itself: it returns resets and errors, and the callers below raise them.
+ */
+const store = new ClosureSwapStore(CFG.dataDir, log);
+const recentHashes = new Map<string, string>();
+
+/** In-memory bookkeeping for the W2.9 alarms and /healthz. Nothing here is persisted. */
+const scanWatch = {
+  /** When the per-tick scan last advanced the cursor or reached its target. */
+  lastProgressMs: Date.now(),
+  lastOkMs: null as number | null,
+  failingSinceMs: null as number | null,
+  lastStopReason: null as string | null,
+  lastError: null as string | null,
+  lastTick: null as null | { from: number; to: number; servedTo: number; chunks: number; logs: number },
+  /** Consecutive ticks on which the two endpoints' heads differed by more than RPC_LAG_BLOCKS. */
+  lagStreak: 0,
+  totals: { logs: 0, decoded: 0, holes: 0, decodeRetries: 0, unmatched: 0, anomalies: 0, late: 0, dupes: 0, refusals: 0, programmingErrors: 0, resets: 0 },
+  backfill: { active: false, level: 0, left: 0, chunksLastTick: 0, chunksTotal: 0, pendingBlocks: 0, lastError: null as string | null },
+  /** "wrapper:cutBlock" of closures whose backfill-done line was logged. */
+  backfillDone: new Set<string>(),
+};
+/** W2.9: four times the worst head lag measured between the two public RPCs (rpc-behaviour.md 5.3). */
+const RPC_LAG_BLOCKS = 30;
+const RPC_LAG_TICKS = 3;
+
+/** Open closures whose file the scans fill: witnessed, no plan, not committed, and a pool in the cohort. */
+function trackedClosures(state: State, assets: Asset[]): Array<Tracked & { c: Closure }> {
+  const out: Array<Tracked & { c: Closure }> = [];
+  for (const c of Object.values(state.open)) {
+    if (!c.witnessedCut || c.plan || c.committed) continue;
+    const a = assets.find((x) => x.wrapper === c.wrapper);
+    if (a) out.push({ c, pool: getAddress(a.pool) });
+  }
+  return out;
+}
+
+/** Counters and alarms for one scan (per-tick or backfill). Never throws. */
+function noteScan(where: string, scan: ScanResult): void {
+  try {
+    const st = scan.stats, t = scanWatch.totals;
+    t.logs += st.logs; t.decoded += st.decoded; t.decodeRetries += st.decodeRetries; t.unmatched += st.unmatched;
+    t.anomalies += st.anomalies; t.refusals += st.refusals.length; t.programmingErrors += st.programmingErrors;
+    for (const h of scan.holes.values()) t.holes += h.length;
+    const odd = st.unmatched + st.anomalies + st.decodeRetries;
+    if (scan.stopReason !== null || odd > 0 || st.decodeFailed.length > 0 || st.programmingErrors > 0) {
+      log("swap-scan", {
+        where, from: scan.from, to: scan.to, servedTo: scan.servedTo, chunks: st.chunks, logs: st.logs, stopReason: scan.stopReason,
+        unmatched: st.unmatched, anomalies: st.anomalies, decodeRetries: st.decodeRetries, decodeFailed: st.decodeFailed.slice(0, 5),
+        refusals: st.refusals.slice(0, 5),
+      });
+    }
+    if (st.decodeFailed.length > 0) {
+      raise(1, "keeper:swap-decode-failed", `${where} scan: no endpoint decoded ${st.decodeFailed.length} Swap log(s); their blocks stay gaps: `
+        + st.decodeFailed.slice(0, 3).map((f) => `${f.pool} block ${f.blockNumber} log ${f.logIndex}: ${f.error}`).join("; "));
+    }
+    if (odd > 0) {
+      raise(2, "keeper:rpc-anomaly", `${where} scan ${scan.from}..${scan.servedTo}: ${st.unmatched} unmatched log(s), ${st.anomalies} answer(s) rejected, ${st.decodeRetries} set aside for a log that did not decode`);
+    }
+    if (st.programmingErrors > 0) {
+      raise(1, "keeper:rpc-programming-error", `${where} scan: ${st.programmingErrors} malformed request(s): `
+        + st.refusals.filter((x) => x.kind === "malformed-request").slice(0, 2).map((x) => `${x.code} ${x.message}`).join("; "));
+    }
+  } catch (e) { log("swap-scan-note-error", { error: String(e) }); }
+}
+
+/** Counters and alarms for one ingest. Never throws. */
+function noteIngest(where: string, rep: IngestReport, tracked: Tracked[]): void {
+  try {
+    const t = scanWatch.totals;
+    t.late += rep.late; t.dupes += rep.dupes; t.resets += rep.resets.length;
+    if (rep.late > 0) raise(2, "keeper:late-log", `${where}: ${rep.late} Swap log(s) arrived in blocks already covered`);
+    if (rep.reorgAt !== null) {
+      log("reorg-suspected", { where, block: rep.reorgAt, closures: tracked.map((x) => x.c.symbol) });
+      raise(1, "keeper:reorg-suspected", `${where}: a block hash changed at block ${rep.reorgAt}; open closures truncated from it and re-scanned: ${tracked.map((x) => x.c.symbol).join(",") || "none"}`);
+    }
+    for (const sym of rep.resets) {
+      raise(1, `keeper:swap-file-lost:${sym}`, `${sym}: closure file shorter than its coverage, or corrupt; coverage reset, rebuilding by backfill`);
+    }
+    for (const e of rep.appendErrors) {
+      log("swap-store-write-failed", { where, symbol: e.symbol, error: e.error });
+      raise(1, `keeper:swap-store-write-failed:${e.symbol}`, `${e.symbol}: cannot write the closure file, nothing claimed (re-scanned later): ${e.error}`);
+    }
+  } catch (err) { log("swap-ingest-note-error", { error: String(err) }); }
+}
+
+/** W2.9 per open closure: how far its file is known to be complete. */
+function closuresHealth(state: State): Array<Record<string, unknown>> {
+  return Object.values(state.open).map((c) => {
+    const d = domainFrom(c);
+    const ranges = normalizeRanges(c.coverage?.ranges ?? []);
+    const gaps = gapsWithin(ranges, d, state.lastScannedBlock);
+    return {
+      symbol: c.symbol, cutBlock: c.cutBlock,
+      // (W7) cutSuspect: c.cutSuspect ?? null
+      coveredTo: ranges.length > 0 && ranges[0][0] <= d ? ranges[0][1] : d - 1,
+      gaps: gaps.length, gapBlocks: blockCount(gaps), rows: c.coverage?.rows ?? 0,
+    };
+  });
+}
+
+/**
+ * W2.7: a tick is busy while any closure is inside its commit window (it is filled by `fillForCommit` instead), any
+ * row is inside its settle window, or this tick sent a transaction. The backfill never runs in a busy tick.
+ */
+export function backfillBusy(
+  s: {
+    open: Array<{ committed?: unknown; witnessedCut: boolean; reopenMs: number | null; cutAtMs: number }>;
+    pending: Array<{ committed?: { settleAfterS: number }; settled?: unknown }>;
+  },
+  nowMs: number, chainNowS: number, sentThisTick: boolean,
+  cfg: { minClosureS: number; commitLeadS: number; settleDelayS: number },
+): boolean {
+  return s.open.some((c) => !c.committed && c.witnessedCut && c.reopenMs !== null
+      && c.reopenMs - c.cutAtMs >= cfg.minClosureS * 1000
+      && c.reopenMs - nowMs <= (cfg.commitLeadS + 120) * 1000 && c.reopenMs - nowMs >= -60_000)
+    || s.pending.some((c) => c.committed !== undefined && !c.settled
+      && chainNowS >= c.committed.settleAfterS + cfg.settleDelayS - 60
+      && chainNowS <= c.committed.settleAfterS + cfg.settleDelayS + 600)
+    || sentThisTick;
+}
+
+/**
+ * Something that changes whenever commitPass or settlePass sends: compared before and after them to tell whether
+ * this tick sent a transaction. (W5 may replace it with the passes' own report of a send.)
+ */
+function sendMark(state: State, health: Health): string {
+  let attempts = 0;
+  for (const c of Object.values(state.open)) attempts += c.plan?.attempts ?? 0;
+  for (const c of state.pending) attempts += c.settleAttempts ?? 0;
+  return `${health.committedTotal}:${health.settledTotal}:${attempts}`;
+}
+
+/** Closures the backfill fills (W2.7): tracked closures, due earliest first. */
+function backfillEligible(state: State, assets: Asset[]): Array<Tracked & { dueMs: number }> {
+  // (W7) adds `c.cutSuspect === false`: a closure whose cut the schedule has not confirmed is never backfilled.
+  return trackedClosures(state, assets).map((t) => ({ ...t, dueMs: t.c.reopenMs ?? Number.POSITIVE_INFINITY }));
+}
+
+/**
+ * Tick step 15 (W2.7), after the flush: one bounded backfill query for the closure due first, then ingest and save.
+ * Never throws; its alarms are delivered by the next tick's flush.
+ */
+async function backfillStep(state: State, assets: Asset[], heads: number[], busy: boolean, tickStartMs: number): Promise<void> {
+  const bf = scanWatch.backfill;
+  bf.active = false;
+  bf.chunksLastTick = 0;
+  try {
+    const eligible = backfillEligible(state, assets);
+    bf.pendingBlocks = eligible.reduce((n, t) => n + blockCount(gapsWithin(t.c.coverage?.ranges ?? [], domainFrom(t.c), state.lastScannedBlock)), 0);
+    if (bf.left > 0) { bf.left--; return; }                       // back-off after a rate limit
+    if (busy) return;
+    const deadlineMs = Math.min(12_000, CFG.tickMs - (Date.now() - tickStartMs) - 3_000);
+    if (deadlineMs < 2_000) return;
+    const job = backfillJob(eligible, state.lastScannedBlock, CFG.backfillChunksPerTick);
+    if (!job) return;
+    const specs = assets.filter((a) => job.pools.includes(getAddress(a.pool)));
+    bf.active = true;
+    const r = await scanRange(CFG.rpcs, specs, job.from, job.to,
+      { maxChunks: CFG.backfillChunksPerTick, deadlineMs, heads, endpointOrder: "roundRobin" });
+    noteScan("backfill", r);
+    bf.chunksLastTick = r.stats.chunks;
+    bf.chunksTotal += r.stats.chunks;
+    if (r.stats.chunks > 0) bf.level = 0;
+    if (r.stopReason === "unserved" && r.stats.refusals.some((x) => x.kind === "rate-limit")) {
+      bf.level = Math.min(8, Math.max(1, 2 * bf.level));
+      bf.left = bf.level;
+    }
+    bf.lastError = r.stopReason === "unserved" ? (r.stats.refusals.at(-1)?.message ?? "unserved") : null;
+    const riders = eligible.filter((t) => job.pools.includes(t.pool));
+    const rep = ingest(store, riders, r, recentHashes);
+    noteIngest("backfill", rep, riders);
+    if (rep.claimed > 0) {
+      try { saveState(state); }
+      catch (e) {
+        log("state-persist-failed", { where: "backfill", error: String(e) });
+        raise(1, "keeper:state-persist-failed", `cannot write keeper-state.json after a backfill: ${String(e)}`);
+      }
+    }
+    for (const t of eligible) {
+      const key = `${t.c.wrapper}:${t.c.cutBlock}`;
+      if (scanWatch.backfillDone.has(key)) continue;
+      const ranges = t.c.coverage?.ranges ?? [];
+      if (gapsWithin(ranges, domainFrom(t.c), state.lastScannedBlock).length > 0) continue;
+      scanWatch.backfillDone.add(key);
+      log("backfill-done", { symbol: t.c.symbol, cutBlock: t.c.cutBlock, coveredTo: state.lastScannedBlock, rows: t.c.coverage?.rows ?? 0 });
+    }
+  } catch (e) {
+    bf.lastError = e instanceof Error ? e.message : String(e);
+    log("backfill-error", { error: bf.lastError });
+  }
+}
+
+/** /healthz views of the scan and the backfill (W2.9). */
+function swapHealth(state: State, health: Health, pinned: number): void {
+  health.swapScan = {
+    ok: scanWatch.failingSinceMs === null && scanWatch.lastOkMs !== null,
+    cursor: state.lastScannedBlock, lagBlocks: pinned - state.lastScannedBlock,
+    lastOkMs: scanWatch.lastOkMs, failingSinceMs: scanWatch.failingSinceMs,
+    lastStopReason: scanWatch.lastStopReason, lastError: scanWatch.lastError,
+    lastTick: scanWatch.lastTick, totals: { ...scanWatch.totals },
+  };
+  const bf = scanWatch.backfill;
+  health.backfill = {
+    active: bf.active, pendingBlocks: bf.pendingBlocks, chunksLastTick: bf.chunksLastTick, chunksTotal: bf.chunksTotal,
+    backoffTicks: bf.left, lastError: bf.lastError,
+  };
+  health.closures = closuresHealth(state);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -658,6 +877,7 @@ async function tick(
   state: State, assets: Asset[], venues: Map<string, Venue>, client: XStocksClient,
   sender: Sender | null, health: Health, digest: string,
 ) {
+  const tickStartMs = Date.now();
   const block = await pinLatest(CFG.rpcs);
   const pinnedAtMs = Date.now();   // W10.7: the clock-skew reading is taken against the moment of pinning
   const calls: Call[] = [
@@ -695,18 +915,46 @@ async function tick(
   }
   client.takeLog();
 
-  // Swaps for every pool since the last scan, in one paged query. Trailing the head by a few blocks
-  // keeps a reorg from writing a swap into a closure file that the chain later drops.
-  const to = block.number - 5;
-  const from = state.lastScannedBlock === 0 ? Math.max(0, to - 200) : state.lastScannedBlock + 1;
-  let swapsByPool = new Map<string, SwapRow[]>();
-  // An empty address list is not "no pools" to every node -- some read it as "no filter" and return
-  // every Swap on the chain. Never ask.
-  if (to >= from && assets.length > 0) {
-    swapsByPool = await scanSwaps(CFG.rpcs, assets, from, to);
-    state.lastScannedBlock = to;
+  // 7. (W2) Every endpoint's head in parallel (3 s), then the per-tick swap scan: [cursor + 1 - 60, pinned - 5], at
+  // most 10 chunks and 10 s. The 60-block overlap gives every block a second look; the 5-block trail is never
+  // asked of an endpoint whose head has not reached it. A scan failure never stops a closure transition, a commit or
+  // a settle: scanRange is total, and what it could not serve is scanned again next tick or filled at commit time.
+  const rawHeads = await readHeads(CFG.rpcs);
+  const heads = [...rawHeads];
+  const bi = CFG.rpcs.indexOf(block.rpc);
+  if (bi >= 0) heads[bi] = Math.max(heads[bi], block.number);   // the endpoint that served the pinned head has at least it
+  scanWatch.lagStreak = rawHeads.length >= 2 && rawHeads[0] >= 0 && rawHeads[1] >= 0 && Math.abs(rawHeads[0] - rawHeads[1]) > RPC_LAG_BLOCKS
+    ? scanWatch.lagStreak + 1 : 0;
+  const scanTo = block.number - 5;
+  const scanFrom = state.lastScannedBlock === 0
+    ? Math.max(0, scanTo - 200)
+    : Math.max(0, state.lastScannedBlock + 1 - 60);
+  const cursorBefore = state.lastScannedBlock;
+  let scan: ScanResult | null = null;
+  try {
+    scan = await scanRange(CFG.rpcs, assets, scanFrom, scanTo, { maxChunks: 10, deadlineMs: 10_000, heads, endpointOrder: "first" });
+    if (scan.servedTo > state.lastScannedBlock) state.lastScannedBlock = scan.servedTo;   // never moves backwards
+    noteScan("tick", scan);
+  } catch (e) {
+    // scanRange is total; this only guards a programming error.
+    scanWatch.lastError = String(e);
+    log("swap-scan-error", { error: String(e) });
+  }
+  {
+    const now = Date.now();
+    const reached = scan !== null && scan.stopReason === null;   // everything asked for was served (or nothing was due)
+    if (scan !== null && (reached || state.lastScannedBlock > cursorBefore)) scanWatch.lastProgressMs = now;
+    if (reached) { scanWatch.lastOkMs = now; scanWatch.failingSinceMs = null; }
+    else scanWatch.failingSinceMs ??= now;
+    if (scan) {
+      scanWatch.lastStopReason = scan.stopReason;
+      scanWatch.lastError = scan.stopReason === "unserved" ? (scan.stats.refusals.at(-1)?.message ?? "unserved") : null;
+      scanWatch.lastTick = { from: scan.from, to: scan.to, servedTo: scan.servedTo, chunks: scan.stats.chunks, logs: scan.stats.logs };
+    }
   }
 
+  // 8. The per-asset loop: opens, closes and abandons closures. No swap handling: the scan's rows go to the
+  // closure files in step 9, whatever this loop decides.
   for (const a of assets) {
     const w = a.wrapper;
     const read = reads.get(w);
@@ -727,13 +975,15 @@ async function tick(
     if (capRead === null) continue;
     const cap = capRead;
     const open = state.open[w];
+    health.assetsLastEvaluatedMs[a.symbol] = nowMs;
 
     if (cap > 0n) {
       state.lastPrint[w] = { priceE18: read.priceE18.toString(), atMs: nowMs };
       if (open?.committed) { state.pending.push(open); delete state.open[w]; log("closure-closed", { symbol: a.symbol, id: open.committed.id }); }
       else if (open) {
         log("closure-abandoned", { symbol: a.symbol, cutBlock: open.cutBlock, reason: "capacity returned before the commit point" });
-        try { rmSync(swapsPath(open), { force: true }); } catch { /* best effort */ }
+        // (W7) the abandon-branch alarms go here.
+        try { store.remove(open); } catch (e) { log("swap-file-remove-failed", { symbol: a.symbol, cutBlock: open.cutBlock, error: String(e) }); }
         delete state.open[w];
       }
       continue;
@@ -751,9 +1001,16 @@ async function tick(
         preCutMidE18: witnessed ? last!.priceE18 : null,
         witnessedCut: witnessed,
         reopenMs, swapCount: 0,
+        // W2: the cut block's hash and this pool's slot0 read at it (committed in the swaps leaf), and an empty
+        // coverage: the closing window [cutBlock - 900, cutBlock] and the closure are filled by the scans.
+        cutBlockHash: block.hash,
+        cutRead: cutReadOf(poolSnap, a.pool),
+        coverage: { ranges: [], rows: 0 },
       };
+      // (W7) the cut check of a new closure goes here.
       state.open[w] = fresh;
-      try { rmSync(swapsPath(fresh), { force: true }); } catch { /* a re-cut at the same block is the same closure */ }
+      // A file left at this path is a re-cut at the same block: start it empty, as its coverage is.
+      try { store.remove(fresh); } catch (e) { log("swap-file-remove-failed", { symbol: a.symbol, cutBlock: block.number, error: String(e) }); }
       log("closure-open", {
         symbol: a.symbol, cutBlock: block.number, midAtCut: read.priceE18,
         reopen: reopenMs === null ? null : new Date(reopenMs).toISOString(),
@@ -762,17 +1019,23 @@ async function tick(
       continue;
     }
 
-    const rows = swapsByPool.get(getAddress(a.pool)) ?? [];
-    const during = rows.filter((r) => r.blockNumber >= open.cutBlock);
-    if (!open.committed) {
-      appendSwaps(open, during);
-      open.swapCount += during.length;
-      if (reopenMs !== null) open.reopenMs = reopenMs;   // frozen by the commit
-    }
+    // (W7) the cut check and recut of an open closure go here.
+    // The predicted reopen is refreshed until a plan exists, then frozen: the plan's settleAfter is what counts.
+    if (reopenMs !== null && !open.committed && !open.plan) open.reopenMs = reopenMs;
   }
 
+  // 9. (W2) The scan's rows into every tracked open closure (store.ensure inside ingest): rows reach the file before
+  // coverage claims their blocks, a failed append claims nothing, a hole is never claimed.
+  if (scan) {
+    const tracked = trackedClosures(state, assets);
+    try { noteIngest("tick", ingest(store, tracked, scan, recentHashes), tracked); }
+    catch (e) { log("swap-ingest-error", { error: String(e) }); }
+  }
+
+  const sendsBefore = sendMark(state, health);
   await commitPass(state, assets, venues, poolSnap, reads, sender, health, digest, nowMs);
   await settlePass(state, sender, health, nowS, nowMs);
+  const sentThisTick = sendMark(state, health) !== sendsBefore;
 
   health.open = Object.keys(state.open).length;
   health.pending = state.pending.length;
@@ -791,13 +1054,39 @@ async function tick(
     raise(2, "keeper:not-armed", `cannot commit: isKeeper=${health.isKeeper} balanceWei=${health.balanceWei}`);
   }
   observeTick(health, block, pinnedAtMs, Date.now());
+  // W2.9: the scan's own health. A failing scan never fails the tick; it pages instead.
+  try {
+    const now = Date.now();
+    const sinceMs = now - scanWatch.lastProgressMs;
+    const behind = block.number - 5 - state.lastScannedBlock;
+    const dueSoon = Object.values(state.open).find((c) => c.witnessedCut && !c.committed && c.reopenMs !== null
+      && c.reopenMs - now >= 0 && c.reopenMs - now <= (CFG.commitLeadS + 300) * 1000);
+    if (sinceMs > 60 * 60_000 || (dueSoon && behind > 500)) {
+      raise(1, "keeper:swap-scan-stalled", dueSoon && behind > 500
+        ? `the swap scan is ${behind} blocks behind and ${dueSoon.symbol} reopens at ${new Date(dueSoon.reopenMs!).toISOString()}`
+        : `the swap scan has not advanced for ${Math.round(sinceMs / 60_000)} minutes (cursor ${state.lastScannedBlock}, head ${block.number})`);
+    } else if (sinceMs > 10 * 60_000) {
+      raise(2, "keeper:swap-scan-failing", `the swap scan has not advanced for ${Math.round(sinceMs / 60_000)} minutes: ${scanWatch.lastError ?? scanWatch.lastStopReason ?? "unknown"}`);
+    }
+    if (scanWatch.lagStreak >= RPC_LAG_TICKS) {
+      raise(2, "keeper:rpc-lagging", `RPC heads ${JSON.stringify(rawHeads)} differ by more than ${RPC_LAG_BLOCKS} blocks on ${scanWatch.lagStreak} consecutive ticks`);
+    }
+    swapHealth(state, health, block.number);
+  } catch (e) { log("swap-health-error", { error: String(e) }); }
 
   // 14. Deliver what this tick raised: after the commit and settle passes, never between a plan and its send.
   // The flush is the only network wait for alarms, bounded by its budget; `raise` itself is never awaited.
   const delivered = alarms.flush(ALARM_FLUSH_BUDGET_MS);
   await delivered;
   if (persistError) throw persistError;
-  // 15. (W2) the backfill goes here, after the flush; it saves through saveState(state) when it progressed.
+
+  // 15. (W2.7) The backfill, after the flush: never on the first tick after boot, never in a busy tick, bounded by
+  // BACKFILL_CHUNKS_PER_TICK and the time left in the tick; it saves through saveState(state) when it claimed coverage.
+  if (health.ticks >= 1 && CFG.backfillChunksPerTick > 0) {
+    const busy = backfillBusy({ open: Object.values(state.open), pending: state.pending }, Date.now(), block.timestamp, sentThisTick, CFG);
+    await backfillStep(state, assets, heads, busy, tickStartMs);
+    swapHealth(state, health, block.number);
+  }
 }
 
 async function commitPass(
@@ -917,7 +1206,10 @@ async function buildPlan(
     const method = MARK_METHODS[MARK_METHOD_VERSION];
     const closingFrom = Math.max(0, c.cutBlock - Math.ceil(method.closingVwapWindowMs / 1000));
     const closingSwaps = await swapsInRange(CFG.rpcs, a, closingFrom, c.cutBlock);
-    const closureSwaps = readSwapFile(c);
+    // (W4b) replaced by fillForCommit + assembleSwapEvidence. Until then: the store's rows in (cutBlock, pinned].
+    const file = store.read(c, poolSnap.block.number);
+    if (file.reset) raise(1, `keeper:swap-file-lost:${c.symbol}`, `${c.symbol}: closure file shorter than its coverage; rebuilding`);
+    const closureSwaps = file.rows.filter((r) => r.blockNumber > c.cutBlock);
 
     // The last print, taken from the chain where possible: the pool mid after the final swap at or
     // before the cut block IS the last print, and it re-derives from the committed evidence. Only if

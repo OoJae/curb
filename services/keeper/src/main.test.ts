@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { Wallet } from "ethers";
 import {
-  loadConfig, attributionHealth, clockSkewStep, archiveStep, CLOCK_SKEW_MAX_S, ARCHIVE_BACKLOG_MS,
+  loadConfig, attributionHealth, clockSkewStep, archiveStep, CLOCK_SKEW_MAX_S, ARCHIVE_BACKLOG_MS, backfillBusy,
 } from "./main.ts";
 import { Sender } from "./tx/sender.ts";
 
@@ -340,4 +340,118 @@ test("W10: deploy.sh saves the keeper's log before docker rm -f, backs up its st
   assert.match(r, /docker logs curb-keeper 2>&1 \| gzip -c > "\/var\/lib\/curb\/logs\/curb-keeper-[^\n]*\|\| /);
   const n = spawnSync("bash", ["-n", path], { encoding: "utf8" });
   assert.equal(n.status, 0, n.stderr);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W2 (the per-tick swap scan, the closure store, the backfill).
+// ---------------------------------------------------------------------------------------------
+
+test("W2: the per-tick scan cannot abort a commit or a settle", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const scan = tick.indexOf("scanRange(");
+  assert.ok(scan > 0, "tick calls scanRange(");
+  const tryAt = tick.lastIndexOf("try {", scan);
+  assert.ok(tryAt > 0 && tick.slice(tryAt, scan).split("}").length === 1, "scanRange( sits inside a try {");
+  assert.ok(tick.indexOf("commitPass(", scan) > scan && tick.indexOf("settlePass(", scan) > scan, "commitPass( and settlePass( after it");
+  assert.doesNotMatch(src, /await scanSwaps\(/);
+  assert.doesNotMatch(src, /appendSwaps\(/);
+  assert.doesNotMatch(src, /readSwapFile\(/);
+  // Heads in parallel with the pinned endpoint's head as a floor; a 60-block overlap; a 5-block trail; the budget.
+  assert.match(tick, /const rawHeads = await readHeads\(CFG\.rpcs\);/);
+  assert.match(tick, /heads\[bi\] = Math\.max\(heads\[bi\], block\.number\)/);
+  assert.match(tick, /const scanTo = block\.number - 5;/);
+  assert.match(tick, /state\.lastScannedBlock \+ 1 - 60/);
+  assert.match(tick, /\{ maxChunks: 10, deadlineMs: 10_000, heads, endpointOrder: "first" \}/);
+  assert.match(tick, /if \(scan\.servedTo > state\.lastScannedBlock\) state\.lastScannedBlock = scan\.servedTo;/, "the cursor never moves backwards");
+});
+
+test("W2: rows reach the closure files after the per-asset loop and before the commit pass", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const loop = tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;");
+  const ing = tick.indexOf("ingest(store, tracked, scan, recentHashes)");
+  assert.ok(loop > 0 && ing > loop && tick.indexOf("await commitPass(") > ing);
+  // The per-asset loop handles no swaps any more, and freezes the predicted reopen once a plan exists.
+  const body = tick.slice(loop, ing);
+  assert.doesNotMatch(body, /swapsByPool|swapCount \+=/);
+  assert.match(body, /if \(reopenMs !== null && !open\.committed && !open\.plan\) open\.reopenMs = reopenMs;/);
+  assert.match(body, /health\.assetsLastEvaluatedMs\[a\.symbol\] = nowMs;/);
+  // Only witnessed, unplanned, uncommitted closures are filled.
+  assert.match(fnBody(SRC(), "function trackedClosures("), /if \(!c\.witnessedCut \|\| c\.plan \|\| c\.committed\) continue;/);
+});
+
+test("W2: closure open and abandon handle the file through the store", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const open = tick.slice(tick.indexOf("const fresh: Closure = {"), tick.indexOf('log("closure-open"'));
+  assert.match(open, /cutBlockHash: block\.hash,/);
+  assert.match(open, /cutRead: cutReadOf\(poolSnap, a\.pool\),/);
+  assert.match(open, /coverage: \{ ranges: \[\], rows: 0 \},/);
+  assert.match(open, /store\.remove\(fresh\)/);
+  const abandon = tick.slice(tick.indexOf('log("closure-abandoned"'), tick.indexOf("delete state.open[w];", tick.indexOf('log("closure-abandoned"')));
+  assert.match(abandon, /store\.remove\(open\)/);
+  assert.doesNotMatch(src, /rmSync\(/, "no bare file removal left in main.ts");
+  assert.doesNotMatch(src, /swapsPath/);
+});
+
+test("W2: BACKFILL_CHUNKS_PER_TICK", () => {
+  withEnv({ BACKFILL_CHUNKS_PER_TICK: undefined }, () => {
+    const { cfg, errors } = loadConfig();
+    assert.equal(cfg.backfillChunksPerTick, 20);
+    assert.deepEqual(errors, []);
+  });
+  withEnv({ BACKFILL_CHUNKS_PER_TICK: "0" }, () => assert.equal(loadConfig().cfg.backfillChunksPerTick, 0));
+  withEnv({ BACKFILL_CHUNKS_PER_TICK: "60" }, () => assert.equal(loadConfig().cfg.backfillChunksPerTick, 60));
+  for (const bad of ["61", "-1", "1.5", "abc", ""]) {
+    withEnv({ BACKFILL_CHUNKS_PER_TICK: bad }, () => {
+      let r: ReturnType<typeof loadConfig> | undefined;
+      assert.doesNotThrow(() => { r = loadConfig(); });
+      assert.ok(r!.errors.some((e) => e.startsWith("BACKFILL_CHUNKS_PER_TICK must be in [0,60]")), `${bad}: ${r!.errors.join("; ")}`);
+    });
+  }
+});
+
+test("W2: no backfill on the first tick; it runs after the flush and saves through saveState", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const call = tick.indexOf("await backfillStep(");
+  assert.ok(call > 0);
+  const guard = tick.lastIndexOf("if (health.ticks >= 1 && CFG.backfillChunksPerTick > 0) {", call);
+  assert.ok(guard > 0 && call < tick.indexOf("\n  }", guard), "the backfill call is inside the block guarded by health.ticks >= 1");
+  // The W6 half: after the end-of-tick write, the flush and the rethrow.
+  const rethrow = tick.indexOf("if (persistError) throw persistError;");
+  assert.ok(rethrow > tick.indexOf("alarms.flush(") && call > rethrow);
+  const step = fnBody(src, "async function backfillStep(");
+  assert.match(step, /if \(rep\.claimed > 0\) \{\n\s*try \{ saveState\(state\); \}/);
+  assert.doesNotMatch(step, /persistReplace\(/);
+  assert.match(step, /if \(busy\) return;/);
+  assert.match(step, /Math\.min\(12_000, CFG\.tickMs - \(Date\.now\(\) - tickStartMs\) - 3_000\)/);
+  assert.match(step, /if \(deadlineMs < 2_000\) return;/);
+  assert.match(step, /bf\.level = Math\.min\(8, Math\.max\(1, 2 \* bf\.level\)\);/);
+  assert.doesNotMatch(step, /await raise|await alarms/);
+});
+
+test("W2: a tick is busy inside a commit window, a settle window, or after a send", () => {
+  const cfg = { minClosureS: 1_800, commitLeadS: 600, settleDelayS: 300 };
+  const now = 1_794_542_157_000, nowS = now / 1000;
+  const shut = (reopenInS: number, over: Record<string, unknown> = {}) =>
+    ({ witnessedCut: true, reopenMs: now + reopenInS * 1000, cutAtMs: now - 3_600_000, ...over });
+  const busy = (open: unknown[], pending: unknown[] = [], sent = false) =>
+    backfillBusy({ open: open as never, pending: pending as never }, now, nowS, sent, cfg);
+  assert.equal(busy([]), false);
+  assert.equal(busy([shut(720)]), true, "inside COMMIT_LEAD_S + 120");
+  assert.equal(busy([shut(721)]), false);
+  assert.equal(busy([shut(-60)]), true, "up to a minute past the reopen");
+  assert.equal(busy([shut(-61)]), false);
+  assert.equal(busy([shut(300, { committed: {} })]), false, "already committed");
+  assert.equal(busy([shut(300, { witnessedCut: false })]), false, "never committable");
+  assert.equal(busy([shut(300, { cutAtMs: now - 600_000 })]), false, "shorter than MIN_CLOSURE_S");
+  assert.equal(busy([shut(300, { reopenMs: null })]), false);
+  const row = (settleAfterS: number, over: Record<string, unknown> = {}) => ({ committed: { settleAfterS }, ...over });
+  assert.equal(busy([], [row(nowS - 300 + 60)]), true, "from a minute before the settle opens");
+  assert.equal(busy([], [row(nowS - 300 - 600)]), true, "to ten minutes after");
+  assert.equal(busy([], [row(nowS - 300 + 61)]), false);
+  assert.equal(busy([], [row(nowS - 300 - 601)]), false);
+  assert.equal(busy([], [row(nowS - 300, { settled: { txHash: "0x" } })]), false);
+  assert.equal(busy([], [], true), true, "a transaction was sent this tick");
 });
