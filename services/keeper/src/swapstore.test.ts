@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { getAddress } from "ethers";
 import { MARK_METHODS, MARK_METHOD_VERSION } from "./mark.ts";
 import { CLOSING_BLOCKS, ClosureSwapStore, backfillJob, domainFrom, fillForCommit, ingest } from "./swapstore.ts";
+import { addRange, gapsWithin, subtractRange } from "./ranges.ts";
 import type { ClosureState, Tracked, StoreIo } from "./swapstore.ts";
 import { decodeSwapLog } from "./sources/pools.ts";
 import type { PoolSpec, RawSwapLog, SwapRow } from "./sources/pools.ts";
@@ -289,9 +290,33 @@ test("a reorg truncates from the reorged block only", () => {
     ingest(h.store, [{ c: other, pool: NVDA.pool }], synthetic(NVDA.pool, 300, 301, A, () => 1n), hashes);
     assert.deepEqual(other.coverage!.ranges, [[cut - 900, 149], [300, 301]]);
     assert.equal(h.store.read(other, 1_000).rows.filter((r) => r.blockNumber >= 150 && r.blockNumber <= 200).length, 0);
-    // ...and only once.
-    ingest(h.store, [{ c: other, pool: NVDA.pool }], synthetic(NVDA.pool, 150, 200, A, () => 3n), hashes);
+    // ...and only once: the same blocks re-read on the new chain are not a second reorg.
+    const again = ingest(h.store, [{ c: other, pool: NVDA.pool }], synthetic(NVDA.pool, 150, 200, (b) => (b < 150 ? A(b) : B(b)), () => 3n), hashes);
+    assert.equal(again.reorgAt, null);
     assert.deepEqual(other.coverage!.ranges, [[cut - 900, 200], [300, 301]]);
+  } finally { h.done(); }
+});
+
+test("a reorg that renumbers a block's logs is detected (review F3)", () => {
+  const h = harness();
+  try {
+    const X = 75773100;
+    const c = closure(NVDA, 75773000);
+    const pool = getAddress(NVDA.pool);
+    const one = (rows: ScanRow[]): ScanResult => ({ from: X - 50, to: X + 50, servedTo: X + 50, rows: new Map([[pool, rows]]), holes: new Map(), stats: newScanStats(), stopReason: null });
+    const r = (i: number, hash: string, p: bigint): ScanRow => ({ blockNumber: X, logIndex: i, equityAbs: 5n, priceE18: p, blockHash: hash });
+    const hashes = new Map<string, string>();
+    ingest(h.store, [{ c, pool }], one([r(5, "0x" + "aa".repeat(32), 1_000n)]), hashes);
+    // Block X re-mined: the swap that was at logIndex 5 is now at 3, a new one at 7. No (b, i) key is shared.
+    const rep = ingest(h.store, [{ c, pool }], one([r(3, "0x" + "bb".repeat(32), 1_001n), r(7, "0x" + "bb".repeat(32), 1_002n)]), hashes);
+    assert.equal(rep.reorgAt, X);
+    assert.deepEqual(h.store.read(c, X + 50).rows.filter((x) => x.blockNumber === X).map((x) => x.logIndex), [3, 7], "the stale (X, 5) is gone");
+    assert.deepEqual(c.coverage!.ranges, [[X - 50, X + 50]]);
+    // A block seen by another pool's row counts too: the hash is the block's, whichever pool's log carried it.
+    const t2 = closure(XIAO, 75773000);
+    const xpool = getAddress(XIAO.pool);
+    const other: ScanResult = { from: X - 50, to: X + 50, servedTo: X + 50, rows: new Map([[xpool, [{ ...r(9, "0x" + "cc".repeat(32), 9n) }]]]), holes: new Map(), stats: newScanStats(), stopReason: null };
+    assert.equal(ingest(h.store, [{ c: t2, pool: xpool }], other, hashes).reorgAt, X);
   } finally { h.done(); }
 });
 
@@ -335,6 +360,32 @@ test("fillForCommit hands every scan and its ingest report to onScan", async () 
     });
     assert.deepEqual(seen, [[p - 4, p, 1], [d + 100, d + 199, 1]]);
     assert.deepEqual(c.coverage!.ranges, [[d, p]], "a throwing hook does not stop the fill");
+  } finally { h.done(); }
+});
+
+test("fillForCommit: a hanging first endpoint does not use the whole budget; the other fills the tail (review F2)", async () => {
+  const h = harness();
+  try {
+    const c = closure(XIAO, 1_900_000);
+    const d = domainFrom(c), p = 1_950_000;
+    c.coverage = { ranges: [[d, d + 399], [d + 500, p - 5]], rows: 0 };
+    const calls: Array<[number, number, number]> = [];
+    const f = (async (u: string | URL | Request, init?: RequestInit) => {
+      const req = JSON.parse(String(init?.body)) as { id: number; params: Array<{ fromBlock: string; toBlock: string }> };
+      const ep = RPCS.indexOf(String(u));
+      calls.push([ep, Number(req.params[0].fromBlock), Number(req.params[0].toBlock)]);
+      if (ep === 0) {
+        return new Promise<Response>((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason), { once: true }));
+      }
+      await new Promise((r) => setTimeout(r, 300));
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: req.id, result: [] }), { status: 200 });
+    }) as typeof fetch;
+    const t0 = performance.now();
+    const r = await fillForCommit(h.store, { c, pool: XIAO.pool }, XIAO, p,
+      { rpcs: RPCS, heads: [p, p], maxChunks: 20, deadlineMs: 4_000, recentHashes: new Map(), fetchImpl: f });
+    assert.ok(performance.now() - t0 < 4_100);
+    assert.deepEqual(calls, [[0, p - 4, p], [1, p - 4, p], [1, d + 400, d + 499]], "endpoint 0 asked once, then left alone");
+    assert.deepEqual(r.gapsLeft, []);
   } finally { h.done(); }
 });
 
@@ -399,6 +450,35 @@ test("a file the store cannot read never throws out of fillForCommit or ingest",
     assert.deepEqual(rep.appendErrors.map((e) => e.symbol), ["wXIAOx"]);
     assert.deepEqual(ok.coverage!.ranges, [[9_200, 9_210]], "the other closure is unaffected");
   } finally { h.done(); }
+});
+
+test("backfill: a one-block hole never starves the other gaps (review F4)", () => {
+  // Closure A (due first) has a persistent hole at one block and a long gap; closure B (due later) a long gap.
+  const a = { c: closure(XIAO, 1_000_000), pool: XIAO.pool, dueMs: 1 };
+  const b = { c: closure(NVDA, 1_003_000), pool: NVDA.pool, dueMs: 2 };
+  a.c.coverage = { ranges: [[999_100, 999_149], [999_151, 1_001_999], [1_004_000, 1_020_000]], rows: 0 };
+  b.c.coverage = { ranges: [[1_002_100, 1_004_099]], rows: 0 };
+  const cursor = 1_020_000;
+  const jobs: string[] = [];
+  for (let tick = 0; tick < 12; tick++) {
+    const job = backfillJob([a, b], cursor, 20);
+    if (!job) break;
+    jobs.push(`${job.from}..${job.to}`);
+    // Serve the job: every block but the hole becomes covered.
+    for (const t of [a, b]) {
+      if (!job.pools.includes(getAddress(t.pool))) continue;
+      const lo = Math.max(job.from, domainFrom(t.c));
+      let r = addRange(t.c.coverage!.ranges, lo, job.to);
+      if (t === a) r = subtractRange(r, 999_150, 999_150);
+      t.c.coverage = { ranges: r, rows: 0 };
+    }
+  }
+  assert.equal(jobs[0], "1002000..1003999", "A's long gap first, not its hole");
+  const firstHole = jobs.indexOf("999150..999150");
+  assert.ok(firstHole > 0, "the hole is still retried");
+  assert.ok(jobs.slice(firstHole).every((j) => j === "999150..999150"), "only once every longer gap is filled");
+  assert.deepEqual(gapsWithin(b.c.coverage!.ranges, domainFrom(b.c), cursor), [], "B is filled");
+  assert.deepEqual(gapsWithin(a.c.coverage!.ranges, domainFrom(a.c), cursor), [[999_150, 999_150]]);
 });
 
 test("backfill job: earliest reopen first", () => {

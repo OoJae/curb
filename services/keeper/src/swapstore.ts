@@ -385,19 +385,24 @@ export function ingest(store: ClosureSwapStore, tracked: Tracked[], scan: ScanRe
   const resets = new Set<string>();
   for (const h of scan.holes.values()) report.holes += h.length;
 
-  // 1. reorg check, across all pools of the scan
+  // 1. reorg check: every row carries its block's hash, so any block re-read with a row of any pool is compared
+  //    (keyed by block, not by (pool, block, logIndex): a re-mined block may renumber or replace its logs).
   let reorgAt: number | null = null;
-  for (const [pool, rows] of scan.rows) {
+  const seenNow = new Map<string, string>();
+  for (const rows of scan.rows.values()) {
     for (const r of rows) {
       if (r.blockHash === null) continue;
-      const hk = `${pool}:${r.blockNumber}:${r.logIndex}`;
+      const hk = String(r.blockNumber);
       const prev = recentHashes.get(hk);
-      if (prev !== undefined && prev !== r.blockHash) reorgAt = reorgAt === null ? r.blockNumber : Math.min(reorgAt, r.blockNumber);
-      recentHashes.set(hk, r.blockHash);
+      if (prev !== undefined && prev !== r.blockHash) {
+        reorgAt = reorgAt === null ? r.blockNumber : Math.min(reorgAt, r.blockNumber);
+      }
+      seenNow.set(hk, r.blockHash);
     }
   }
+  for (const [hk, h] of seenNow) recentHashes.set(hk, h);
   const keepFrom = scan.to - 200;
-  for (const hk of recentHashes.keys()) if (Number(hk.split(":")[1]) < keepFrom) recentHashes.delete(hk);
+  for (const hk of recentHashes.keys()) if (Number(hk) < keepFrom) recentHashes.delete(hk);
   if (reorgAt !== null) { report.reorgAt = reorgAt; store.noteReorg(reorgAt); }
 
   // 2. per tracked closure: apply any reorg not yet applied to its file (only blocks >= it; this scan or a later fill
@@ -465,6 +470,7 @@ export async function fillForCommit(store: ClosureSwapStore, t: Tracked, spec: P
     const tail = gaps.filter((g) => g[1] === pinnedBlock);
     const order = [...tail, ...gaps.filter((g) => g[1] !== pinnedBlock)];
     const floor = minKnownHead(o.heads);
+    const slow = new Set<number>();                              // an endpoint that timed out is not asked again in this fill
     for (const g of order) {
       const chunksLeft = o.maxChunks - chunks;
       if (chunksLeft <= 0) { stopReason = "chunk-budget"; break; }
@@ -473,7 +479,7 @@ export async function fillForCommit(store: ClosureSwapStore, t: Tracked, spec: P
       const historical = floor !== null && g[1] <= floor - HISTORICAL_DEPTH;
       const r = await scanRange(o.rpcs, [spec], g[0], g[1], {
         maxChunks: chunksLeft, deadlineMs: timeLeft, heads: o.heads, endpointOrder: historical ? "roundRobin" : "first",
-        now: o.now, fetchImpl: o.fetchImpl,
+        now: o.now, fetchImpl: o.fetchImpl, slow,
       });
       chunks += r.stats.chunks;
       const rep = ingest(store, [t], r, o.recentHashes);
@@ -495,24 +501,31 @@ export async function fillForCommit(store: ClosureSwapStore, t: Tracked, spec: P
  * The next backfill query: the eligible closure that is due first and has a gap in [domainFrom, cursor]; its lowest
  * gap, capped at `maxChunks` chunks; every eligible closure whose gaps intersect that range rides along (closures that
  * share a cut share one query). Null when nothing is left to fill.
+ *
+ * Gaps of one block are taken last, after every longer gap of every closure: a one-block gap is almost always a
+ * hole (a block holding a Swap log no endpoint decodes), which a scan serves without closing, so taking it first
+ * would ask the same block every tick and starve every other gap (review F4). It is still retried when nothing
+ * else is left, and fillForCommit asks it at commit time.
  */
 export function backfillJob(eligible: Array<Tracked & { dueMs: number }>, cursor: number, maxChunks: number):
   { from: number; to: number; pools: string[] } | null {
   if (!(maxChunks > 0)) return null;
   const gapsOf = (t: Tracked) => gapsWithin(t.c.coverage?.ranges ?? [], domainFrom(t.c), cursor);
-  const sorted = [...eligible].sort((a, b) => (a.dueMs - b.dueMs) || (domainFrom(a.c) - domainFrom(b.c)));
-  for (const first of sorted) {
-    const g = gapsOf(first)[0];
-    if (!g) continue;
-    const from = g[0];
-    const to = Math.min(g[1], from + LOG_RANGE * Math.floor(maxChunks) - 1);
-    const pools: string[] = [];
-    for (const t of eligible) {
-      const p = getAddress(t.pool);
-      if (pools.includes(p)) continue;
-      if (gapsOf(t).some(([x, y]) => x <= to && y >= from)) pools.push(p);
+  const sorted = [...eligible].sort((a, b) => (a.dueMs < b.dueMs ? -1 : a.dueMs > b.dueMs ? 1 : 0) || (domainFrom(a.c) - domainFrom(b.c)));
+  for (const longOnly of [true, false]) {
+    for (const first of sorted) {
+      const g = gapsOf(first).find(([x, y]) => !longOnly || y > x);
+      if (!g) continue;
+      const from = g[0];
+      const to = Math.min(g[1], from + LOG_RANGE * Math.floor(maxChunks) - 1);
+      const pools: string[] = [];
+      for (const t of eligible) {
+        const p = getAddress(t.pool);
+        if (pools.includes(p)) continue;
+        if (gapsOf(t).some(([x, y]) => x <= to && y >= from)) pools.push(p);
+      }
+      return { from, to, pools };
     }
-    return { from, to, pools };
   }
   return null;
 }
