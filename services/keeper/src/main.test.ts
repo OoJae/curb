@@ -1350,3 +1350,53 @@ test("W5 review F5: an earlier attempt that mined is booked as ours, with its ha
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// --- review fixes (16 Nov): the measured tick for the cut check (F3); the cut instant into the assembly (F1) -------
+
+import { cutCheckTickMs } from "./main.ts";
+import { cutReadLagOk } from "./swapEvidence.ts";
+import { poolAbi } from "./sources/pools.ts";
+
+test("W7: the cut check allows the tick this keeper actually observed, so one slow tick still re-anchors (F3)", () => {
+  assert.equal(cutCheckTickMs(1_000_000, null, 30_000), 30_000, "first tick after boot: the configured tick");
+  assert.equal(cutCheckTickMs(1_000_000, 1_000_000 - 20_000, 30_000), 30_000, "never less than the configured tick");
+  assert.equal(cutCheckTickMs(1_000_000, 1_000_000 - 65_000, 30_000), 65_000);
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.match(tick, /const cutTickMs = cutCheckTickMs\(nowMs, cutWatch\.lastNowMs, CFG\.tickMs\);\n\s*cutWatch\.lastNowMs = nowMs;/);
+  assert.ok(tick.indexOf("cutWatch.lastNowMs = nowMs;") < tick.indexOf("checkCut(fresh,"), "measured before the per-asset loop");
+  assert.equal(tick.split("venue.limits, sched, nowMs, cutTickMs)").length - 1, 2, "both cut checks use it");
+  assert.doesNotMatch(tick, /checkCut\([^)]*CFG\.tickMs\)/);
+  // The reviewer's case: a blip from 03:52Z merging into the lunch cut; ticks every 30 s to 03:54:30Z, then one 65 s tick.
+  const hk = HK();
+  const blip = () => { const c = opened("wXIAOx", T("2026-11-13T03:52:00Z"), hk); runTicks(c, hk, T("2026-11-13T03:54:30Z")); return c; };
+  const at = T("2026-11-13T03:55:35Z");
+  const fixed = blip(), old = blip();
+  assert.equal(fixed.cutSuspect, true);
+  onCutCheck(fixed, checkCut(fixed, hk.limits, closureVenueSchedule(hk, fixed.holidayLedger), at, cutCheckTickMs(at, T("2026-11-13T03:54:30Z"), TICK)), anchorAt(at, 75_000_215));
+  assert.equal(fixed.cutAtMs, at, "re-anchored at the slow tick");
+  assert.equal(fixed.cutSuspect, false);
+  onCutCheck(old, checkCut(old, hk.limits, closureVenueSchedule(hk, old.holidayLedger), at, TICK), anchorAt(at, 75_000_215));
+  assert.equal(old.cutSuspect, "unanchorable", "with the configured tick alone the row was lost");
+});
+
+test("W7: a recut's cut read is this tick's, so the keeper's own S22 holds on every re-anchored row (F1)", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T03:52:00Z"), hk);
+  runTicks(c, hk, T("2026-11-13T03:54:30Z"));
+  const now = T("2026-11-13T03:55:00.700Z");
+  const pool = "0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417";
+  const slot0 = poolAbi.encodeFunctionResult("slot0", [1n << 96n, 0, 0, 1, 1, 0, true]);
+  const anchor: CutAnchor = {
+    nowMs: now, block: { number: 75_773_080, hash: "0x" + "cc".repeat(32) }, midE18: 1n, pool,
+    poolSnap: { block: { number: 75_773_080, hash: "0x" + "cc".repeat(32), timestamp: Math.floor(now / 1000) - 1, rpc: "" },
+      results: [{ label: `slot0:${pool}`, target: pool, callData: "0x3850c7bd", success: true, returnData: slot0 }] },
+  };
+  onCutCheck(c, checkCut(c, hk.limits, closureVenueSchedule(hk, c.holidayLedger), now, TICK), anchor);
+  assert.ok(c.cutRead, "recut");
+  assert.equal(c.cutRead!.blockNumber, c.cutBlock);
+  assert.ok(cutReadLagOk(c.cutAtMs, c.cutRead!.blockTimestamp));
+});
+
+test("W4b/F1: buildPlan hands the cut instant to the assembly, which drops a cut read that does not fit it", () => {
+  assert.match(fnBody(SRC(), "export async function buildPlan("), /assembleSwapEvidence\(\{\n\s*symbol: c\.symbol, pool: getAddress\(a\.pool\), cutBlock: c\.cutBlock, cutAtMs: c\.cutAtMs,/);
+});

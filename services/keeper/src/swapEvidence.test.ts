@@ -117,3 +117,17 @@ test("checkSwapEvidence and preFixNotes are total", () => {
     assert.ok(Array.isArray(preFixNotes({ swaps: junk, markinput: junk, readBlock: null })));
   }
 });
+
+import { CUT_READ_LAG_MAX_S, CUT_READ_LAG_MIN_S, cutReadLagOk, cutReadLagS } from "./swapEvidence.ts";
+
+test("cutReadLagOk: seconds from the cut read's block to the observed cut, within [-5, 60]", () => {
+  assert.equal(CUT_READ_LAG_MIN_S, -5);
+  assert.equal(CUT_READ_LAG_MAX_S, 60);
+  assert.equal(cutReadLagS(1_794_542_157_246, 1_794_542_156), 1, "the real 13 Nov recess cut: 03:55:57.246 vs block 03:55:56");
+  assert.equal(cutReadLagOk(1_794_542_157_246, 1_794_542_156), true);
+  assert.equal(cutReadLagOk(1_794_542_157_999, 1_794_542_157 + 5), true);
+  assert.equal(cutReadLagOk(1_794_542_157_999, 1_794_542_157 + 6), false);
+  assert.equal(cutReadLagOk(1_794_542_157_999, 1_794_542_157 - 60), true);
+  assert.equal(cutReadLagOk(1_794_542_157_999, 1_794_542_157 - 61), false);
+  assert.equal(cutReadLagOk(Number.NaN, 1), false);
+});

@@ -575,6 +575,10 @@ const TAMPERS: Tamper[] = [
   }],
   ["S19", "cut time", "wXIAOx", (_i, c) => { c.venue = { ...c.venue!, cutAtMs: c.venue!.cutAtMs + 1000 }; }],
   ["S20", "predicted reopen", "wXIAOx", (_i, c) => { c.venue = { ...c.venue!, predictedReopenMs: c.venue!.predictedReopenMs + 1000 }; }],
+  ["S22", "after the cut read's block time", "wMEITx", (_i, c) => {
+    c.cutAtMs += 120_000;                       // the reviewer's V/08b: a cut moved 2 min later, still inside the recess
+    c.venue = { ...c.venue!, cutAtMs: c.cutAtMs };
+  }, true],
   ["S21", "holidaysKept", "wXIAOx", (_i, c) => {
     c.venue = { ...c.venue!, holidaysKept: [{ startsAt: "2026-11-12T16:00:00.000Z", endsAt: "2026-11-13T16:00:00.000Z", kind: "Closed", firstSeenMs: 1, lastSeenMs: 2 }] };
   }],
@@ -678,4 +682,72 @@ test("several claims in one bundle: each note names its symbol", () => {
   const v = verifyMarkBundleOffline(clone(buildMarkRound(i).bundle));
   assert.equal(v.ok, true, v.failures.join(" | "));
   assert.ok(v.notes.some((n) => n.startsWith("TCENTx: pre-fix row")) && v.notes.some((n) => n.startsWith("XIAOx: pre-fix row")), v.notes.join(" | "));
+});
+
+// --- review fixes (16 Nov): cutAtMs bound to the cut read (F1), clock slack at the cut shared with checkCut (F2) ---
+
+import { CUT_READ_LAG_MAX_S, CUT_READ_LAG_MIN_S } from "./swapEvidence.ts";
+import { checkCut } from "./venueTime.ts";
+import type { ExchangeSchedule } from "./regime.ts";
+
+/** The real cut read of the 13 Nov recess, wMEITx (block 75,773,120 at 03:55:56Z; read with eth_call at that block). */
+const REAL_MEIT_CUT_READ: CutRead = {
+  blockNumber: 75_773_120, blockHash: "0x430f6e6c725e16574ed783aeb8a11b3034623d7013770abbfbd62f82e07ad5ca", blockTimestamp: 1_794_542_156,
+  slot0: "0x0000000000000000000000000000000000050ed0774e1d15612b4d3de016c5ad000000000000000000000000000000000000000000000000000000000003e11e000000000000000000000000000000000000000000000000000000000000016f00000000000000000000000000000000000000000000000000000000000002d000000000000000000000000000000000000000000000000000000000000002d000000000000000000000000000000000000000000000000000000000000000440000000000000000000000000000000000000000000000000000000000000001",
+};
+
+/** The wMEITx recess round with `cutRead`, its cut moved by `shiftS` seconds (venue and swaps leaf alike). */
+function meitShifted(cutRead: CutRead, shiftS: number) {
+  const i = strictRecessInputs("wMEITx", cutRead);
+  const c = i.closures[0];
+  c.cutAtMs += shiftS * 1000;
+  c.venue = { ...c.venue!, cutAtMs: c.cutAtMs };
+  return i;
+}
+
+test("S22: the observed cut instant is bound to the committed cut read (the real 13 Nov read: honest +1 s; +2 min and +30 min fail)", () => {
+  const honest = strictly(buildMarkRound(strictRecessInputs("wMEITx", REAL_MEIT_CUT_READ)).bundle);
+  assert.deepEqual(honest.failures, []);
+  assert.deepEqual(honest.notes, []);
+  for (const shift of [120, 1_800]) {
+    const v = strictly(buildMarkRound(meitShifted(REAL_MEIT_CUT_READ, shift)).bundle);
+    assert.equal(v.ok, false, `+${shift} s`);
+    assert.ok(has(v.failures, "after the cut read's block time"), v.failures.join(" | "));
+  }
+  // The bounds, exactly: the cut at -5..+60 s from the read's block passes, one second further does not.
+  const cutS = Math.floor(strictRecessInputs("wMEITx").closures[0].cutAtMs / 1000);
+  const read = (lagS: number): CutRead => ({ ...REAL_MEIT_CUT_READ, blockTimestamp: cutS - lagS });
+  for (const lag of [CUT_READ_LAG_MIN_S, 0, 1, CUT_READ_LAG_MAX_S]) {
+    assert.deepEqual(strictly(buildMarkRound(strictRecessInputs("wMEITx", read(lag))).bundle).failures, [], `lag ${lag}`);
+  }
+  for (const lag of [CUT_READ_LAG_MIN_S - 1, CUT_READ_LAG_MAX_S + 1]) {
+    assert.ok(has(strictly(buildMarkRound(strictRecessInputs("wMEITx", read(lag))).bundle).failures, "after the cut read's block time"), `lag ${lag}`);
+  }
+});
+
+test("block-time drift is computed from the observed cut instant, not from the cut read", () => {
+  // A cut read 60 s before the cut instant (allowed), and a pinned read that ran 61 s slow per block from the cut.
+  const i0 = strictRecessInputs("wMEITx");
+  const cutS = Math.floor(i0.closures[0].cutAtMs / 1000);
+  const i = strictRecessInputs("wMEITx", { ...REAL_MEIT_CUT_READ, blockTimestamp: cutS - 60 });
+  i.chain = { ...i.chain, block: { ...i.chain.block, timestamp: cutS + (i.chain.block.number - NOV13.cutBlock) - 61 } };
+  const v = strictly(buildMarkRound(i).bundle);
+  assert.deepEqual(v.failures, []);
+  assert.ok(has(v.notes, "(-61 s off)"), v.notes.join(" | "));
+});
+
+test("S18 allows the same clock slack as the keeper's cut check, and no more", () => {
+  const hk = leafValue(loadBundle(ROOTS.recessXIAO), LeafKind.HTTP_EXCHANGE, subjectOf(`venue:${leafValue(loadBundle(ROOTS.recessXIAO), LeafKind.CLAIM).wrapper.toLowerCase()}`));
+  const S = { mic: hk.mic, schedule: hk.schedule } as ExchangeSchedule;
+  const zero = Date.parse("2026-11-13T03:55:00Z");
+  for (let offS = -10; offS <= 10; offS++) {
+    const cutAtMs = zero + offS * 1000;
+    const i = strictRecessInputs("wXIAOx");
+    i.closures[0].cutAtMs = cutAtMs;
+    i.closures[0].venue = { ...i.closures[0].venue!, cutAtMs };
+    const verifierOk = !has(strictly(buildMarkRound(i).bundle).failures, "open at the cut");
+    const keeperOk = checkCut({ cutAtMs }, hk.limitsPerPeriod, S, cutAtMs, 30_000).kind === "ok";
+    assert.equal(verifierOk, keeperOk, `${offS} s: the keeper's cut check and S18 must agree`);
+    assert.equal(verifierOk, offS >= -5, `${offS} s`);
+  }
 });

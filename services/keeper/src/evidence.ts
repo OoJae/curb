@@ -21,7 +21,7 @@ import { getAddress } from "ethers";
 import { blockCount, gapsWithin, inRanges } from "./ranges.ts";
 import { SWAP_TOPIC0, vwap } from "./sources/pools.ts";
 import type { SwapRow } from "./sources/pools.ts";
-import { SWAP_EVIDENCE_VERSION, closingRangeFor, commitList, swapListDigest } from "./swapEvidence.ts";
+import { SWAP_EVIDENCE_VERSION, closingRangeFor, commitList, cutReadLagOk, swapListDigest } from "./swapEvidence.ts";
 import type { CutRead, SwapEvidenceFields } from "./swapEvidence.ts";
 
 export interface AssemblyInput {
@@ -29,6 +29,11 @@ export interface AssemblyInput {
   /** Checksummed. */
   pool: string;
   cutBlock: number;
+  /**
+   * The closure's observed cut instant (c.cutAtMs). Given, a cut read whose block time is not within strict S22's
+   * bound of it is not committed (the row would fail the self-check, and every verifier, with it). buildPlan passes it.
+   */
+  cutAtMs?: number;
   cutBlockHash: string | null;
   cutRead: CutRead | null;
   /** poolSnap.block.number: where midNow was read. */
@@ -140,7 +145,8 @@ export function assembleSwapEvidence(i: AssemblyInput): AssemblyResult {
   let cutBlockHash = i.cutBlockHash;
   if (cutBlockHash !== null && !HASH32.test(cutBlockHash)) { cutBlockHash = null; degraded.push("cut-block-hash-dropped"); }
   let cutRead = i.cutRead;
-  if (cutRead !== null && (cutRead.blockNumber !== i.cutBlock || cutBlockHash === null || cutRead.blockHash.toLowerCase() !== cutBlockHash.toLowerCase())) {
+  if (cutRead !== null && (cutRead.blockNumber !== i.cutBlock || cutBlockHash === null || cutRead.blockHash.toLowerCase() !== cutBlockHash.toLowerCase()
+      || (i.cutAtMs !== undefined && !cutReadLagOk(i.cutAtMs, cutRead.blockTimestamp)))) {
     cutRead = null;
     degraded.push("cut-read-dropped");
   }
