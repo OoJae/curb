@@ -25,6 +25,10 @@ import { Regime } from "../../../services/attestor/src/regime.ts";
 import { checkMarkRound } from "../../../services/keeper/src/markWitness.ts";
 import type { SettlementInfo } from "../../../services/keeper/src/markWitness.ts";
 import { closuresCommitted, decodeClosureCommitted, decodeCommitCalldata, scorecardAbi } from "../../../services/keeper/src/sources/scorecard.ts";
+import { LeafKind, loadTree, subjectOf } from "../../../services/keeper/src/tree.ts";
+import type { Leaf } from "../../../services/keeper/src/tree.ts";
+import { registrySpecOf } from "../../../services/keeper/src/swapEvidence.ts";
+import { Interface, getAddress } from "ethers";
 import { classify } from "./classify.ts";
 import { EXIT, exitFor, iso } from "./render.ts";
 import type { CheckLike } from "./render.ts";
@@ -42,6 +46,27 @@ export const ARCHIVE = "https://archive.curb.markets";
 /** The archive first: it is locked and outlives the hosts. Then host A, which serves rounds only. */
 export const DEFAULT_ARCHIVES = [ARCHIVE, HOST_A];
 
+/** Scorecard's write-once price source per wrapper (src/Scorecard.sol `priceSources`). */
+export const priceSourcesAbi = new Interface([
+  "function priceSources(address) view returns (address pool, bool equityIsToken0, uint32 twapWindow, uint8 equityDecimals, uint8 stableDecimals)",
+]);
+/**
+ * The six rows D-16 explains: the XHKG holiday closures of 30 Sep-2 Oct and 16-20 Oct 2026. The release gate
+ * (spec W8a) needs the set of rows that get E6 to be exactly these.
+ */
+export const KNOWN_E6_ROOTS = [
+  "0xfa50604164a77feb3cb38f6e56f8f37e5aec9a54030d997f95d5efda63351bdc",
+  "0x3dafc1b6355ef8bfacc33bbc0563489b65530afc2474a8b78fd9d560c7ff18ed",
+  "0xd81c7e07d527dfa1e9952f02c9d8f4c37380f2b2c8cc2617ff46b14804bb4e89",
+  "0xf1da8c479ddbdf42cfa39c57125b17f7339ec7b73b1b3a556c130f0a8671490f",
+  "0x4db753ad7eb06acf7ba22d0b4fe2ded09ab39eda8803b6cc6ba811b6e4a36ad5",
+  "0x67daecc7a7788552b0b7e649283e31600f1b43d21d3d5c00b8bf4a0a35e508fe",
+];
+
+/** Scorecard.SETTLE_DELAY and SETTLE_WINDOW: `settle` reverts TooLate after settleAfter + 300 + 6 h. */
+export const SETTLE_DELAY_S = 300;
+export const SETTLE_WINDOW_S = 6 * 3600;
+
 const ATTEST_BATCH = clockAbi.getFunction("attestBatch")!.selector;
 const COMMIT = scorecardAbi.getFunction("commit")!.selector;
 const CLOSURE_COMMITTED = scorecardAbi.getEvent("ClosureCommitted")!.topicHash;
@@ -54,6 +79,8 @@ export interface Deps {
   rpc<T>(method: string, params: unknown[]): Promise<T>;
   /** The first source that serves `key` as JSON, with the exact text it served. */
   evidence(key: string): Promise<Evidence>;
+  /** Tests only: replaces the keeper's SWAP_EVIDENCE_FROM_BLOCK when deciding a mark's era. */
+  swapEvidenceFromBlock?: number;
 }
 
 export interface Verdict {
@@ -187,16 +214,90 @@ export async function verifyTx(hashIn: string, deps: Deps): Promise<Verdict> {
     const s = scorecardAbi.decodeFunctionResult("settlements", out);
     settlement = { settledAt: Number(s.settledAt), settledBlock: Number(s.settledBlock), reopenPrint: String(s.reopenPrint), settled: Boolean(s.settled) };
   } catch { /* the settlement is a further check, never a precondition */ }
-  const m = checkMarkRound(doc, row, tx, CHAIN_ID, SCORECARD, writtenAtS, settlement);
+  const m = checkMarkRound(doc, row, tx, CHAIN_ID, SCORECARD, writtenAtS, settlement,
+    deps.swapEvidenceFromBlock === undefined ? undefined : { swapEvidenceFromBlock: deps.swapEvidenceFromBlock });
   const mine = m.rows.find((x) => lower(x.wrapper) === lower(row.wrapper));
+
+  // The pool the bundle prices from must be the one Scorecard settles against. Both are write-once, so a
+  // difference is a wrong bundle; a read that fails (or answers nothing) is only a warning.
+  const spec = registrySpecOf(leafOf(doc, LeafKind.REGISTRY, subjectOf("registry")), row.wrapper);
+  try {
+    const out = await deps.rpc<string>("eth_call", [{ to: SCORECARD, data: priceSourcesAbi.encodeFunctionData("priceSources", [row.wrapper]) }, "latest"]);
+    const p = priceSourcesAbi.decodeFunctionResult("priceSources", out);
+    const onchain = { pool: getAddress(String(p.pool)), equityIsToken0: Boolean(p.equityIsToken0), equityDecimals: Number(p.equityDecimals), stableDecimals: Number(p.stableDecimals) };
+    if (onchain.pool === ZERO_ADDRESS) m.warnings.push(`Scorecard.priceSources(${row.wrapper}) answered no pool; the REGISTRY entry was not compared`);
+    else if (!spec || lower(spec.pool) !== lower(onchain.pool) || spec.equityIsToken0 !== onchain.equityIsToken0
+      || spec.equityDecimals !== onchain.equityDecimals || spec.stableDecimals !== onchain.stableDecimals) {
+      m.failures.push(`REGISTRY entry for ${mine?.symbol ?? row.wrapper} (pool, equityIsToken0, decimals) is not Scorecard.priceSources: `
+        + `bundle ${spec ? `${spec.pool}, ${spec.equityIsToken0}, ${spec.equityDecimals}/${spec.stableDecimals}` : "(none)"}, `
+        + `chain ${onchain.pool}, ${onchain.equityIsToken0}, ${onchain.equityDecimals}/${onchain.stableDecimals}`);
+      m.reproduced = false;
+    }
+  } catch (e) {
+    m.warnings.push(`could not read Scorecard.priceSources(${row.wrapper}); the REGISTRY entry was not compared (${e instanceof Error ? e.message : String(e)})`);
+  }
+
   fields.push(
     ["method", m.method || "(unreadable)"],
     ["evaluated", when(m.evaluatedAtMs)],
     ["row", `${mine?.symbol ?? row.wrapper}  mark ${formatE18(row.mark)}  band ${row.bandBps} bps  graded after ${iso(row.settleAfter * 1000)}`],
+  );
+  if (mine) fields.push(["flags", mine.flags.length ? mine.flags.join(" ") : "(none)"], ["drift", `${mine.driftBps} bp`]);
+  fields.push(
+    ["swaps", swapsField(doc, row.wrapper, m.evidence.era)],
     ["closure", m.closureId || row.id],
-    ["settled", settlement ? (settlement.settled ? `yes, block ${settlement.settledBlock.toLocaleString("en-US")}, reopen print ${formatE18(settlement.reopenPrint)}` : "not yet") : "(could not read)"],
+    ["settled", await settledField(settlement, row.settleAfter, deps)],
   );
   return done(m);
+}
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/** One committed leaf of a mark bundle, parsed; null when absent or unreadable. Never throws. */
+function leafOf(doc: unknown, kind: number, subject: string): Record<string, unknown> | null {
+  try {
+    const b = doc as { tree: unknown; json: Record<string, string> };
+    const leaf = [...loadTree(b.tree as never).entries()].map(([, v]: [number, Leaf]) => v).find(([k, s]) => Number(k) === kind && s === subject);
+    if (!leaf) return null;
+    const v = JSON.parse(b.json[leaf[2]]);
+    return v && typeof v === "object" ? v : null;
+  } catch { return null; }
+}
+
+/** What the row's swap evidence covers, as committed. Strict rows only; a pre-fix keeper recorded none. */
+export function swapsField(doc: unknown, wrapper: string, era: string): string {
+  if (era === "pre-swap-fix") return "not recorded (pre-fix keeper)";
+  const s = leafOf(doc, LeafKind.FETCH_LOG, subjectOf(`swaps:${lower(wrapper)}`));
+  const range = (r: unknown) => {
+    const x = r as { fromBlock?: unknown; toBlock?: unknown } | null;
+    return x && typeof x === "object" ? `${x.fromBlock}..${x.toBlock}` : "?";
+  };
+  if (!s || !Array.isArray(s.closingSwaps)) return "(unreadable)";
+  let out = `closing ${s.closingSwaps.length} in ${range(s.closingRange)}, closure ${String(s.closureCount)} in ${range(s.closureRange)}`;
+  if (Array.isArray(s.gaps) && s.gaps.length) out += `, gaps ${s.gaps.map((g) => (Array.isArray(g) ? `${g[0]}..${g[1]}` : "?")).join(" ")}`;
+  if (s.closingComplete === false) out += ", closing window not committed";
+  if (s.closureOmitted !== null && s.closureOmitted !== undefined) out += `, truncated (${Number(s.closureCount).toLocaleString("en-US")} total)`;
+  return out;
+}
+
+/**
+ * Settled, or why not. An unsettled row whose window has closed can never be graded (Scorecard reverts
+ * TooLate), and saying "not yet" about it would be false; row 151 (D-17) is such a row. One read of the
+ * latest block decides it; a failed read keeps the cautious "not yet".
+ */
+export async function settledField(s: SettlementInfo | undefined, settleAfterS: number, deps: Deps): Promise<string> {
+  if (!s) return "(could not read)";
+  if (s.settled) return `yes, block ${s.settledBlock.toLocaleString("en-US")}, reopen print ${formatE18(s.reopenPrint)}`;
+  const deadlineS = settleAfterS + SETTLE_DELAY_S + SETTLE_WINDOW_S;
+  let latestS: number;
+  try {
+    const b = await deps.rpc<{ timestamp: string } | null>("eth_getBlockByNumber", ["latest", false]);
+    if (!b) return "not yet";
+    latestS = Number(BigInt(b.timestamp));
+  } catch { return "not yet"; }
+  return latestS > deadlineS
+    ? `not settled; settle window closed ${iso(deadlineS * 1000)} (TooLate: this row can no longer be graded)`
+    : `not yet (window open until ${iso(deadlineS * 1000)})`;
 }
 
 const REGIME_NAME = Object.fromEntries(Object.entries(Regime).map(([k, v]) => [v, k])) as Record<number, string>;
@@ -280,7 +381,8 @@ export function checkUrl(u: string): string | null {
   return `refusing ${url.protocol} ${u}: use https (plain http only on loopback)`;
 }
 
-export function networkDeps(rpcs: string[], archives: string[], timeoutMs = 20_000): Deps & Scan {
+/** A capped mark bundle is up to about 1.25 MB, so the evidence fetch gets 60 s. */
+export function networkDeps(rpcs: string[], archives: string[], timeoutMs = 60_000): Deps & Scan {
   return {
     rpc: <T>(method: string, params: unknown[]) => rpcAny<T>(rpcs, method, params),
     async evidence(key: string): Promise<Evidence> {

@@ -118,3 +118,72 @@ test("selftest passes offline and proves the verifier can still say no", () => {
   assert.match(r.stdout, /catches tampering/);
   assert.match(r.stdout, /wrong label is surfaced/);
 });
+
+// --- EVIDENCE lines (deploy 2) ---------------------------------------------------------------
+
+const MARK = (root: string) => fileURLToPath(new URL(`../../../services/keeper/src/fixtures/marks/${root}.json`, import.meta.url));
+const HOLIDAY_2OCT = "0x3dafc1b6355ef8bfacc33bbc0563489b65530afc2474a8b78fd9d560c7ff18ed";
+const US_9NOV = "0xa5e1ff04a41bb46293fa07b6d62a386a86a5cb0da3378f6d34c0a6d968652efd";
+const base = { reproduced: true, labelsConsistent: true, failures: [], labelFailures: [], warnings: [] };
+
+test("an EVIDENCE finding does not change the exit code", () => {
+  const notes = ["pre-fix row (evidence read at block 1, before block 2): the keeper build that wrote it decoded no pool Swap logs (DECISIONS D-15)."];
+  assert.equal(exitFor({ ...base, evidence: { era: "pre-swap-fix", complete: null, notes } }), EXIT.VERIFIED);
+  assert.equal(exitFor({ ...base, reproduced: false, evidence: { era: "pre-swap-fix", complete: null, notes } }), EXIT.NOT_REPRODUCED);
+  const r = run("bundle", MARK(HOLIDAY_2OCT));
+  assert.equal(r.status, EXIT.VERIFIED, r.stdout + r.stderr);
+  assert.match(r.stdout, /^ {2}EVIDENCE reopen re-derived from the commit instant: walked from the cut, the committed schedule gives 2026-10-01T01:30:00\.000Z/m);
+  assert.match(r.stdout, /^ {2}EVIDENCE pre-fix row \(evidence read at block 72134982/m);
+  assert.match(r.stdout, /era +pre-swap-fix \(offline: the era is bound to the commit block only by 'tx'\)/);
+  assert.match(r.stdout, /REPRODUCED {2}\(from the evidence as published; that evidence omits pool swaps -- see EVIDENCE above\)/);
+});
+
+test("every EVIDENCE note is printed, after the warnings, and the closing line says why", () => {
+  const notes = Array.from({ length: 9 }, (_, i) => `note ${i}`);
+  const out = renderCheck("x", [], { ...base, warnings: ["w"], evidence: { era: "swap-evidence", complete: false, notes } });
+  for (const n of notes) assert.ok(out.includes(`  EVIDENCE ${n}`), n);
+  assert.ok(out.indexOf("warn") < out.indexOf("EVIDENCE"));
+  assert.match(out, /\n {2}REPRODUCED$/, "a strict row needs no qualifier: its notes say what they say");
+  const e0 = "pre-fix row (x): the keeper build that wrote it decoded no pool Swap logs (DECISIONS D-15).";
+  assert.match(renderCheck("x", [], { ...base, evidence: { era: "pre-swap-fix", complete: null, notes: [e0] } }),
+    /REPRODUCED {2}\(pre-fix row: swap evidence was not recorded -- see EVIDENCE above\)$/);
+  assert.match(renderCheck("x", [], { ...base, evidence: { era: "pre-swap-fix", complete: null, notes: [e0, "lastPrint is the keeper's last pre-cut reading, -2.2 bp from the pool mid at the cut block."] } }),
+    /that evidence omits pool swaps/);
+  assert.match(renderCheck("x", [], { ...base, labelsConsistent: false, evidence: { era: "pre-swap-fix", complete: null, notes: ["pre-fix row (x): swap lists present but not checked."] } }),
+    /REPRODUCED {2}\(pre-fix row: its swap lists were not checked -- see EVIDENCE above\) {2}\(but the uncommitted labels disagree/);
+  assert.match(renderCheck("x", [], { ...base, reproduced: false, evidence: { era: "pre-swap-fix", complete: null, notes: [e0] } }), /\n {2}NOT REPRODUCED$/);
+});
+
+test("--json carries evidence and keeps ok", () => {
+  const r = run("bundle", "--json", MARK(US_9NOV));
+  assert.equal(r.status, EXIT.VERIFIED, r.stderr);
+  const o = JSON.parse(r.stdout.trim());
+  assert.equal(o.kind, "mark");
+  assert.equal(o.ok, true);
+  assert.equal(o.evidence.era, "pre-swap-fix");
+  assert.equal(o.evidence.complete, null);
+  assert.ok(o.evidence.notes.some((n: string) => n.includes("moved -373.9 bp")), JSON.stringify(o.evidence.notes));
+  assert.ok(o.evidence.notes.some((n: string) => n.includes("-2.2 bp from the pool mid at the cut block")));
+});
+
+test("a tampered mark bundle is still NOT reproduced (1), EVIDENCE or not", () => {
+  const b = JSON.parse(readFileSync(MARK(US_9NOV), "utf8"));
+  const k = Object.keys(b.json).find((x) => b.json[x].includes('"markE18"'))!;
+  b.json[k] = b.json[k].replace('"bandBps":25', '"bandBps":26');
+  const r = spawnSync(process.execPath, ["--experimental-strip-types", CLI, "bundle", "-"], { encoding: "utf8", input: JSON.stringify(b) });
+  assert.equal(r.status, EXIT.NOT_REPRODUCED, r.stdout + r.stderr);
+  assert.match(r.stdout, /NOT REPRODUCED/);
+});
+
+test("selftest covers marks", () => {
+  const r = run("selftest");
+  assert.equal(r.status, EXIT.VERIFIED, r.stdout + r.stderr);
+  assert.match(r.stdout, /2 Oct holiday row/);
+  assert.match(r.stdout, /13 Nov recess row\) {2}catches tampering/);
+  assert.match(r.stdout, /^era cutover: (NOT SET \(pre-release build\)|block \d+)$/m);
+  assert.match(r.stdout, /2 real mainnet rounds and 2 real mainnet marks/);
+});
+
+test("usage names what EVIDENCE lines mean", () => {
+  assert.match(run("--help").stdout, /EVIDENCE lines describe gaps in what a row's evidence records; they never change the exit code/);
+});

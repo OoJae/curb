@@ -26,13 +26,14 @@ import { classify, expectKind, SCHEMAS } from "./classify.ts";
 import { EXIT, exitFor, fromOffline, iso, renderCheck, renderJson } from "./render.ts";
 import type { CheckLike } from "./render.ts";
 import {
-  CLOCK, DEFAULT_ARCHIVES, SCORECARD, checkUrl, mapLimit, networkDeps, parseRange, verifyTx, worstExit, writesInRange,
+  CLOCK, DEFAULT_ARCHIVES, KNOWN_E6_ROOTS, SCORECARD, checkUrl, mapLimit, networkDeps, parseRange, verifyTx, worstExit, writesInRange,
 } from "./tx.ts";
 import type { Verdict } from "./tx.ts";
 import { verifyBundleOffline } from "../../../services/attestor/src/verify/offline.ts";
 import { verifyWitness } from "../../../services/attestor/src/witness.ts";
 import { DEFAULT_RPCS } from "../../../services/attestor/src/sources/chain.ts";
 import { verifyMarkBundleOffline } from "../../../services/keeper/src/markRound.ts";
+import { SWAP_EVIDENCE_FROM_BLOCK } from "../../../services/keeper/src/swapEvidence.ts";
 
 const USAGE = `curb-verify -- check a Curb number against the evidence it was published with
 
@@ -53,6 +54,7 @@ Contracts: MarketClock ${CLOCK}, Scorecard ${SCORECARD} (X Layer, chain 196)
 Exit codes
   0 verified   1 NOT reproduced   2 usage error   3 unavailable (nothing concluded)   4 unsupported
   A range exits with its worst item: 1, then 4, then 3.
+  EVIDENCE lines describe gaps in what a row's evidence records; they never change the exit code
 
 Schemas verified: ${Object.values(SCHEMAS).join(", ")}`;
 
@@ -82,7 +84,7 @@ async function readSource(src: string | undefined, archives: string[], dirs: str
 
 async function get(url: string): Promise<string> {
   let res: Response;
-  try { res = await fetch(url, { signal: AbortSignal.timeout(20_000) }); }
+  try { res = await fetch(url, { signal: AbortSignal.timeout(60_000) }); }
   catch (e) { throw new Error(`${url}: ${e instanceof Error ? e.message : String(e)}`); }
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
   return res.text();
@@ -130,7 +132,7 @@ function verifyDoc(doc: unknown, from: string, json: boolean): { check: CheckLik
   // sufficiently mangled bundle makes one throw -- and a throw here means "this does not check out",
   // never "I could not reach the network". Letting it reach the top-level catch would report a
   // broken bundle as exit 3 and tell the reader nothing was concluded, when plenty was.
-  let r: { ok: boolean; root: string; failures: string[] };
+  let r: { ok: boolean; root: string; failures: string[]; notes?: string[]; era?: string; evidenceComplete?: boolean | null };
   try {
     r = c.kind === "round" ? verifyBundleOffline(c.doc) : verifyMarkBundleOffline(c.doc);
   } catch (e) {
@@ -142,6 +144,7 @@ function verifyDoc(doc: unknown, from: string, json: boolean): { check: CheckLik
     fields.push(["kind", String(c.doc.kind)], ["evaluated", iso(c.doc.evaluatedAtMs)], ["claims", String(c.doc.claims?.length ?? 0)]);
   } else {
     fields.push(["scorecard", String(c.doc.scorecard)], ["evaluated", iso(c.doc.evaluatedAtMs)], ["marks", String(c.doc.marks?.length ?? 0)]);
+    if (r.era) fields.push(["era", `${r.era} (offline: the era is bound to the commit block only by 'tx')`]);
   }
   emit(json, renderCheck(`${c.kind} bundle ${c.doc.inputRoot}`, fields, check),
     renderJson(c.kind, { source: from, inputRoot: c.doc.inputRoot, root: r.root }, check));
@@ -201,6 +204,11 @@ async function runRange(spec: string | undefined, json: boolean, rpcs: string[],
     }
   }
   const count = (code: number) => verdicts.filter((v) => v.exit === code).length;
+  // Reproduced marks whose evidence was read before the swap-evidence cutover: they reproduce from evidence
+  // known to omit pool swaps (DECISIONS D-15). And every row whose reopen re-derived only from the commit
+  // instant (E6): the release gate requires that set to be exactly the six holiday rows of D-16.
+  const preFix = verdicts.filter((v) => v.exit === EXIT.VERIFIED && v.kind === "mark" && v.check?.evidence?.era === "pre-swap-fix").length;
+  const e6 = verdicts.filter((v) => v.check?.evidence?.notes.some((n) => n.includes(E6_NOTE))).map((v) => v.inputRoot ?? v.tx);
   const exit = worstExit(verdicts.map((v) => v.exit));
   const summary = {
     writes: verdicts.length,
@@ -208,14 +216,30 @@ async function runRange(spec: string | undefined, json: boolean, rpcs: string[],
     marks: writes.filter((w) => w.kind === "mark").length,
     reproduced: count(EXIT.VERIFIED), notReproduced: count(EXIT.NOT_REPRODUCED),
     unavailable: count(EXIT.UNAVAILABLE), unsupported: count(EXIT.UNSUPPORTED),
+    preFix, e6Roots: e6, e6Unexpected: e6.filter((x) => !KNOWN_E6_ROOTS.includes(lower(x))),
   };
   if (json) process.stdout.write(JSON.stringify({ schema: "curb.verify/1", kind: "range", from: r.from, to, ...summary, exit }) + "\n");
   else {
+    const omit = preFix > 0 ? ` (${preFix} from evidence known to omit pool swaps: rows read before ${eraStart()})` : "";
     process.stdout.write(`range ${r.from}..${to}: ${summary.writes} Curb writes (${summary.rounds} rounds, ${summary.marks} marks): `
-      + `${summary.reproduced} reproduced, ${summary.notReproduced} NOT reproduced, ${summary.unavailable} unavailable, ${summary.unsupported} unsupported\n`);
+      + `${summary.reproduced} reproduced${omit}, ${summary.notReproduced} NOT reproduced, ${summary.unavailable} unavailable, ${summary.unsupported} unsupported\n`);
+    if (e6.length) {
+      process.stdout.write(`reopen re-derived from the commit instant (E6) on ${e6.length} row(s):\n`);
+      for (const x of e6) process.stdout.write(`  ${x}${KNOWN_E6_ROOTS.includes(lower(x)) ? "  (D-16 holiday row)" : "  NOT one of the six D-16 holiday rows: explain it in DECISIONS before any release"}\n`);
+    }
   }
   process.exit(exit);
 }
+
+const lower = (x: string) => x.toLowerCase();
+
+/** The note E6 starts with (keeper swapEvidence.ts holidayFallbackNote). */
+const E6_NOTE = "reopen re-derived from the commit instant";
+
+
+const eraStart = () => (SWAP_EVIDENCE_FROM_BLOCK === Number.MAX_SAFE_INTEGER
+  ? "the swap-evidence cutover (not set in this build)"
+  : `block ${SWAP_EVIDENCE_FROM_BLOCK.toLocaleString("en-US")}`);
 
 async function main() {
   let parsed;
