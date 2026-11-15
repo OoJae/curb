@@ -43,6 +43,9 @@ import type { ExchangeSchedule, TradingObject } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
 import { Sender, RevertedInSimulation, PendingUnresolved, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
 import { publisherFromEnv } from "./publish.ts";
+import type { PublishHealth } from "./publish.ts";
+import { createAlarms, ALARM_FLUSH_BUDGET_MS } from "./alarms.ts";
+import type { AlarmsHealth } from "./alarms.ts";
 
 const MODES = ["shadow", "live"];
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -88,6 +91,11 @@ export function loadConfig() {
     errors.push(`${name} must be on|off, got ${JSON.stringify(v)}`);
     return false;
   };
+  const wei = (name: string, v: string, fallback: bigint) => {
+    const x = v.trim();
+    if (!/^[0-9]+$/.test(x)) { errors.push(`${name} must be a decimal integer, got ${JSON.stringify(v)}`); return fallback; }
+    return BigInt(x);
+  };
   const baseUrl = (name: string, v: string) => {
     const x = v.trim().replace(/\/+$/, "");
     if (x === "") return "";
@@ -119,12 +127,13 @@ export function loadConfig() {
      *
      * The issuer ends EVERY period 300s early (D-4), so a US name whose overnight and extended caps
      * are both non-zero shows a five-minute capacity gap at each session boundary -- 09:25, 15:55,
-     * 19:55, 03:55 ET. Those are real zero-capacity windows, but nothing happens in them: the pool
-     * barely trades, the mark equals the last print by construction, and `skill()` counts strict
-     * wins, so each one would be a guaranteed tie. Committing them would pad the record with rows
-     * that cannot say anything, which is the opposite of what it is for. The meaningful closures --
-     * the 65-minute Hong Kong lunch recess, the 17-hour overnight, weekends, holidays -- are all
-     * far above this floor.
+     * 19:55, 03:55 ET. Those are real zero-capacity windows, but a mark for such a gap would be
+     * committed seconds after the cut, with almost no closure behind it: the primary market is shut
+     * for five minutes while the pool keeps trading through them (wNVDAx had 1,418 swaps in four
+     * hours on 13 Nov). Committing them would pad the record with rows that say almost nothing about
+     * pricing a closure, which is the opposite of what it is for. The meaningful closures -- the
+     * 65-minute Hong Kong lunch recess, the 17-hour overnight, weekends, holidays -- are all far
+     * above this floor.
      */
     minClosureS: num("MIN_CLOSURE_S", env("MIN_CLOSURE_S", "1800")!, 0, 86_400),
     /** Must equal Scorecard.SETTLE_DELAY. */
@@ -132,7 +141,7 @@ export function loadConfig() {
     /** MarketClock.MAX_ATTESTATION_AGE: past this the clock reads UNKNOWN and we are blind. */
     maxAttestationAgeS: num("MAX_ATTESTATION_AGE_S", env("MAX_ATTESTATION_AGE_S", "1800")!, 60, 86_400),
     venueRefreshMs: num("VENUE_REFRESH_MS", env("VENUE_REFRESH_MS", "600000")!, 60_000, 3_600_000),
-    lowBalanceWei: BigInt(env("LOW_BALANCE_WEI", "3000000000000000")!),
+    lowBalanceWei: wei("LOW_BALANCE_WEI", env("LOW_BALANCE_WEI", "3000000000000000")!, 3_000_000_000_000_000n),
     /**
      * ERC-8021 attribution: the X Layer Builder Code suffix the Sender appends to every commit and settle
      * this keeper signs. Empty, the default, is off. It is applied inside the Sender and nowhere else:
@@ -251,6 +260,8 @@ interface State {
   open: Record<string, Closure>;
   /** Committed rows still owing a settle. */
   pending: Closure[];
+  /** Written by saveState (deploy 2, W6); never required on load. */
+  v?: 2;
 }
 
 const statePath = () => join(CFG.dataDir, "keeper-state.json");
@@ -270,6 +281,18 @@ function persistReplace(path: string, content: string) {
   const fd = openSync(tmp, "r+"); fsyncSync(fd); closeSync(fd);
   renameSync(tmp, path);
   const dfd = openSync(dirname(path), "r"); fsyncSync(dfd); closeSync(dfd);
+}
+
+/**
+ * The ONLY writer of keeper-state.json (W6). Called with the frozen plan right after it is built, with each
+ * commit attempt's number before the transaction is signed, and at the end of every tick. `persistReplace` is
+ * tmp + fsync + rename + directory fsync, so a crash leaves the old or the new file whole: after any restart a
+ * plan that was ever signed for is on disk, and `buildPlan` only runs for a closure without one. Throws on I/O
+ * error; every caller decides what not to do when it does.
+ */
+function saveState(state: State): void {
+  state.v = 2;
+  persistReplace(statePath(), JSON.stringify(state));
 }
 
 /** Write-once: a published bundle is the thing a row is checked against, so it is never rewritten. */
@@ -320,6 +343,23 @@ interface Health {
   lastSettle?: Record<string, unknown>;
   /** ERC-8021 Builder Code attribution. The suffix is in every transaction's calldata, so it is public. */
   attribution: { on: boolean; dataSuffix: string | null; codes: string[] };
+  // Deploy 2 (W10.3). Every field below is a view; none is persisted. Absent until its package fills it.
+  /** W2: the per-tick swap scan, the backfill, and per open closure {symbol, cutBlock, cutSuspect, coveredTo, gaps, gapBlocks, rows}. */
+  swapScan?: Record<string, unknown>;
+  backfill?: Record<string, unknown>;
+  closures?: Array<Record<string, unknown>>;
+  /** W3: free space on DATA_DIR's volume and what the keeper keeps there; the process's memory. */
+  disk?: { freeMb: number | null; marksBytes: number; closuresBytes: number; orphans: number };
+  mem?: { rssMb: number; heapUsedMb: number };
+  /** W5: Scorecard's own count beside the keeper's books, and the reconciliation's last good read. */
+  onchain?: {
+    closureCount: number | null; pending: number; pendingPastDue: string[]; recent: number; expired: number;
+    reconcile: { lastOkBlock: number | null; skipped: number };
+  };
+  /** W10.7: wall clock minus the pinned block's timestamp, at the moment the block was pinned. */
+  clock: { skewS: number | null };
+  /** When each asset was last evaluated by the per-asset loop (W2's loop sets it). */
+  assetsLastEvaluatedMs: Record<string, number>;
 }
 
 /**
@@ -337,9 +377,15 @@ export function attributionHealth(sender: { readonly dataSuffix: string } | null
   return { on: dataSuffix !== null, dataSuffix, codes: builderCodes(dataSuffix ?? "") };
 }
 
-const alarmSentAt = new Map<string, { at: number; sev: number }>();
-let alarmCheckDown = false;
-const ALARM_COOLDOWN_MS = 15 * 60_000;
+/**
+ * Alarms (W10.1, alarms.ts). `raise` is synchronous and never touches the network: it logs `alarm`, applies the
+ * 15-minute cooldown and queues the alarm. Nothing is delivered between building a plan and sending it; the
+ * queue is flushed once per tick after the commit and settle passes (`alarms.flush`, 5 s budget, every sev-1 of
+ * the flush coalesced into one page), and in the main loop's catch. Never `await` a raise.
+ */
+const alarms = createAlarms({ url: CFG.alarmUrl, hostId: CFG.hostId, log });
+
+function raise(sev: 1 | 2, key: string, message: string): void { alarms.raise(sev, key, message); }
 
 async function hcAccepted(res: Response): Promise<boolean> {
   if (!res.ok) return false;
@@ -347,31 +393,71 @@ async function hcAccepted(res: Response): Promise<boolean> {
   try { return (await res.text()).trim() === "OK"; } catch { return false; }
 }
 
+/** The heartbeat (HC_URL), after a good tick. */
 async function ping(url: string): Promise<boolean> {
   if (!url) return false;
   try { return await hcAccepted(await fetch(url, { signal: AbortSignal.timeout(5_000) })); } catch { return false; }
 }
 
-async function raise(sev: 1 | 2, key: string, message: string): Promise<void> {
-  const now = Date.now();
-  const prev = alarmSentAt.get(key);
-  if (prev !== undefined && now - prev.at < ALARM_COOLDOWN_MS && prev.sev <= sev) return;
-  log("alarm", { sev, key, message });
-  if (!CFG.alarmUrl) { alarmSentAt.set(key, { at: now, sev }); return; }
+/** W10.7: |skew| above this on CLOCK_SKEW_TICKS consecutive ticks pages. X Layer makes one block per second. */
+export const CLOCK_SKEW_MAX_S = 30;
+export const CLOCK_SKEW_TICKS = 3;
+/**
+ * One tick's clock-skew reading. `pinnedAtMs` is the wall clock taken right after `pinLatest` returned, so the
+ * reading is not inflated by however long the rest of the tick took. The commit window and `cutAtMs` run on
+ * the VPS clock, the contract on `block.timestamp`.
+ */
+export function clockSkewStep(streak: number, pinnedAtMs: number, blockTimestampS: number): { skewS: number; streak: number; alarm: boolean } {
+  const skewS = Math.round(pinnedAtMs / 1000 - blockTimestampS);
+  const next = Math.abs(skewS) > CLOCK_SKEW_MAX_S ? streak + 1 : 0;
+  return { skewS, streak: next, alarm: next >= CLOCK_SKEW_TICKS };
+}
+
+/** W10.7: archive items waiting (parked ones excluded: they page on their own) this long raise a sev-2. */
+export const ARCHIVE_BACKLOG_MS = 60 * 60_000;
+/**
+ * One tick's archive reading. `publish.ts` stays byte-identical with the attestor's and exposes no age, so how
+ * long items have been waiting is tracked here: `backlogSinceMs` is when the waiting count last became non-zero.
+ */
+export function archiveStep(backlogSinceMs: number | null, h: { queued: number; parked: number }, nowMs: number):
+  { backlogSinceMs: number | null; parked: boolean; backlog: boolean } {
+  const waiting = h.queued - h.parked;
+  const since = waiting > 0 ? (backlogSinceMs ?? nowMs) : null;
+  return { backlogSinceMs: since, parked: h.parked > 0, backlog: since !== null && nowMs - since >= ARCHIVE_BACKLOG_MS };
+}
+
+/** In-memory watch state for tick step 13 (W10.7). */
+const watch = { skewStreak: 0, archiveBacklogSinceMs: null as number | null };
+
+/** Tick step 13, the W10 part: clock skew and the archive. Never throws; raises are queued, never awaited. */
+function observeTick(health: Health, block: { timestamp: number }, pinnedAtMs: number, nowMs: number): void {
   try {
-    // A check left failing never pages again, so re-arm before a new sev-1.
-    if (sev === 1 && alarmCheckDown) {
-      if (!(await hcAccepted(await fetch(CFG.alarmUrl, { method: "POST", body: "re-arm", signal: AbortSignal.timeout(5_000) })))) return;
-      alarmCheckDown = false;
+    const sk = clockSkewStep(watch.skewStreak, pinnedAtMs, block.timestamp);
+    watch.skewStreak = sk.streak;
+    health.clock = { skewS: sk.skewS };
+    if (sk.alarm) {
+      raise(1, "keeper:clock-skew", `the VPS clock is ${sk.skewS}s off the chain on ${sk.streak} consecutive ticks; the commit window runs on it`);
     }
-    const res = await fetch(`${CFG.alarmUrl}/${sev === 1 ? "fail" : "log"}`, {
-      method: "POST", body: `[${CFG.hostId}] sev-${sev} ${message}`.slice(0, 9_000), signal: AbortSignal.timeout(5_000),
-    });
-    if (await hcAccepted(res)) {
-      alarmSentAt.set(key, { at: now, sev });
-      if (sev === 1) alarmCheckDown = true;
+  } catch (e) { log("clock-check-error", { error: String(e) }); }
+  try {
+    const ph = publisher.health();
+    const ar = archiveStep(watch.archiveBacklogSinceMs, ph, nowMs);
+    watch.archiveBacklogSinceMs = ar.backlogSinceMs;
+    if (ar.parked) {
+      raise(1, "keeper:archive-parked", `${ph.parked} archive item(s) parked after their retries: restart the keeper outside commit and settle windows to re-queue`);
     }
-  } catch { /* monitoring must never break the keeper; the next tick retries */ }
+    if (ar.backlog) {
+      raise(2, "keeper:archive-backlog", `${ph.queued - ph.parked} archive item(s) waiting since ${new Date(ar.backlogSinceMs!).toISOString()}`);
+    }
+  } catch (e) { log("archive-check-error", { error: String(e) }); }
+}
+
+/** /healthz body: health plus the views kept outside it (the archive's backlog age, the alarm queue). */
+function healthBody(health: Health, ok: boolean): Record<string, unknown> {
+  const alarmsHealth: AlarmsHealth = alarms.health();
+  const body = { ok, ...health, archive: publisher.health() as PublishHealth & { backlogSinceMs?: number | null }, alarms: alarmsHealth };
+  body.archive.backlogSinceMs = watch.archiveBacklogSinceMs;   // health() returns a fresh object each call
+  return body;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -490,6 +576,8 @@ async function main() {
   log("attribution", CFG.dataSuffix
     ? { on: true, dataSuffix: CFG.dataSuffix, codes: builderCodes(CFG.dataSuffix), note: "ERC-8021 Builder Code suffix appended to every commit and settle this keeper signs" }
     : { on: false, note: "DATA_SUFFIX unset: transactions carry no Builder Code" });
+  // Whether a sev-1 can page anyone, before any disk access. Never the URLs.
+  log("alarms", { paging: CFG.alarmUrl !== "", heartbeat: CFG.hcUrl !== "" });
   mkdirSync(join(CFG.dataDir, "marks"), { recursive: true });
   mkdirSync(join(CFG.dataDir, "closures"), { recursive: true });
   publisher.start();
@@ -512,7 +600,7 @@ async function main() {
   }
   log("boot", { mode: CFG.mode, clock: CFG.clock, scorecard: CFG.scorecard, codeDigest: digest, address, assets });
   if (assets.length === 0) {
-    await raise(CFG.scorecard === ZERO ? 2 : 1, "keeper:no-priceable-assets",
+    raise(CFG.scorecard === ZERO ? 2 : 1, "keeper:no-priceable-assets",
       CFG.scorecard === ZERO
         ? "bootstrap boot: no SCORECARD configured yet, so nothing is marked; the key exists and the address is on /healthz"
         : "no registered asset has a Scorecard price source; nothing can be marked");
@@ -541,6 +629,7 @@ async function main() {
     bootMs: Date.now(), ticks: 0, lastTickOkMs: Date.now(), mode: CFG.mode, address, isKeeper: false, armed: false,
     assets: assets.length, open: 0, pending: state.pending.length, committedTotal: 0, settledTotal: 0,
     attribution: attributionHealth(sender),
+    clock: { skewS: null }, assetsLastEvaluatedMs: {},
   };
   startHttp(health);
 
@@ -554,8 +643,11 @@ async function main() {
     } catch (e) {
       log("tick-error", { error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) });
       if (Date.now() - health.lastTickOkMs > 10 * 60_000) {
-        await raise(1, "keeper:ticks-failing", `no successful tick for ${Math.round((Date.now() - health.lastTickOkMs) / 60_000)} minutes`);
+        raise(1, "keeper:ticks-failing", `no successful tick for ${Math.round((Date.now() - health.lastTickOkMs) / 60_000)} minutes`);
       }
+      // A tick that threw skipped its own flush (step 14): deliver what it raised now, within the budget.
+      const delivered = alarms.flush(ALARM_FLUSH_BUDGET_MS);
+      await delivered;
     }
     const wait = CFG.tickMs - (Date.now() - tickStart);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -567,6 +659,7 @@ async function tick(
   sender: Sender | null, health: Health, digest: string,
 ) {
   const block = await pinLatest(CFG.rpcs);
+  const pinnedAtMs = Date.now();   // W10.7: the clock-skew reading is taken against the moment of pinning
   const calls: Call[] = [
     ...assets.flatMap((a) => [
       { label: `cap:${a.wrapper}`, target: CFG.clock, callData: capAbi.encodeFunctionData("primaryCapNow", [a.wrapper]) },
@@ -627,7 +720,7 @@ async function tick(
     // A stale attestation reads capacity as zero for the conservative reason, but it is "we stopped
     // looking", not "the market shut". Committing a closure off it would invent one. Hold everything.
     if (observedAt === 0 || nowS - observedAt > CFG.maxAttestationAgeS) {
-      await raise(1, "keeper:clock-stale", `MarketClock is stale for ${a.symbol} (observedAt=${observedAt}); holding all closure decisions`);
+      raise(1, "keeper:clock-stale", `MarketClock is stale for ${a.symbol} (observedAt=${observedAt}); holding all closure decisions`);
       continue;
     }
     const capRead = decodeOr(null, () => BigInt(capAbi.decodeFunctionResult("primaryCapNow", capRes.returnData)[0]), capRes);
@@ -683,11 +776,28 @@ async function tick(
 
   health.open = Object.keys(state.open).length;
   health.pending = state.pending.length;
-  persistReplace(statePath(), JSON.stringify(state));
 
-  if (CFG.mode === "live" && !health.armed) {
-    await raise(2, "keeper:not-armed", `cannot commit: isKeeper=${health.isKeeper} balanceWei=${health.balanceWei}`);
+  // 12. The end-of-tick write (W6). A failure pages and fails the tick, but only after this tick's alarms are out.
+  let persistError: unknown = null;
+  try { saveState(state); }
+  catch (e) {
+    persistError = e;
+    log("state-persist-failed", { where: "tick", error: String(e) });
+    raise(1, "keeper:state-persist-failed", `cannot write keeper-state.json: ${String(e)}`);
   }
+
+  // 13. Health and alarm conditions. (W3 adds disk and memory here.)
+  if (CFG.mode === "live" && !health.armed) {
+    raise(2, "keeper:not-armed", `cannot commit: isKeeper=${health.isKeeper} balanceWei=${health.balanceWei}`);
+  }
+  observeTick(health, block, pinnedAtMs, Date.now());
+
+  // 14. Deliver what this tick raised: after the commit and settle passes, never between a plan and its send.
+  // The flush is the only network wait for alarms, bounded by its budget; `raise` itself is never awaited.
+  const delivered = alarms.flush(ALARM_FLUSH_BUDGET_MS);
+  await delivered;
+  if (persistError) throw persistError;
+  // 15. (W2) the backfill goes here, after the flush; it saves through saveState(state) when it progressed.
 }
 
 async function commitPass(
@@ -714,7 +824,7 @@ async function commitPass(
     if (c.reopenMs === null || !venue) {
       // No schedule means no defensible settleAfter. Better no row than an unfalsifiable one.
       if (nowMs - c.cutAtMs > 30 * 60_000) {
-        await raise(1, `keeper:no-reopen:${c.symbol}`, `${c.symbol} has been shut for ${Math.round((nowMs - c.cutAtMs) / 60_000)}m with no venue schedule; no row can be committed`);
+        raise(1, `keeper:no-reopen:${c.symbol}`, `${c.symbol} has been shut for ${Math.round((nowMs - c.cutAtMs) / 60_000)}m with no venue schedule; no row can be committed`);
       }
       continue;
     }
@@ -729,13 +839,26 @@ async function commitPass(
     if (toReopenS > CFG.commitLeadS) continue;
     if (toReopenS < CFG.commitFloorS) {
       // We arrived too late to land a transaction that the contract would still accept.
-      await raise(1, `keeper:commit-missed:${c.symbol}:${c.cutBlock}`, `missed the commit window for ${c.symbol}: ${toReopenS}s to reopen`);
+      raise(1, `keeper:commit-missed:${c.symbol}:${c.cutBlock}`, `missed the commit window for ${c.symbol}: ${toReopenS}s to reopen`);
       continue;
     }
 
-    if (!c.plan) c.plan = await buildPlan(c, a, venue, assets, poolSnap, read.priceE18, digest, nowMs);
-    if (!c.plan) continue;
+    if (!c.plan) {
+      const built = await buildPlan(c, a, venue, assets, poolSnap, read.priceE18, digest, nowMs);
+      if (!built) continue;                                // nothing was signed, nothing to persist
+      c.plan = built;
+      // W6: the frozen plan is on disk before any transaction carrying it is signed, so a restart can only
+      // reuse it (buildPlan runs only for a closure without one). If it cannot be saved, it stays in memory and
+      // nothing is sent; the attempt below saves it again before the first signature.
+      try { saveState(state); }
+      catch (e) {
+        log("state-persist-failed", { where: "plan", symbol: c.symbol, error: String(e) });
+        raise(1, "keeper:state-persist-failed", `cannot persist the plan for ${c.symbol}; nothing is sent until it is: ${String(e)}`);
+        continue;
+      }
+    }
     const plan = c.plan;
+    // (W5) Everything from here to the end of the loop body becomes `await sendCommit(c, {...})`.
 
     if (!health.armed || !sender) {
       log("shadow-mark", {
@@ -747,7 +870,16 @@ async function commitPass(
       continue;
     }
 
+    // W6: the attempt number is on disk before its outbox id is signed, so a restart never re-uses an id and a
+    // signature orphaned by a crash ('unsent' in the outbox) is never broadcast. Unsaved: undo, send nothing.
     plan.attempts++;
+    try { saveState(state); }
+    catch (e) {
+      plan.attempts--;
+      log("state-persist-failed", { where: "attempt", symbol: c.symbol, attempt: plan.attempts + 1, error: String(e) });
+      raise(1, "keeper:state-persist-failed", `cannot persist commit attempt ${plan.attempts + 1} for ${c.symbol}; nothing was sent: ${String(e)}`);
+      continue;
+    }
     try {
       const receipt = await sender.broadcastAndWait(
         await sender.prepare(CFG.scorecard, plan.data, { id: `commit:${plan.root}:${plan.attempts}`, kind: "commit", targetMs: nowMs }));
@@ -771,7 +903,7 @@ async function commitPass(
         : e instanceof PendingUnresolved ? e.message
         : e instanceof Error ? e.message : String(e);
       log("commit-failed", { symbol: c.symbol, root: plan.root, attempt: plan.attempts, error: msg });
-      await raise(1, `keeper:commit-failed:${c.symbol}:${c.cutBlock}`, `commit for ${c.symbol} failed: ${msg}`);
+      raise(1, `keeper:commit-failed:${c.symbol}:${c.cutBlock}`, `commit for ${c.symbol} failed: ${msg}`);
     }
   }
 }
@@ -906,7 +1038,7 @@ async function settlePass(state: State, sender: Sender | null, health: Health, n
       still.push(c);
       // settle() is permissionless, so a row that stays unsettled is not lost -- but it is ours to notice.
       if (nowS > settleAfterS + 3 * 3600) {
-        await raise(1, `keeper:settle-stuck:${c.committed.id}`, `row ${c.committed.id} (${c.symbol}) unsettled 3h after its reopen: ${msg}`);
+        raise(1, `keeper:settle-stuck:${c.committed.id}`, `row ${c.committed.id} (${c.symbol}) unsettled 3h after its reopen: ${msg}`);
       }
     }
   }
@@ -919,7 +1051,7 @@ function startHttp(health: Health) {
     if (url === "/healthz") {
       const ok = health.ticks > 0 && Date.now() - health.lastTickOkMs < 6 * CFG.tickMs;
       res.writeHead(ok ? 200 : 503, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok, ...health, archive: publisher.health() }));
+      res.end(JSON.stringify(healthBody(health, ok)));
       return;
     }
     const m = url.match(/^\/marks\/(0x[0-9a-fA-F]{64})\.json$/);

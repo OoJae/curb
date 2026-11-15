@@ -11,13 +11,15 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { Wallet } from "ethers";
-import { loadConfig, attributionHealth } from "./main.ts";
+import {
+  loadConfig, attributionHealth, clockSkewStep, archiveStep, CLOCK_SKEW_MAX_S, ARCHIVE_BACKLOG_MS,
+} from "./main.ts";
 import { Sender } from "./tx/sender.ts";
 
 const MAIN = fileURLToPath(new URL("./main.ts", import.meta.url));
@@ -151,4 +153,191 @@ test("/healthz attribution is what the live Sender appends: off without a key, w
   const src = readFileSync(MAIN, "utf8");
   assert.match(src, /attribution: attributionHealth\(sender\)/);
   assert.doesNotMatch(src, /on: CFG\.dataSuffix !== ""/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W6 (plan persistence) and W10 (alarms, health, operations). Source-text tests read main.ts as
+// written; `fnBody` cuts one top-level function out of it.
+// ---------------------------------------------------------------------------------------------
+
+const SRC = () => readFileSync(MAIN, "utf8");
+/** The text of a top-level function, from its declaration to the first `}` at column 0 after it. */
+function fnBody(src: string, decl: string): string {
+  const i = src.indexOf(decl);
+  assert.ok(i >= 0, `${decl} not found in main.ts`);
+  const end = src.indexOf("\n}\n", i);
+  assert.ok(end > i, `${decl} has no end`);
+  return src.slice(i, end + 2);
+}
+const after = (text: string, needle: string, from: number) => text.indexOf(needle, from);
+
+test("W6: main.ts writes the state file only through saveState(", () => {
+  const src = SRC();
+  assert.equal(src.split("persistReplace(statePath()").length - 1, 1, "exactly one write of keeper-state.json");
+  const save = fnBody(src, "function saveState(state: State): void");
+  assert.match(save, /state\.v = 2;\n\s*persistReplace\(statePath\(\), JSON\.stringify\(state\)\);/);
+  assert.doesNotMatch(src, /writeFileSync\(statePath\(\)/);
+  // The old build loads `{ ...empty, ...JSON.parse(text) }`, so `v` and every later optional field survive a rollback.
+  assert.match(fnBody(src, "function loadState(): State"), /\{ \.\.\.empty, \.\.\.JSON\.parse\(/);
+});
+
+test("W6: the end-of-tick write calls saveState(state) after the settle pass, and a failed write is paged before the tick fails", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const settle = tick.indexOf("await settlePass(");
+  const save = after(tick, "saveState(state)", settle);
+  assert.ok(settle > 0 && save > settle, "saveState(state) after settlePass(");
+  const flush = after(tick, "alarms.flush(", save);
+  const rethrow = after(tick, "if (persistError) throw persistError;", flush);
+  assert.ok(tick.indexOf("await delivered;", flush) < rethrow);
+  assert.ok(flush > save && rethrow > flush, "the persist alarm is flushed, then the tick fails as HEAD's did");
+  // (W2 adds the backfill write after the flush, also through saveState(state).)
+});
+
+test("W6: commitPass persists the plan and the attempt number before anything is signed", () => {
+  const cp = fnBody(SRC(), "async function commitPass(");
+  const built = cp.indexOf("c.plan = built;");
+  const planSave = after(cp, "saveState(state)", built);
+  const firstSend = Math.min(...["sender.prepare(", "sendCommit(", "commitAttempt("].map((n) => cp.indexOf(n)).filter((i) => i >= 0));
+  assert.ok(built > 0 && planSave > built && firstSend > planSave, "plan -> saveState -> first signature");
+  // A plan that cannot be saved is kept in memory and nothing is sent this tick.
+  assert.match(cp.slice(planSave), /^saveState\(state\); \}\n\s*catch \(e\) \{\n[^]*?raise\(1, "keeper:state-persist-failed"[^\n]*\n\s*continue;/);
+  // Until W5 moves the send into commitAttempt (whose order outcome.test.ts pins), the attempt is saved inline.
+  if (cp.includes("sender.prepare(")) {
+    const inc = cp.indexOf("plan.attempts++;");
+    const attemptSave = after(cp, "saveState(state)", inc);
+    assert.ok(inc > planSave && attemptSave > inc && cp.indexOf("sender.prepare(") > attemptSave, "attempts++ -> saveState -> prepare");
+    assert.match(cp.slice(attemptSave), /^saveState\(state\); \}\n\s*catch \(e\) \{\n\s*plan\.attempts--;[^]*?continue;/);
+  }
+  // buildPlan runs only for a closure without a plan: a restart can only reuse the saved one.
+  assert.match(cp, /if \(!c\.plan\) \{\n\s*const built = await buildPlan\(/);
+});
+
+test("W10: the boot line names paging", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-alarms-boot-"));
+  const file = join(dir, "not-a-directory");
+  writeFileSync(file, "");
+  const env = {
+    ...process.env, MODE: "shadow", SCORECARD: "", DATA_DIR: file, RPCS: "http://127.0.0.1:9", DATA_SUFFIX: "",
+    KEEPER_KEY_PASSWORD: "", ATTESTOR_KEY_PASSWORD: "", HC_URL: "", HC_ALARM_URL: "",
+  };
+  try {
+    const off = await bootUntil(env, /"event":"fatal"/);
+    const i = off.indexOf('"event":"alarms","paging":false,"heartbeat":false');
+    assert.ok(i >= 0, off);
+    assert.ok(i < off.indexOf('"event":"fatal"'));
+    assert.ok(off.indexOf('"event":"attribution"') < i, "right after the attribution line");
+    const url = "https://hc-ping.example/secret-uuid";
+    const on = await bootUntil({ ...env, HC_URL: url, HC_ALARM_URL: url }, /"event":"fatal"/);
+    assert.match(on, /"event":"alarms","paging":true,"heartbeat":true/);
+    assert.doesNotMatch(on, /secret-uuid/, "never the URLs");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("W10: LOW_BALANCE_WEI is a collected error, never a throw at import", () => {
+  withEnv({ LOW_BALANCE_WEI: undefined }, () => {
+    const { cfg, errors } = loadConfig();
+    assert.equal(cfg.lowBalanceWei, 3_000_000_000_000_000n);
+    assert.deepEqual(errors, []);
+  });
+  withEnv({ LOW_BALANCE_WEI: " 123 " }, () => assert.equal(loadConfig().cfg.lowBalanceWei, 123n));
+  for (const bad of ["abc", "", "-1", "1e18", "0x10", "1.5"]) {
+    withEnv({ LOW_BALANCE_WEI: bad }, () => {
+      let r: ReturnType<typeof loadConfig> | undefined;
+      assert.doesNotThrow(() => { r = loadConfig(); });
+      assert.ok(r!.errors.some((e) => e.startsWith("LOW_BALANCE_WEI must be a decimal integer")), `${bad}: ${r!.errors.join("; ")}`);
+    });
+  }
+});
+
+test("W10: no await on raise anywhere in main.ts; alarms are flushed after the settle pass and in the loop's catch", () => {
+  const src = SRC();
+  assert.doesNotMatch(src, /await raise\(/);
+  assert.doesNotMatch(src, /await alarms\.raise\(/);
+  // The review gate is literally `grep -n "await raise\|await alarms" main.ts` empty.
+  assert.doesNotMatch(src, /await raise|await alarms/);
+  assert.doesNotMatch(src, /async function raise\(/);
+  assert.match(src, /function raise\(sev: 1 \| 2, key: string, message: string\): void \{ alarms\.raise\(sev, key, message\); \}/);
+  assert.match(src, /const alarms = createAlarms\(\{ url: CFG\.alarmUrl, hostId: CFG\.hostId, log \}\);/);
+  const tick = fnBody(src, "async function tick(");
+  assert.ok(tick.indexOf("alarms.flush(") > tick.indexOf("await settlePass("), "alarms.flush( after settlePass(");
+  assert.ok(tick.indexOf("alarms.flush(") > tick.indexOf("await commitPass("));
+  const main = fnBody(src, "async function main()");
+  const katch = main.indexOf('log("tick-error"');
+  assert.ok(katch > 0 && main.indexOf("alarms.flush(", katch) > main.indexOf('"keeper:ticks-failing"', katch));
+  assert.match(main.slice(katch), /const delivered = alarms\.flush\(ALARM_FLUSH_BUDGET_MS\);\n\s*await delivered;/);
+  assert.match(tick, /const delivered = alarms\.flush\(ALARM_FLUSH_BUDGET_MS\);\n\s*await delivered;/);
+  // The HEAD implementation (inline POSTs, its own cooldown map) is gone.
+  assert.doesNotMatch(src, /alarmSentAt|alarmCheckDown/);
+});
+
+test("W10: clock skew pages on the third consecutive tick beyond 30 s", () => {
+  const ts = 1_794_542_157;
+  const at = (skewS: number) => (ts + skewS) * 1000;
+  let streak = 0;
+  for (const [skewS, alarm] of [[31, false], [-45, false], [40, true], [41, true], [30, false], [31, false]] as const) {
+    const r = clockSkewStep(streak, at(skewS), ts);
+    assert.equal(r.skewS, skewS);
+    assert.equal(r.alarm, alarm, `skew ${skewS}`);
+    streak = r.streak;
+  }
+  assert.equal(CLOCK_SKEW_MAX_S, 30);
+  assert.equal(clockSkewStep(0, at(0.4), ts).skewS, 0);
+  // The reading is taken when the block was pinned, not at step 13 after a long commit.
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.match(tick, /const block = await pinLatest\(CFG\.rpcs\);\n\s*const pinnedAtMs = Date\.now\(\);/);
+  assert.match(tick, /observeTick\(health, block, pinnedAtMs, Date\.now\(\)\);/);
+});
+
+test("W10: a parked archive item pages; items waiting 60 minutes are a sev-2 backlog", () => {
+  const t0 = 1_000_000;
+  let since: number | null = null;
+  let r = archiveStep(since, { queued: 0, parked: 0 }, t0);
+  assert.deepEqual(r, { backlogSinceMs: null, parked: false, backlog: false });
+  r = archiveStep(r.backlogSinceMs, { queued: 2, parked: 0 }, t0);
+  assert.deepEqual(r, { backlogSinceMs: t0, parked: false, backlog: false });
+  r = archiveStep(r.backlogSinceMs, { queued: 1, parked: 0 }, t0 + ARCHIVE_BACKLOG_MS - 1);
+  assert.equal(r.backlog, false);
+  r = archiveStep(r.backlogSinceMs, { queued: 1, parked: 0 }, t0 + ARCHIVE_BACKLOG_MS);
+  assert.deepEqual(r, { backlogSinceMs: t0, parked: false, backlog: true });
+  since = archiveStep(r.backlogSinceMs, { queued: 0, parked: 0 }, t0 + ARCHIVE_BACKLOG_MS + 1).backlogSinceMs;
+  assert.equal(since, null, "an empty queue resets the age");
+  // Parked items page on their own (sev-1) and do not count as a backlog.
+  assert.deepEqual(archiveStep(null, { queued: 1, parked: 1 }, t0), { backlogSinceMs: null, parked: true, backlog: false });
+  // /healthz keeps publish.ts's literal wiring and adds the backlog age and the alarm queue.
+  const body = fnBody(SRC(), "function healthBody(");
+  assert.match(body, /archive: publisher\.health\(\)/);
+  assert.match(body, /backlogSinceMs = watch\.archiveBacklogSinceMs/);
+  assert.match(body, /alarms: alarmsHealth/);
+  assert.match(SRC(), /res\.end\(JSON\.stringify\(healthBody\(health, ok\)\)\);/);
+});
+
+test("W10: the minClosureS comment says what such a row would be, not that the pool does not trade", () => {
+  const cfg = fnBody(SRC(), "export function loadConfig()");
+  assert.doesNotMatch(cfg, /the mark equals the last print by construction/);
+  assert.doesNotMatch(cfg, /the pool\s*\*?\s*barely trades/);
+  assert.match(cfg, /committed seconds after the cut, with almost no closure behind it/);
+});
+
+test("W10: deploy.sh saves the keeper's log before docker rm -f, backs up its state after, and sets BACKFILL_CHUNKS_PER_TICK", () => {
+  const path = fileURLToPath(new URL("../../../script/hostb/deploy.sh", import.meta.url));
+  const sh = readFileSync(path, "utf8");
+  const keeperEnv = sh.match(/cat > \/etc\/curb\/keeper\.env <<CONF\n([^]*?)\nCONF\n/);
+  assert.ok(keeperEnv, "the keeper.env heredoc");
+  const line = keeperEnv[1].match(/^BACKFILL_CHUNKS_PER_TICK=(\d+)$/m);
+  assert.ok(line, "at column 0");
+  assert.equal(line[1], "20");
+  assert.ok(Number(line[1]) >= 0 && Number(line[1]) <= 60);
+  // Only inside the REMOTE heredoc: the header comment names the same files.
+  const remote = sh.match(/<<'REMOTE'\n([^]*?)\nREMOTE\n/);
+  assert.ok(remote, "the REMOTE heredoc");
+  const r = remote[1];
+  const order = ["docker logs curb-keeper", "docker rm -f curb-keeper", "keeper-state.predeploy-", "docker run -d --name curb-keeper"].map((n) => [n, r.indexOf(n)] as const);
+  for (const [n, i] of order) assert.ok(i >= 0, `${n} in the REMOTE heredoc`);
+  for (let k = 1; k < order.length; k++) assert.ok(order[k - 1][1] < order[k][1], `${order[k - 1][0]} before ${order[k][0]}`);
+  // The log save cannot stop the deploy, and the keeper is restarted even if the state copy fails.
+  assert.match(r, /docker logs curb-keeper 2>&1 \| gzip -c > "\/var\/lib\/curb\/logs\/curb-keeper-[^\n]*\|\| /);
+  const n = spawnSync("bash", ["-n", path], { encoding: "utf8" });
+  assert.equal(n.status, 0, n.stderr);
 });
