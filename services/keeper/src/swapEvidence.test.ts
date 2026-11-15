@@ -98,3 +98,22 @@ test("cutReadOf picks the pool's slot0 with the block", () => {
   assert.equal(cutReadOf(snap, "not an address"), null);
   assert.equal(cutReadOf(null, B), null);
 });
+
+import { RECESS, recessRows } from "./fixtures/markFixtures.test.ts";
+import { checkSwapEvidence, preFixNotes } from "./swapEvidence.ts";
+
+test("swapListDigest is pinned on real data", () => {
+  const K = recessRows("wXIAOx").filter((r) => r.blockNumber > RECESS.cutBlock && r.blockNumber <= RECESS.pinnedBlock);
+  assert.equal(K.length, 14);
+  assert.equal(swapListDigest(K), "0x1e178005413bae90d6a16606d5d19c0237229066fbe160e74efe6eacc1ec4578");
+  assert.equal(swapListDigest([]), EMPTY_DIGEST);
+});
+
+test("checkSwapEvidence and preFixNotes are total", () => {
+  for (const junk of [null, undefined, 1, "x", [], {}, { evidence: "curb.scorecard.swaps/2" }, { evidence: "curb.scorecard.swaps/2", cutBlock: 5, gaps: [[1]] }]) {
+    const r = checkSwapEvidence({ symbol: "X", wrapper: "0x01", settleAfterS: 1, swaps: junk, markinput: junk, venue: junk, registry: junk, chainCalls: [junk], params: junk });
+    assert.ok(r.failures.length > 0, JSON.stringify(junk));
+    assert.ok(r.failures.every((f) => f.startsWith("swap evidence for X: ")));
+    assert.ok(Array.isArray(preFixNotes({ swaps: junk, markinput: junk, readBlock: null })));
+  }
+});
