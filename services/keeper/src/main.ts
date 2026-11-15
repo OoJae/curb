@@ -54,6 +54,7 @@ import { Sender, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
 import { publisherFromEnv } from "./publish.ts";
 import type { PublishHealth } from "./publish.ts";
 import { createAlarms, ALARM_FLUSH_BUDGET_MS } from "./alarms.ts";
+import { orphanReport, orphanClosureFiles, createDiskMonitor, diskAlarm, memUsage, DISK_BYTES_EVERY_MS } from "./retention.ts";
 import type { AlarmsHealth } from "./alarms.ts";
 import { sendOnce, maxNonceRpc, commitAttempt, canSettle, settleStep, settleOutcome, settleLateAlarm, settleWindow } from "./outcome.ts";
 import {
@@ -482,6 +483,26 @@ function observeTick(health: Health, block: { timestamp: number }, pinnedAtMs: n
       raise(2, "keeper:archive-backlog", `${ph.queued - ph.parked} archive item(s) waiting since ${new Date(ar.backlogSinceMs!).toISOString()}`);
     }
   } catch (e) { log("archive-check-error", { error: String(e) }); }
+}
+
+/** W3: free space every tick (statfs), the two byte counts and the orphan count at most every 10 minutes. */
+const diskMonitor = createDiskMonitor(CFG.dataDir);
+const diskWatch = { orphans: 0, orphansAtMs: Number.NEGATIVE_INFINITY };
+
+/** Tick step 13, the W3 part: disk and memory on /healthz; sev-2 below 2,048 MB free, sev-1 below 512 MB. Never throws. */
+function observeDisk(state: State, health: Health): void {
+  try {
+    const du = diskMonitor.read();
+    const t = Date.now();
+    if (t - diskWatch.orphansAtMs >= DISK_BYTES_EVERY_MS) {
+      diskWatch.orphans = orphanClosureFiles(CFG.dataDir, state).length;
+      diskWatch.orphansAtMs = t;
+    }
+    health.disk = { ...du, orphans: diskWatch.orphans };
+    health.mem = memUsage();
+    const alarm = diskAlarm(du.freeMb);
+    if (alarm) raise(...alarm);
+  } catch (e) { log("disk-check-error", { error: String(e) }); }
 }
 
 /** /healthz body: health plus the views kept outside it (the archive's backlog age, the alarm queue). */
@@ -978,6 +999,12 @@ async function main() {
   const client = new XStocksClient();
   const venues = new Map<string, Venue>();
   const state = loadState();
+  // W3: report, never delete (CO B2). A swap file no open or pending closure names exists only after a state loss or
+  // a restore, and it is exactly the file a later restore would need. A person deletes orphans.
+  const orphans = orphanReport(CFG.dataDir, state);
+  diskWatch.orphans = orphans.files.length;
+  diskWatch.orphansAtMs = Date.now();
+  if (orphans.files.length > 0) log("closure-file-orphans", { files: orphans.files, bytes: orphans.bytes });
   const health: Health = {
     bootMs: Date.now(), ticks: 0, lastTickOkMs: Date.now(), mode: CFG.mode, address, isKeeper: false, armed: false,
     assets: assets.length, open: 0, pending: state.pending.length, committedTotal: 0, settledTotal: 0,
@@ -1222,11 +1249,12 @@ async function tick(
     raise(1, "keeper:state-persist-failed", `cannot write keeper-state.json: ${String(e)}`);
   }
 
-  // 13. Health and alarm conditions. (W3 adds disk and memory here.)
+  // 13. Health and alarm conditions.
   if (CFG.mode === "live" && !health.armed) {
     raise(2, "keeper:not-armed", `cannot commit: isKeeper=${health.isKeeper} balanceWei=${health.balanceWei}`);
   }
   observeTick(health, block, pinnedAtMs, Date.now());
+  observeDisk(state, health);
   // W2.9: the scan's own health. A failing scan never fails the tick; it pages instead.
   try {
     const now = Date.now();
@@ -1345,19 +1373,32 @@ function dropPending(state: State, c: Closure): void {
   state.pending = state.pending.filter((x) => x !== c);
 }
 
-/** A row the chain has settled (by us or anyone): out of `pending`, into `recent`. */
-function settleRow(state: State, c: Closure & { committed: Committed }, how: { tx: string; block?: number; by: "keeper" | "chain"; atMs: number }): void {
+type RemoveFile = (c: { wrapper: string; cutBlock: number }) => void;
+
+/**
+ * W3: delete a finished row's swap file through the store. Never throws (EIO, a full disk: logged, and the file is
+ * then an orphan that /healthz counts). A row put back in `pending` from an old `recent` entry may carry no file
+ * name (wrapper ""): there is nothing to delete.
+ */
+function removeSwapFile(c: { symbol: string; wrapper: string; cutBlock: number }, remove: RemoveFile = (x) => store.remove(x)): void {
+  if (!c.wrapper || !c.cutBlock) return;
+  try { remove({ wrapper: c.wrapper, cutBlock: c.cutBlock }); }
+  catch (e) { log("swap-file-remove-failed", { symbol: c.symbol, cutBlock: c.cutBlock, error: e instanceof Error ? e.message : String(e) }); }
+}
+
+/** A row the chain has settled (by us or anyone): out of `pending`, into `recent`, its swap file deleted (W3). */
+function settleRow(state: State, c: Closure & { committed: Committed }, how: { tx: string; block?: number; by: "keeper" | "chain"; atMs: number }, remove?: RemoveFile): void {
   dropPending(state, c);
   c.settled = { txHash: how.tx, atMs: how.atMs };
   recordSettled(state, c, how);
-  // (W3) the settled row's swap file is deleted here: store.remove(c), wrapped (it can throw on EIO).
+  removeSwapFile(c, remove);
 }
 
-/** A row that can no longer be settled: out of `pending`, into `expired` (last 50). */
-function expireRow(state: State, c: Closure & { committed: Committed }, reason: ExpiredRef["reason"], atMs: number): void {
+/** A row that can no longer be settled: out of `pending`, into `expired` (last 50), its swap file deleted (W3). */
+function expireRow(state: State, c: Closure & { committed: Committed }, reason: ExpiredRef["reason"], atMs: number, remove?: RemoveFile): void {
   dropPending(state, c);
   recordExpired(state, c, reason, atMs);
-  // (W3) the expired row's swap file is deleted here: store.remove(c), wrapped (it can throw on EIO).
+  removeSwapFile(c, remove);
 }
 
 /** A recent row the chain shows unsettled, back in `pending` with its attempt numbering (reconcile.ts). */
@@ -1719,6 +1760,8 @@ export async function settleRows(
     mode: string; scorecard: string; settleDelayS: number; sender: SendPort | null;
     health: Pick<Health, "settledTotal" | "lastSettle">; balanceWei: bigint | null; chainNowS: number; nowMs: number;
     save(): void; raise(sev: 1 | 2, key: string, message: string): void; log(event: string, fields?: Record<string, unknown>): void;
+    /** W3: how a finished row's swap file is deleted (default: the module's store; tests pass a recorder). */
+    removeFile?: RemoveFile;
   },
 ): Promise<void> {
   const { chainNowS, nowMs } = d;
@@ -1731,11 +1774,12 @@ export async function settleRows(
       const step = settleStep(row, chainNowS, d.settleDelayS, can);
       if (step.action === "drop-shadow") {
         dropPending(state, c);
+        removeSwapFile(c, d.removeFile);   // W3: a shadow row past its window needs its file no more than a settled one
         d.log("shadow-row-dropped", { symbol: c.symbol, id: owed.committed.id });
         continue;
       }
       if (step.action === "expire") {
-        expireRow(state, owed, step.reason, nowMs);
+        expireRow(state, owed, step.reason, nowMs, d.removeFile);
         d.log("settle-expired", { symbol: c.symbol, id: owed.committed.id, reason: step.reason });
         d.raise(...step.alarm);
         continue;
@@ -1751,7 +1795,7 @@ export async function settleRows(
         const v = settleOutcome(o, row, attempt);
         d.log(v.event, v.fields);
         if (v.books === "settled") {
-          settleRow(state, owed, { tx: v.tx, block: v.block, by: v.by, atMs: nowMs });
+          settleRow(state, owed, { tx: v.tx, block: v.block, by: v.by, atMs: nowMs }, d.removeFile);
           if (v.by === "keeper") {
             d.health.settledTotal++;
             d.health.lastSettle = { symbol: c.symbol, id: owed.committed.id, tx: v.tx, block: v.block ?? null };
@@ -1759,7 +1803,7 @@ export async function settleRows(
           continue;
         }
         if (v.books === "expire") {
-          expireRow(state, owed, v.reason, nowMs);
+          expireRow(state, owed, v.reason, nowMs, d.removeFile);
           d.raise(...v.alarm);
           continue;
         }

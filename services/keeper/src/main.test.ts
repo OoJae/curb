@@ -505,12 +505,13 @@ function settleDeps(sender: unknown, chainNowS: number, over: Record<string, unk
   const events: string[] = [];
   const health = { settledTotal: 0 } as { settledTotal: number; lastSettle?: Record<string, unknown> };
   let saves = 0;
+  const removed: Array<{ wrapper: string; cutBlock: number }> = [];
   const d = {
     mode: "live", scorecard: SCORECARD_ADDR, settleDelayS: 300, sender, health, balanceWei: 10n ** 16n, chainNowS,
     nowMs: chainNowS * 1000, save: () => { saves++; }, raise: (s: 1 | 2, k: string, m: string) => { alarms.push([s, k, m]); },
-    log: (e: string) => { events.push(e); }, ...over,
+    log: (e: string) => { events.push(e); }, removeFile: (c: { wrapper: string; cutBlock: number }) => { removed.push(c); }, ...over,
   };
-  return { d: d as never, alarms, events, health, saves: () => saves };
+  return { d: d as never, alarms, events, health, removed, saves: () => saves };
 }
 
 test("W5: a settle mined with status 0 (row 151, PriceDeviates on chain) is NOT settled; the next tick settles it", async () => {
@@ -1145,4 +1146,82 @@ test("W4b: end to end, buildPlan on the real 13 Nov recess builds a plan whose b
     quiet.mock.restore();
     h.done();
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W3 (retention, disk, memory) wired into main.ts.
+// ---------------------------------------------------------------------------------------------
+
+test("W3: boot reports orphans and deletes nothing", () => {
+  const main = fnBody(SRC(), "async function main()");
+  const load = main.indexOf("const state = loadState();");
+  const firstTick = main.indexOf("tick(", load);
+  assert.ok(load > 0 && firstTick > load);
+  const boot = main.slice(load, firstTick);
+  assert.match(boot, /const orphans = orphanReport\(CFG\.dataDir, state\);/);
+  assert.match(boot, /log\("closure-file-orphans", \{ files: orphans\.files, bytes: orphans\.bytes \}\)/);
+  assert.doesNotMatch(boot, /rmSync\(|unlinkSync\(|store\.remove\(|removeSwapFile\(/);
+  // orphanReport is orphanClosureFiles plus sizes (retention.ts).
+  const retention = readFileSync(fileURLToPath(new URL("./retention.ts", import.meta.url)), "utf8");
+  assert.match(fnBody(retention, "export function orphanReport("), /const files = orphanClosureFiles\(dataDir, state\);/);
+});
+
+test("W3: settled and expired rows delete their swap file", async () => {
+  const src = SRC();
+  assert.match(fnBody(src, "function settleRow("), /recordSettled\(state, c, how\);\n\s*removeSwapFile\(c, remove\);/);
+  assert.match(fnBody(src, "function expireRow("), /recordExpired\(state, c, reason, atMs\);\n\s*removeSwapFile\(c, remove\);/);
+  const rm = fnBody(src, "function removeSwapFile(");
+  assert.match(rm, /remove: RemoveFile = \(x\) => store\.remove\(x\)/);
+  assert.match(rm, /if \(!c\.wrapper \|\| !c\.cutBlock\) return;\n\s*try \{ remove\(/);
+
+  const W = "0x41333Df9E7639188BBfca5522dC4844398Af9f9E";
+  let status = "0x1";
+  let revert: string | null = null;
+  const run = async (row: Record<string, unknown>, chainNowS: number, over: Record<string, unknown> = {}) => {
+    // A fresh outbox per case: each case's first attempt reuses the id settle:<root>:1.
+    const h = chainHarness({ receipt: () => ({ status, blockNumber: "0x46efbbe", gasUsed: "0x1cd97" }), revert: () => revert });
+    const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [row], recent: [], expired: [] } as never as { pending: unknown[] };
+    const t = settleDeps(h.sender, chainNowS, over);
+    try { await settleRows(state as never, t.d); } finally { h.cleanup(); }
+    return { state, t };
+  };
+  const readyAt = ROW151_SETTLE_AFTER + 300;
+  // Settled by our transaction: the file goes.
+  let r = await run(pendingRow151(), readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed], [0, [{ wrapper: W, cutBlock: 74_370_000 }]]);
+  // A status-0 settle keeps the row, and its file.
+  status = "0x0";
+  r = await run(pendingRow151(), readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [1, 0]);
+  // Settled by someone else (AlreadySettled): the file goes.
+  revert = scorecardErrors.encodeErrorResult("AlreadySettled", [ROW151_ID]);
+  r = await run(pendingRow151(), readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [0, 1]);
+  revert = null;
+  // Expired at the window's end: the file goes.
+  r = await run(pendingRow151(), readyAt + 21_600 - 59);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [0, 1]);
+  // A row revived from `recent` without a file name: nothing to delete, never a throw.
+  status = "0x1";
+  r = await run({ ...pendingRow151(), wrapper: "", cutBlock: 0 }, readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [0, 0]);
+  // A delete that throws (EIO) never undoes the settle.
+  r = await run(pendingRow151(), readyAt, { removeFile: () => { throw new Error("EIO: i/o error, unlink"); } });
+  assert.equal(r.state.pending.length, 0);
+  assert.equal(r.t.health.settledTotal, 1);
+});
+
+test("W3: disk and memory reach /healthz every tick, and a filling disk pages", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const save = tick.indexOf("try { saveState(state); }");
+  const disk = tick.indexOf("observeDisk(state, health);");
+  assert.ok(save > 0 && disk > save && disk < tick.indexOf("alarms.flush("), "after the end-of-tick write, before the flush");
+  const od = fnBody(src, "function observeDisk(");
+  assert.match(od, /const du = diskMonitor\.read\(\);/);
+  assert.match(od, /health\.disk = \{ \.\.\.du, orphans: diskWatch\.orphans \};/);
+  assert.match(od, /health\.mem = memUsage\(\);/);
+  assert.match(od, /const alarm = diskAlarm\(du\.freeMb\);\n\s*if \(alarm\) raise\(\.\.\.alarm\);/);
+  assert.match(od, /^function observeDisk[^]*try \{[^]*\} catch \(e\) \{ log\("disk-check-error"/);
+  assert.match(src, /const diskMonitor = createDiskMonitor\(CFG\.dataDir\);/);
 });
