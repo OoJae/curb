@@ -65,7 +65,7 @@ const REUSE_MS = 2 * DAY;
 const SPAN_MS = MAX_HORIZON_DAYS * DAY + REUSE_MS;
 
 /**
- * handover    a 300s gap between two capacity-bearing periods (US names); nothing trades in it.
+ * handover    a 300s gap between two capacity-bearing periods (US names); the primary market does not trade in it (the pool does).
  * recess      reopens the same venue-local day (the Hong Kong lunch cut).
  * overnight   reopens the next venue-local day.
  * weekend     reopens after one or more skipped days, at least one of them a Saturday or Sunday.

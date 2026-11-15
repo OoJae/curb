@@ -60,7 +60,7 @@ test("skill() is reported as the contract returns it, and the rows come newest f
   assert.deepEqual({ settled: r.skill.settled, beatLastPrint: r.skill.beatLastPrint, beatClosingVwap: r.skill.beatClosingVwap }, { settled: 2, beatLastPrint: 1, beatClosingVwap: 0 });
   assert.equal(r.closureCount, 3);
   assert.deepEqual(r.rows.map((x) => x.index), [2, 1, 0]);
-  assert.equal(r.summary, `Scorecard v2 at block ${BLOCK.number}: 3 marks committed, 2 settled. Curb's mark beat the last print in 1 and the pre-close price (closingVwap) in 0 (strict wins; 1 of the settled rows did not beat the last print). Newest 3 rows below.`);
+  assert.equal(r.summary, `Scorecard v2 at block ${BLOCK.number}: 3 marks committed, 2 settled. Curb's mark beat the last print in 1 (strict wins; 1 of the settled rows did not). Against the closingVwap baseline: 0 (it is the last print in every row committed before the keeper's swap-decoding fix, DECISIONS D-15). Newest 3 rows below.`);
 
   const [pending, win, tie] = r.rows;
   assert.equal(pending.status, "awaiting-reopen");

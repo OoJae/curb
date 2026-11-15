@@ -19,5 +19,5 @@ export const isPreFix = (committedBlock: number, from: number = SWAP_EVIDENCE_FR
 
 /** How the pre-fix rows are named in served text: by block once it is set, and by the fix until then. */
 export function preFixRows(from: number = SWAP_EVIDENCE_FROM_BLOCK): string {
-  return swapEvidenceSet(from) ? `rows committed before block ${from}` : "rows committed before the keeper fix recorded in DECISIONS D-15";
+  return swapEvidenceSet(from) ? `rows committed before block ${from}` : "rows committed before the keeper's swap-decoding fix";
 }

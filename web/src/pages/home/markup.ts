@@ -20,7 +20,7 @@ export const CUT = [
   ['12:00', 'The bell', 'Hong Kong breaks for lunch. On X Layer nothing pauses.'],
   ['12:50', 'Commit', 'Curb’s keeper writes its reopen mark on chain, before anyone can know the price.'],
   ['13:00', 'Reopen', 'The exchange reopens and the cap returns.'],
-  ['13:05', 'Settle', 'Scorecard reads the pool itself and grades the mark against the last print and the closing VWAP.'],
+  ['13:05', 'Settle', 'Scorecard reads the pool itself and grades the mark against the two baselines committed with it.'],
 ] as const;
 
 export const INSTRUMENTS = [

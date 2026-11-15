@@ -190,7 +190,7 @@ test("durations run from the RegimeChanged into CLOSED to settleAfter; buckets a
   assert.equal(l.durationS, 3_895, "13:00:00 - 11:55:05");
   assert.equal(l.bucket, "30m-2h");
   assert.equal(l.discountBps, 0.9, "(58243189692637603411 - 58237918997832996539) / 58243189692637603411, truncated at 0.01 bp");
-  assert.equal(l.markDiscountBps, 0, "mark == closing VWAP: the pool did not trade");
+  assert.equal(l.markDiscountBps, 0, "mark == closing VWAP: the keeper recorded no swaps, so no drift and no VWAP (D-15)");
   assert.equal(o.durationS, 63_296, "09:30:00 HKT next day - 15:55:04 HKT: 17h 34m 56s");
   assert.equal(o.bucket, "8h-24h");
   assert.equal(o.discountBps, 52.94);

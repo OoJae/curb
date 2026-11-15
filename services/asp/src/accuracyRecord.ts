@@ -23,7 +23,7 @@ import { grade, recount } from "./index/scorecard.ts";
 import type { ScorecardRow, ScorecardSnapshot } from "./index/scorecard.ts";
 import { methodDigestOf } from "./sources/scorecard.ts";
 import { median } from "./stats.ts";
-import { SWAP_EVIDENCE_FROM_BLOCK, isPreFix, swapEvidenceSet } from "./swapEvidence.ts";
+import { SWAP_EVIDENCE_FROM_BLOCK, isPreFix, preFixRows, swapEvidenceSet } from "./swapEvidence.ts";
 
 export const RECORD_SCHEMA = "curb.asp.record/1";
 export const RECORD_PREVIEW_SCHEMA = "curb.asp.record.preview/1";
@@ -230,6 +230,14 @@ export function buildRecord(i: RecordInput): RecordAnswer {
         " mark without an applied cross-market signal equals the last print and ties it, and closingVwapE18 equals lastPrintE18, so" +
         " beatClosingVwap repeats beatLastPrint. They keep the inputs they were committed with, and none is re-marked."
       : "");
+  if (preFix) {
+    warnings.push(
+      (swapEvidenceSet(fixFrom)
+        ? `${preFix} of ${scope.length} rows in scope were committed before block ${fixFrom}: `
+        : "Rows committed before the keeper's swap-decoding fix (the block is in DECISIONS D-15): ") +
+      "their swap evidence is empty and closingVwapE18 equals lastPrintE18 whatever the pool did, because the keeper decoded no Swap logs (DECISIONS D-15)",
+    );
+  }
 
   return {
     schema: RECORD_SCHEMA,
@@ -249,7 +257,8 @@ export function buildRecord(i: RecordInput): RecordAnswer {
     note,
     evidenceNote:
       "evidenceUrl is each row's input bundle in Curb's write-once archive, named by the inputRoot committed on chain. " +
-      "Every object was checked against the chain before upload, and anyone can re-derive the row from its bytes. " +
+      "Every object was checked against the chain before upload, and anyone can re-derive each row's mark from its bytes. " +
+      `The swap lists in the bundles of ${preFixRows(fixFrom)} are empty whatever the pool did (DECISIONS D-15). ` +
       "A row committed in the last few minutes may take a moment to appear.",
     definitions: {
       errorBps: "|estimate - reopenPrint| * 10000 / reopenPrint, floored, computed on chain by Scorecard.settle() (curbErrorBps for the mark, then the last print and the closing VWAP)",

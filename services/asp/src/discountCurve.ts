@@ -31,6 +31,7 @@ import type { ScorecardRow, ScorecardSnapshot } from "./index/scorecard.ts";
 import type { ClosureIndexStatus, ClosureStart, ClosureStartStatus } from "./index/closures.ts";
 import { round2, summarize, EMPTY_SUMMARY } from "./stats.ts";
 import type { Summary } from "./stats.ts";
+import { SWAP_EVIDENCE_FROM_BLOCK, isPreFix, preFixRows, swapEvidenceSet } from "./swapEvidence.ts";
 
 export const CURVE_SCHEMA = "curb.asp.discount/1";
 export const CURVE_PREVIEW_SCHEMA = "curb.asp.discount.preview/1";
@@ -172,6 +173,8 @@ export interface CurveInput {
   minMinutes: number;
   nowMs: number;
   warnings?: string[];
+  /** Tests only: overrides swapEvidence.ts's SWAP_EVIDENCE_FROM_BLOCK. */
+  swapEvidenceFromBlock?: number;
 }
 
 export function observe(r: ScorecardRow, symbol: string | null, closures: ClosureView, minMinutes: number): Observation {
@@ -257,6 +260,18 @@ export function buildCurve(i: CurveInput): CurveAnswer {
   }
   const odd = observations.filter((o) => o.closureStartStatus === "not-closed-at-commit" || o.closureStartStatus === "no-closed-transition").length;
   if (odd) warnings.push(`${odd} observation(s) have no CLOSED run in MarketClock's log covering their commit; they are listed and excluded, not guessed`);
+  // DECISIONS D-15: rows before the fixed keeper's first read have closingVwap == lastPrint, so the series changes meaning there.
+  const fixFrom = i.swapEvidenceFromBlock ?? SWAP_EVIDENCE_FROM_BLOCK;
+  const preFix = observations.filter((o) => isPreFix(o.committedBlock, fixFrom)).length;
+  if (preFix) {
+    warnings.push(
+      (swapEvidenceSet(fixFrom)
+        ? `${preFix} of ${observations.length} observations were committed before block ${fixFrom} (committedBlock < ${fixFrom}). `
+        : "Observations committed before the keeper's swap-decoding fix (the block is in DECISIONS D-15) are not comparable with later ones. ") +
+      "In those rows closingVwap is the pool price the keeper last read before the cut, not a volume-weighted price, because the keeper " +
+      "decoded no Swap logs (DECISIONS D-15); split the series at that block before fitting anything to it",
+    );
+  }
 
   return {
     schema: CURVE_SCHEMA,
@@ -285,7 +300,9 @@ export function buildCurve(i: CurveInput): CurveAnswer {
     observations,
     definitions: {
       durationS: "settleAfter - closureStartAt: from the block time of MarketClock's last RegimeChanged into CLOSED before the commit, to the reopen the row was committed with",
-      discountBps: "(closingVwap - reopenPrint) / closingVwap * 10000, signed, truncated toward zero at 0.01 bp; positive means the reopen came in below the closing VWAP. closingVwap is the committed baseline: the pool's 15-minute VWAP before the cut, or its last price when nothing traded in that window, which the chain cannot tell apart",
+      discountBps: "(closingVwap - reopenPrint) / closingVwap * 10000, signed, truncated toward zero at 0.01 bp; positive means the reopen came in below the closing VWAP. " +
+        `closingVwap is the committed baseline. In ${preFixRows(fixFrom)} it equals lastPrint in every row: the keeper decoded no Swap logs and computed no VWAP (DECISIONS D-15). ` +
+        "In later rows it is the pool's 15-minute VWAP before the cut, or its last price when nothing traded in that window, which the chain cannot tell apart",
       markDiscountBps: "(closingVwap - mark) / closingVwap * 10000, same convention: the discount Curb's committed mark implied",
       buckets: "half-open duration ranges [minDurationS, maxDurationS) in seconds; only usable observations (excludedReason null) are counted",
       quantiles: "Hyndman-Fan type 7 over the bucket's sorted values (R's default, numpy's linear), rounded to 0.01 bp",

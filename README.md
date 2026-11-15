@@ -224,8 +224,10 @@ US names mark/2 has no signal and falls back to mark/1's rule. Until block ⟨N�
 swaps, so that move was recorded as zero in every row ([D-15](docs/DECISIONS.md)). After the reopen, anyone can
 call `settle(id)`. It takes no price: the contract reads the wrapper's pinned pool itself, through a
 manipulation guard (spot must sit within 50 ticks, about 0.5%, of the pool's own 120-second average; see Honest
-limits). It grades the mark against two baselines: the last print, and the pre-close price (the 15-minute closing
-VWAP, or the last pool price when nothing traded). `skill()` counts strict wins only, so a tie is not a win.
+limits). It grades the mark against two baselines committed with it: the last print, and the pre-close price (the
+15-minute closing VWAP, or the last print when nothing traded in those 15 minutes). In every row committed before
+block ⟨N⟩ the second baseline is the last print, because the keeper computed no VWAP ([D-15](docs/DECISIONS.md)), so
+`skill()`'s two win counts are one comparison for those rows. `skill()` counts strict wins only, so a tie is not a win.
 
 **curb-asp** (`services/asp`) sells that data over x402 at `api.curb.markets`:
 closure calendar $0.01, accuracy record $0.05, discount by duration $0.10. Payment is USD₮0 on X Layer,

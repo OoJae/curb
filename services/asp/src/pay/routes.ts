@@ -12,6 +12,8 @@
  * same figure from `$price` when it builds a challenge, and the test suite holds the two equal.
  */
 
+import { preFixRows } from "../swapEvidence.ts";
+
 /** USD₮0 on X Layer mainnet: the SDK's default stablecoin for eip155:196 (EIP-3009, 6 decimals). */
 export const USDT0 = { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6, symbol: "USD₮0" } as const;
 export const SCHEME = "exact";
@@ -53,10 +55,11 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
     summary: "Curb's graded record: every mark committed on chain before a reopen, and how Scorecard settled it",
     description:
       "Curb's accuracy record, read from the Scorecard contract on X Layer at one pinned block: the contract's own " +
-      "skill() tally across every asset (settled rows, and strict wins against the last print and against the closing " +
-      "VWAP; a tie is not a win), per-asset counts, ties and median errors, and the rows newest first, up to limit, " +
-      "each with its mark, both baselines, the reopen price the contract read from the pool, and the three errors in " +
-      "basis points.",
+      "skill() tally across every asset (settled rows, and strict wins against the last print and against the committed " +
+      "closingVwap baseline; a tie is not a win; in " + preFixRows() + ", closingVwap equals the last print, so the two " +
+      "counts are one comparison, DECISIONS D-15), per-asset counts, ties and median errors, and the rows newest first, " +
+      "up to limit, each with its mark, both baselines, the reopen price the contract read from the pool, and the three " +
+      "errors in basis points.",
     query: "symbol (optional, e.g. wTCENTx; omit for every graded asset; see /v1/assets), limit (1-200, default 50)",
   },
   {
@@ -69,10 +72,12 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
     description:
       "Closure-discount observations for tokenized equities on X Layer, one per closure Curb marked on chain before " +
       "the reopen and Scorecard then settled: how long the primary market was shut (from MarketClock's RegimeChanged " +
-      "into CLOSED to the scheduled reopen), the discount from the pre-close price (the 15-minute closing VWAP, or the " +
-      "last pool price when nothing traded in that window) to the reopen price, and the discount Curb's mark implied, " +
-      "in basis points. Grouped into five duration buckets with counts, and order statistics only once a bucket holds " +
-      "enough closures. No fitted curve: fit is always null.",
+      "into CLOSED to the scheduled reopen), the discount from the pre-close price to the reopen price, and the discount " +
+      "Curb's mark implied, in basis points. The pre-close price is the row's committed closingVwap baseline: in " +
+      preFixRows() + " it is the pool price the keeper last read before the cut, not a volume-weighted price " +
+      "(DECISIONS D-15); in later rows it is the pool's 15-minute VWAP before the cut, or its last price when nothing " +
+      "traded in that window. Grouped into five duration buckets with counts, and order statistics only once a bucket " +
+      "holds enough closures. No fitted curve: fit is always null.",
     query: "symbol (optional, e.g. wTCENTx; omit for every graded asset), minMinutes (30-10080, default 30; shorter closures are listed but left out of the buckets)",
   },
 ];

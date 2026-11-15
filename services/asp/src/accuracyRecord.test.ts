@@ -31,7 +31,8 @@ test("wins are strict, exactly as Scorecard.settle() counts them: an exact tie i
   // The recount of the rows' own flags reproduces skill() exactly.
   assert.equal(a.rows.filter((r) => r.beatLastPrint).length, a.skill.beatLastPrint);
   assert.equal(a.rows.filter((r) => r.beatClosingVwap).length, a.skill.beatClosingVwap);
-  assert.deepEqual(a.warnings, []);
+  assert.equal(a.warnings.length, 1, JSON.stringify(a.warnings));
+  assert.match(a.warnings[0], /swap evidence is empty and closingVwapE18 equals lastPrintE18 whatever the pool did/, "D-15, for a machine reader");
 
   assert.deepEqual(a.perSymbol, {
     wTCENTx: {
@@ -159,6 +160,9 @@ test("rows before the swap-evidence block are named as pre-fix by block once it 
 
   const after = buildRecord({ snapshot: snapshot([row({ committedBlock: FROM, settlement: s(5, 9, 6) })]), chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW, swapEvidenceFromBlock: FROM });
   assert.doesNotMatch(after.note, /D-15/, "no pre-fix claim about a row the fixed keeper wrote");
+  assert.deepEqual(after.warnings, []);
+  assert.ok(a.warnings.some((w) => /^1 of 3 rows in scope were committed before block 75800000: their swap evidence is empty/.test(w)), JSON.stringify(a.warnings));
+  assert.match(a.evidenceNote, /bundles of rows committed before block 75800000 are empty whatever the pool did/);
 });
 
 test("the swap-evidence block is the placeholder or a block after the last pre-fix row checked on 14 Nov", () => {
