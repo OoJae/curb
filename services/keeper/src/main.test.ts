@@ -696,3 +696,237 @@ test("W5: reconcile runs before commitPass( and settlePass( inside its own try",
   assert.match(step, /\} catch \(e\) \{\n\s*onchainWatch\.skipped\+\+;\n\s*log\("reconcile-skipped"/);
   assert.match(step, /revive: closureFromRecent,/);
 });
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W7 (holiday evidence and the cut check). Source text for the wiring; the per-closure steps main.ts
+// exports run on the real venue schedules committed in the archived bundles (fixtures/marks).
+// ---------------------------------------------------------------------------------------------
+
+import { closureVenueSchedule, openLedger, foldVenueRead, onCutCheck, abandonAlarms } from "./main.ts";
+import type { CutAnchor } from "./main.ts";
+import { checkCut, expectedCapAt, holidayKey, venueEvidenceFor } from "./venueTime.ts";
+import { nextCapReturnMs } from "./reopen.ts";
+import type { ExchangeSchedule } from "./regime.ts";
+import { buildMarkRound, verifyMarkBundleOffline } from "./markRound.ts";
+import type { VenueEvidence } from "./markRound.ts";
+import { LeafKind, subjectOf } from "./tree.ts";
+import { ROOTS, inputsFromBundle, leafValue, loadBundle } from "./fixtures/markFixtures.test.ts";
+
+/** The venue a keeper holds (main.ts `Venue`), rebuilt from an archived bundle's committed venue leaf. */
+function venueFrom(root: string, atMs: number, holidays?: ExchangeSchedule["schedule"]["holidays"]) {
+  const b = loadBundle(root);
+  const v = leafValue(b, LeafKind.HTTP_EXCHANGE, subjectOf(`venue:${leafValue(b, LeafKind.CLAIM).wrapper.toLowerCase()}`)) as VenueEvidence;
+  return {
+    mic: v.mic, assetUrl: v.assetUrl, assetBodyHash: v.assetBodyHash, exchangeUrl: v.exchangeUrl, exchangeBodyHash: v.exchangeBodyHash,
+    limits: v.limitsPerPeriod,
+    sched: { mic: v.mic, timezone: v.schedule.timezone, isOpen: false, currentSession: null, nextChangeAt: null, schedule: { ...v.schedule, holidays: holidays ?? v.schedule.holidays } } as ExchangeSchedule,
+    atMs,
+  };
+}
+const HK = (atMs = 0) => venueFrom(ROOTS.recessXIAO, atMs);
+const US = (atMs = 0, holidays?: ExchangeSchedule["schedule"]["holidays"]) => venueFrom(ROOTS.us9Nov, atMs, holidays);
+const T = (s: string) => Date.parse(s);
+const TICK = 30_000;
+
+/** A closure as the per-asset loop opens one (W2 fields, W7 ledger), cut at `cutAtMs`. */
+function opened(symbol: string, cutAtMs: number, venue: ReturnType<typeof US>, block = 75_000_000) {
+  return {
+    wrapper: "0x" + "12".repeat(20), symbol, cutAtMs, cutBlock: block, midAtCutE18: "1000", preCutMidE18: "999" as string | null,
+    witnessedCut: true, reopenMs: null as number | null, swapCount: 0,
+    cutBlockHash: "0x" + "aa".repeat(32), cutRead: null, coverage: { ranges: [[block - 900, block + 10]] as Array<[number, number]>, rows: 3 },
+    holidayLedger: openLedger(venue),
+  } as Parameters<typeof onCutCheck>[0];
+}
+const anchorAt = (nowMs: number, block: number): CutAnchor =>
+  ({ nowMs, block: { number: block, hash: "0x" + "bb".repeat(32) }, midE18: 2000n, poolSnap: { block: { number: block, hash: "0x" + "bb".repeat(32), timestamp: Math.floor(nowMs / 1000), rpc: "" }, results: [] }, pool: "0x" + "34".repeat(20) });
+
+/**
+ * Drive the loop's W7 step tick by tick (every 30 s, one block per second), exactly as tick() does for a closure
+ * without a plan: checkCut on the closure's schedule, then onCutCheck. Stops at the first recut or unanchorable.
+ */
+function runTicks(c: Parameters<typeof onCutCheck>[0], venue: ReturnType<typeof US>, untilMs: number) {
+  const kinds: Array<[string, string]> = [];
+  for (let now = c.cutAtMs, blk = c.cutBlock; now <= untilMs; now += TICK, blk += 30) {
+    const r = checkCut(c, venue.limits, closureVenueSchedule(venue, c.holidayLedger), now, TICK);
+    onCutCheck(c, r, anchorAt(now, blk));
+    kinds.push([new Date(now).toISOString(), r.kind]);
+    if (r.kind === "recut" || r.kind === "unanchorable") break;
+  }
+  return kinds;
+}
+
+test("W7: the reopen prediction uses the closure's schedule", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const loop = tick.slice(tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;"), tick.indexOf("ingest(store, tracked, scan, recentHashes)"));
+  assert.match(loop, /const sched = venue \? closureVenueSchedule\(venue, open\?\.holidayLedger\) : null;/);
+  assert.match(loop, /const reopenMs = venue && sched \? nextCapReturnMs\(venue\.limits, sched, nowMs\) : null;/);
+  assert.match(fnBody(SRC(), "export function closureVenueSchedule("), /closureSchedule\(venue\.sched\.schedule, ledger\)/);
+  // With nothing kept it is the latest read; with a kept entry, the entry is in it.
+  const us = US();
+  assert.deepEqual(closureVenueSchedule(us, openLedger(us)).schedule, us.sched.schedule);
+  const pruned = US(0, us.sched.schedule.holidays.slice(1));
+  const s = closureVenueSchedule(pruned, openLedger(us));
+  assert.ok(s.schedule.holidays.some((h) => holidayKey(h) === holidayKey(us.sched.schedule.holidays[0])));
+});
+
+test("W7: the ledger is folded on every fresh venue read, and frozen by a plan", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.match(tick, /venues\.set\(a\.wrapper, v\);\n\s*\/\/[^\n]*\n\s*foldVenueRead\(state\.open, a\.wrapper, v\);/);
+  assert.match(tick, /if \(open && venue && !open\.plan && !open\.committed && !open\.holidayLedger\) open\.holidayLedger = openLedger\(venue\);/, "W7.3: an old-build closure gets a ledger");
+  assert.match(tick, /holidayLedger: openLedger\(venue\),/, "a new closure starts one");
+  const us = US(1);
+  const open: Record<string, { plan?: unknown; committed?: unknown; holidayLedger?: ReturnType<typeof openLedger> }> = {
+    a: {}, b: { plan: {} }, c: { committed: {} },
+  };
+  for (const k of ["a", "b", "c", "missing"]) foldVenueRead(open, k, us);
+  assert.equal(open.a.holidayLedger!.entries.length, us.sched.schedule.holidays.length);
+  assert.equal(open.b.holidayLedger, undefined, "a planned closure's schedule is frozen");
+  assert.equal(open.c.holidayLedger, undefined);
+  // An issuer body with junk in its holiday list never throws here.
+  const junk = { ...us, sched: { ...us.sched, schedule: { ...us.sched.schedule, holidays: [null, { startsAt: 1 }, "x"] as never } } };
+  assert.doesNotThrow(() => foldVenueRead(open, "a", junk));
+  assert.equal(openLedger(undefined), undefined);
+});
+
+test("W7: the cut is checked on open and every tick, and a recut removes the old file first", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const loop = tick.slice(tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;"), tick.indexOf("ingest(store, tracked, scan, recentHashes)"));
+  assert.equal(loop.split("checkCut(").length - 1, 2, "checkCut( on the opening tick and on every later tick");
+  const openAt = loop.indexOf("checkCut(fresh,");
+  assert.ok(openAt > loop.indexOf("const fresh: Closure = {") && openAt < loop.indexOf("state.open[w] = fresh;"), "checked before the closure is stored");
+  const later = loop.indexOf("checkCut(open,");
+  assert.ok(later > 0 && loop.lastIndexOf("if (venue && sched && !open.plan && !open.committed) {", later) > openAt, "every tick until a plan exists");
+  assert.ok(later < loop.indexOf("open.reopenMs = reopenMs;"), "before the prediction is stored");
+  const step = fnBody(SRC(), "export function onCutCheck(");
+  const recut = step.slice(step.indexOf('case "recut"'), step.indexOf('case "unanchorable"'));
+  assert.ok(recut.indexOf("store.remove(c)") >= 0 && recut.indexOf("store.remove(c)") < recut.indexOf("applyRecut("), "the old file (old cutBlock) goes first");
+  assert.match(recut, /cutRead: cutReadOf\(at\.poolSnap, at\.pool\)/);
+  assert.doesNotMatch(step, /await /);
+});
+
+test("W7: a suspect closure is never planned", () => {
+  const cp = fnBody(SRC(), "async function commitPass(");
+  const gate = cp.indexOf("if (!c.plan && c.cutSuspect !== false) continue;");
+  assert.ok(gate > 0 && gate < cp.indexOf("buildPlan("), "the gate precedes buildPlan(");
+  assert.ok(gate > cp.indexOf("if (c.reopenMs === null || !venue) {") && gate < cp.indexOf("CFG.minClosureS * 1000"), "after the venue gate, before minClosureS");
+  assert.match(fnBody(SRC(), "function backfillEligible("), /\.filter\(\(t\) => t\.c\.cutSuspect === false\)/, "nor backfilled");
+  assert.match(fnBody(SRC(), "function closuresHealth("), /cutSuspect: c\.cutSuspect \?\? null,/, "and /healthz says why");
+});
+
+test("W7: closure-missed only for confirmed, witnessed, long closures; a blip the schedule never confirmed is a phantom", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const abandon = tick.slice(tick.indexOf('log("closure-abandoned"'), tick.indexOf("delete state.open[w];", tick.indexOf('log("closure-abandoned"')));
+  assert.match(abandon, /cutSuspect: open\.cutSuspect \?\? null, lastedS:/);
+  assert.match(abandon, /abandonAlarms\(open, nowMs, CFG\.minClosureS\);/);
+  const body = fnBody(SRC(), "export function abandonAlarms(");
+  for (const s of ["keeper:closure-missed", "keeper:phantom-closure", "witnessedCut", "minClosureS"]) assert.ok(body.includes(s), s);
+  const now = T("2026-11-16T01:30:30Z");
+  const c = (over: Record<string, unknown>) => ({ symbol: "wX", cutBlock: 1, cutAtMs: now - 3_600_000, cutSuspect: false, witnessedCut: true, ...over }) as Parameters<typeof abandonAlarms>[0];
+  assert.equal(abandonAlarms(c({}), now, 1_800), "missed");
+  assert.equal(abandonAlarms(c({ cutAtMs: now - 600_000 }), now, 1_800), null, "short: a closure-too-short row was never due");
+  assert.equal(abandonAlarms(c({ witnessedCut: false }), now, 1_800), null, "unwitnessed: no row was possible");
+  for (const s of [true, "unanchorable", undefined]) assert.equal(abandonAlarms(c({ cutSuspect: s }), now, 1_800), "phantom", String(s));
+});
+
+test("W7: a scheduled cut is confirmed on its opening tick", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T07:56:04Z"), hk);
+  assert.deepEqual(runTicks(c, hk, c.cutAtMs), [["2026-11-13T07:56:04.000Z", "ok"]]);
+  assert.equal(c.cutSuspect, false);
+  assert.equal(c.cutBlock, 75_000_000, "nothing re-anchored");
+});
+
+test("W7: an HK blip merging into the 11:55 lunch cut is re-anchored at the schedule's cut, and its row re-derives", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T03:52:00Z"), hk);
+  const run = runTicks(c, hk, T("2026-11-13T04:10:00Z"));
+  assert.deepEqual(run.at(-1), ["2026-11-13T03:55:00.000Z", "recut"]);
+  assert.ok(run.slice(0, -1).every(([, k]) => k === "suspect"));
+  assert.equal(c.cutAtMs, T("2026-11-13T03:55:00Z"));
+  assert.equal(c.cutBlock, 75_000_000 + 180);
+  assert.equal(c.cutBlockHash, "0x" + "bb".repeat(32));
+  assert.equal(c.midAtCutE18, "2000");
+  assert.equal(c.preCutMidE18, null);
+  assert.deepEqual(c.coverage, { ranges: [], rows: 0 });
+  assert.equal(c.cutSuspect, false);
+  assert.deepEqual(c.recut, { fromCutAtMs: T("2026-11-13T03:52:00Z"), fromCutBlock: 75_000_000 });
+  assert.equal(c.witnessedCut, true);
+  // At the commit instant the closure's schedule gives 05:00Z from now and from the new cut, and says shut at the cut.
+  const now = T("2026-11-13T04:50:00Z");
+  const settleAfterS = Math.floor(nextCapReturnMs(hk.limits, closureVenueSchedule(hk, c.holidayLedger), now)! / 1000);
+  assert.equal(settleAfterS * 1000, T("2026-11-13T05:00:00Z"));
+  const ev = venueEvidenceFor(c, hk, now, settleAfterS);
+  assert.equal(ev.kind, "ok");
+  if (ev.kind === "ok") assert.equal(expectedCapAt(ev.evidence.limitsPerPeriod, { mic: ev.evidence.mic, schedule: ev.evidence.schedule } as ExchangeSchedule, ev.evidence.cutAtMs), 0, "S18 holds on the re-anchored cut");
+});
+
+test("W7: an HK phantom persisting into the recess is re-anchored at 03:55Z", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T02:00:00Z"), hk);
+  const run = runTicks(c, hk, T("2026-11-13T04:10:00Z"));
+  assert.deepEqual(run.at(-1), ["2026-11-13T03:55:00.000Z", "recut"]);
+  assert.ok(run.slice(0, -1).every(([, k]) => k === "suspect"));
+  assert.equal(c.cutAtMs, T("2026-11-13T03:55:00Z"));
+  assert.equal(c.recut!.fromCutAtMs, T("2026-11-13T02:00:00Z"));
+});
+
+test("W7: a US phantom persisting to the close is re-anchored at the first tick from 20:55Z, then too short to mark", () => {
+  const us = US();
+  const c = opened("wNVDAx", T("2026-11-13T15:30:44Z"), us);
+  const run = runTicks(c, us, T("2026-11-13T21:30:00Z"));
+  assert.deepEqual(run.at(-1), ["2026-11-13T20:55:14.000Z", "recut"]);
+  assert.ok(run.slice(0, -1).every(([, k]) => k === "suspect"));
+  const reopen = nextCapReturnMs(us.limits, closureVenueSchedule(us, c.holidayLedger), c.cutAtMs)!;
+  assert.equal(reopen, T("2026-11-13T21:00:00Z"));
+  assert.ok(reopen - c.cutAtMs < 1_800_000, "commitPass drops it as closure-too-short, the right answer");
+});
+
+test("W7: a suspect closure inherited after its schedule shut is unanchorable, once", () => {
+  const us = US();
+  const c = opened("wNVDAx", T("2026-11-13T15:30:44Z"), us);
+  const at = T("2026-11-13T20:56:00Z");
+  onCutCheck(c, checkCut(c, us.limits, closureVenueSchedule(us, c.holidayLedger), at, TICK), anchorAt(at, 75_100_000));
+  assert.equal(c.cutSuspect, "unanchorable");
+  assert.equal(c.cutBlock, 75_000_000, "never re-anchored");
+  onCutCheck(c, checkCut(c, us.limits, closureVenueSchedule(us, c.holidayLedger), at + TICK, TICK), anchorAt(at + TICK, 75_100_030));
+  assert.equal(c.cutSuspect, "unanchorable");
+});
+
+test("W7: Thanksgiving-shaped: a holiday listed at the cut and pruned before the commit still gives the settleAfter a verifier re-derives", () => {
+  const listed = US(T("2026-11-26T00:50:00Z"));
+  const entry = listed.sched.schedule.holidays.find((h) => h.startsAt === "2026-11-26T01:00:00.000Z")!;
+  assert.ok(entry, "the fixture lists Thanksgiving");
+  const prunedList = listed.sched.schedule.holidays.filter((h) => holidayKey(h) !== holidayKey(entry));
+  // Cut at 00:55:30Z: the opening tick starts the ledger from the list as read, and the cut is a scheduled one.
+  const cut = T("2026-11-26T00:55:30Z");
+  const c = opened("wNVDAx", cut, listed);
+  onCutCheck(c, checkCut(c, listed.limits, closureVenueSchedule(listed, c.holidayLedger), cut, TICK), anchorAt(cut, 75_000_000));
+  assert.equal(c.cutSuspect, false);
+  // 12:00Z: the issuer has pruned the entry (it started 11 h ago); a fresh read is folded in step 6, and kept.
+  const state = { open: { [c.wrapper]: c } };
+  foldVenueRead(state.open, c.wrapper, US(T("2026-11-26T12:00:00Z"), prunedList));
+  assert.ok(c.holidayLedger!.entries.some((e) => holidayKey(e) === holidayKey(entry)));
+  // The commit tick, 27 Nov 00:50Z, with the latest (pruned) read: the loop's prediction, and the evidence buildPlan commits.
+  const latest = US(T("2026-11-27T00:40:00Z"), prunedList);
+  const now = T("2026-11-27T00:50:00Z");
+  const reopenMs = nextCapReturnMs(latest.limits, closureVenueSchedule(latest, c.holidayLedger), now)!;
+  assert.equal(reopenMs, T("2026-11-27T01:00:00Z"));
+  const settleAfterS = Math.floor(reopenMs / 1000);
+  const ev = venueEvidenceFor(c, latest, now, settleAfterS);
+  assert.equal(ev.kind, "ok", JSON.stringify(ev));
+  if (ev.kind !== "ok") return;
+  assert.deepEqual(ev.evidence.holidaysKept!.map(holidayKey), [holidayKey(entry)]);
+  // What every verifier re-derives from the committed bytes: walked from the cut, the committed schedule gives settleAfter.
+  assert.equal(nextCapReturnMs(ev.evidence.limitsPerPeriod, { mic: ev.evidence.mic, schedule: ev.evidence.schedule } as ExchangeSchedule, ev.evidence.cutAtMs), settleAfterS * 1000);
+  // ...where the latest list alone (HEAD) would have walked to 26 Nov 01:00Z and the row would not reproduce.
+  assert.equal(nextCapReturnMs(latest.limits, latest.sched, cut), T("2026-11-26T01:00:00Z"));
+  // And through the repo verifier: a round built with this evidence reproduces from the cut, with no fallback.
+  const i = inputsFromBundle(loadBundle(ROOTS.us9Nov));
+  Object.assign(i.closures[0], { cutAtMs: cut, settleAfterS, venue: ev.evidence });
+  i.evaluatedAtMs = now;
+  const v = verifyMarkBundleOffline(JSON.parse(JSON.stringify(buildMarkRound(i).bundle)));
+  assert.deepEqual(v.failures, []);
+  assert.ok(!v.notes.some((n) => n.includes("reopen re-derived from the commit instant")), v.notes.join(" | "));
+  const strict = verifyMarkBundleOffline(JSON.parse(JSON.stringify(buildMarkRound(i).bundle)), { era: "swap-evidence" });
+  assert.ok(!strict.failures.some((f) => /reopen|venue|cut time|predicted reopen|holidaysKept|open at the cut/.test(f)), strict.failures.join(" | "));
+});

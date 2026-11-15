@@ -46,6 +46,8 @@ import type { GatheredSignal } from "./sources/signalFetch.ts";
 import type { VenueEvidence } from "./markRound.ts";
 import { nextCapReturnMs } from "./reopen.ts";
 import type { PeriodLimits } from "./reopen.ts";
+import { applyRecut, checkCut, closureSchedule, foldHolidays } from "./venueTime.ts";
+import type { CutCheck, HolidayLedger } from "./venueTime.ts";
 import type { ExchangeSchedule, TradingObject } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
 import { Sender, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
@@ -280,6 +282,19 @@ interface Closure {
   cutRead?: CutRead | null;
   /** Block ranges the closure file is known to cover, and its row count when last claimed (swapstore.ts). */
   coverage?: Coverage;
+  // W7 (deploy 2). Optional: absent on a closure the old build opened; the old build ignores and keeps them.
+  /**
+   * Was the cut a scheduled one (venueTime.ts checkCut)? false: confirmed. true: the chain shut while the schedule
+   * says open (a host A blip, or a blip merged into a real cut); waiting for the schedule's own cut. "unanchorable":
+   * the true cut is unknown; never planned. Absent: not checked yet (no venue so far); never planned either.
+   */
+  cutSuspect?: boolean | "unanchorable";
+  /** The last tick at which the schedule said open, while suspect. */
+  schedOpenSeenMs?: number | null;
+  /** Set when the cut was re-anchored at the schedule's own cut: where the chain first showed it. */
+  recut?: { fromCutAtMs: number; fromCutBlock: number };
+  /** Every holiday list read while the closure was open (forward-only pruning, venueTime.ts foldHolidays). */
+  holidayLedger?: HolidayLedger;
   settleAttempts?: number;
   skipLogged?: boolean;
   settled?: { txHash: string; atMs: number };
@@ -575,7 +590,7 @@ function closuresHealth(state: State): Array<Record<string, unknown>> {
     const gaps = gapsWithin(ranges, d, state.lastScannedBlock);
     return {
       symbol: c.symbol, cutBlock: c.cutBlock,
-      // (W7) cutSuspect: c.cutSuspect ?? null
+      cutSuspect: c.cutSuspect ?? null,
       coveredTo: ranges.length > 0 && ranges[0][0] <= d ? ranges[0][1] : d - 1,
       gaps: gaps.length, gapBlocks: blockCount(gaps), rows: c.coverage?.rows ?? 0,
     };
@@ -611,8 +626,11 @@ const sendWatch = { sends: 0 };
 
 /** Closures the backfill fills (W2.7): tracked closures, due earliest first. */
 function backfillEligible(state: State, assets: Asset[]): Array<Tracked & { dueMs: number }> {
-  // (W7) adds `c.cutSuspect === false`: a closure whose cut the schedule has not confirmed is never backfilled.
-  return trackedClosures(state, assets).map((t) => ({ ...t, dueMs: t.c.reopenMs ?? Number.POSITIVE_INFINITY }));
+  // W7: a closure whose cut the schedule has not confirmed (unchecked, suspect, unanchorable) is never backfilled:
+  // a suspect one is re-anchored (a new domain) or never committed.
+  return trackedClosures(state, assets)
+    .filter((t) => t.c.cutSuspect === false)
+    .map((t) => ({ ...t, dueMs: t.c.reopenMs ?? Number.POSITIVE_INFINITY }));
 }
 
 /**
@@ -684,6 +702,111 @@ function swapHealth(state: State, health: Health, pinned: number): void {
     backoffTicks: bf.left, lastError: bf.lastError,
   };
   health.closures = closuresHealth(state);
+}
+
+// ---------------------------------------------------------------------------------------------
+// W7: the schedule a closure is predicted and committed with, and the check that its cut was a real one
+// ---------------------------------------------------------------------------------------------
+
+/** The issuer's holiday entries in a venue read, keeping only well-formed ones (a ledger must never throw). */
+function holidaysOf(v: Pick<Venue, "sched">): Array<{ startsAt: string; endsAt: string; kind: string }> {
+  const h: unknown = v.sched?.schedule?.holidays;
+  return (Array.isArray(h) ? h : []).filter((x) => x && typeof x.startsAt === "string" && typeof x.endsAt === "string" && typeof x.kind === "string");
+}
+
+/**
+ * The closure's venue schedule (W7.2): the latest read's sessions, with its holidays plus every entry the closure's
+ * ledger kept after the issuer dropped it (venueTime.ts closureSchedule). The keeper predicts the reopen with it and
+ * checks the cut with it; venueEvidenceFor commits the same schedule, and a verifier walks it from the cut. With
+ * nothing kept it is the latest read, so a closure's first tick predicts exactly as HEAD did.
+ */
+export function closureVenueSchedule(venue: Pick<Venue, "mic" | "sched">, ledger: HolidayLedger | undefined): ExchangeSchedule {
+  return { ...venue.sched, mic: venue.mic, schedule: closureSchedule(venue.sched.schedule, ledger).schedule };
+}
+
+/** A new closure's holiday ledger: the list as read now; undefined while there is no venue. */
+export function openLedger(venue: Pick<Venue, "sched" | "atMs"> | undefined): HolidayLedger | undefined {
+  return venue ? foldHolidays(undefined, holidaysOf(venue), venue.atMs) : undefined;
+}
+
+/**
+ * Tick step 6 (W7.2): a FRESH venue read joins the ledger of the wrapper's open closure, so a holiday the issuer
+ * prunes once it has started stays in the schedule the row commits (the six holiday rows of D-16). Frozen once the
+ * closure has a plan.
+ */
+export function foldVenueRead(
+  open: Record<string, { plan?: unknown; committed?: unknown; holidayLedger?: HolidayLedger }>, wrapper: string, v: Pick<Venue, "sched" | "atMs">,
+): void {
+  const c = open[wrapper];
+  if (!c || c.plan || c.committed) return;
+  c.holidayLedger = foldHolidays(c.holidayLedger, holidaysOf(v), v.atMs);
+}
+
+/** Where a recut re-anchors a closure: this tick's pinned block and this pool's read in it. */
+export interface CutAnchor { nowMs: number; block: { number: number; hash: string }; midE18: bigint; poolSnap: MulticallSnapshot; pool: string }
+
+/**
+ * W7.4: act on checkCut's answer for a closure without a plan.
+ * - ok: confirmed (`cutSuspect = false`); only now may it be backfilled and planned.
+ * - suspect: the chain shut while the schedule says open; remember the tick, wait for the schedule's own cut.
+ * - recut: the schedule shut within two ticks of last showing it open: re-anchor at this tick. The old file is named
+ *   by the old cutBlock, so it is removed FIRST; then applyRecut; then any file at the new name (it starts empty, as
+ *   its coverage does). This tick's ingest fills the new domain and the backfill its closing window.
+ * - unanchorable: the true cut is unknown; never planned, abandoned when capacity returns. Sev-1 once.
+ */
+export function onCutCheck(c: Closure, r: CutCheck, at: CutAnchor): void {
+  const iso = (ms: number | null | undefined) => (typeof ms === "number" ? new Date(ms).toISOString() : null);
+  switch (r.kind) {
+    case "ok":
+      c.cutSuspect = false;
+      return;
+    case "suspect":
+      if (c.cutSuspect !== true) {
+        log("closure-cut-suspect", { symbol: c.symbol, cutBlock: c.cutBlock, cutAt: iso(c.cutAtMs), scheduleOpenAt: iso(r.schedOpenSeenMs) });
+      }
+      c.cutSuspect = true;
+      c.schedOpenSeenMs = r.schedOpenSeenMs;
+      return;
+    case "recut": {
+      const from = { cutBlock: c.cutBlock, cutAtMs: c.cutAtMs };
+      try { store.remove(c); } catch (e) { log("swap-file-remove-failed", { symbol: c.symbol, cutBlock: c.cutBlock, error: String(e) }); }
+      applyRecut(c, { nowMs: at.nowMs, blockNumber: at.block.number, blockHash: at.block.hash, midE18: at.midE18, cutRead: cutReadOf(at.poolSnap, at.pool) });
+      try { store.remove(c); } catch (e) { log("swap-file-remove-failed", { symbol: c.symbol, cutBlock: c.cutBlock, error: String(e) }); }
+      log("closure-recut", { symbol: c.symbol, fromCutBlock: from.cutBlock, fromCutAt: iso(from.cutAtMs), cutBlock: c.cutBlock, cutAt: iso(c.cutAtMs) });
+      return;
+    }
+    case "unanchorable":
+      if (c.cutSuspect !== "unanchorable") {
+        log("closure-cut-unanchorable", { symbol: c.symbol, cutBlock: c.cutBlock, cutAt: iso(c.cutAtMs), reason: r.reason });
+        raise(1, `keeper:cut-unconfirmed-by-schedule:${c.symbol}`,
+          `${c.symbol}: capacity went to zero at ${iso(c.cutAtMs)} (block ${c.cutBlock}) while the venue schedule said open, and ${r.reason}; no row will be committed for this closure`);
+      }
+      c.cutSuspect = "unanchorable";
+      return;
+  }
+}
+
+/**
+ * W7.5: an uncommitted closure that capacity has returned to. A cut the schedule never confirmed is a host A blip
+ * (sev-2); a confirmed, witnessed closure at least minClosureS long that ended without a row lost one (sev-1: a
+ * mispredicted reopen, such as a holiday withdrawn on the day, or a missed commit window). Returns which, for tests.
+ */
+export function abandonAlarms(
+  c: Pick<Closure, "symbol" | "cutBlock" | "cutAtMs" | "cutSuspect" | "witnessedCut">, nowMs: number, minClosureS: number,
+): "phantom" | "missed" | null {
+  const lastedS = Math.round((nowMs - c.cutAtMs) / 1000);
+  if (c.cutSuspect !== false) {
+    log("closure-phantom", { symbol: c.symbol, cutBlock: c.cutBlock, lastedS, cutSuspect: c.cutSuspect ?? null });
+    raise(2, `keeper:phantom-closure:${c.symbol}`,
+      `${c.symbol}: capacity was at zero for ${lastedS}s from block ${c.cutBlock} without the venue schedule confirming the cut (${c.cutSuspect === undefined ? "never checked" : String(c.cutSuspect)}): a host A blip`);
+    return "phantom";
+  }
+  if (c.witnessedCut && nowMs - c.cutAtMs >= minClosureS * 1000) {
+    raise(1, `keeper:closure-missed:${c.symbol}`,
+      `${c.symbol}: a ${(lastedS / 3600).toFixed(1)}-hour closure the schedule confirmed (cut block ${c.cutBlock}) ended without a row: a mispredicted reopen or a missed commit window`);
+    return "missed";
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -928,7 +1051,11 @@ async function tick(
     if (have && nowMs - have.atMs < CFG.venueRefreshMs) continue;
     try {
       const v = await readVenue(client, a);
-      if (v) venues.set(a.wrapper, v);
+      if (v) {
+        venues.set(a.wrapper, v);
+        // W7.2: the fresh holiday list joins the open closure's ledger (frozen once it has a plan).
+        foldVenueRead(state.open, a.wrapper, v);
+      }
       else if (!have) log("venue-unavailable", { symbol: a.symbol });
     } catch (e) { log("venue-error", { symbol: a.symbol, error: String(e) }); }
   }
@@ -1000,8 +1127,12 @@ async function tick(
       state.lastPrint[w] = { priceE18: read.priceE18.toString(), atMs: nowMs };
       if (open?.committed) { state.pending.push(open); delete state.open[w]; log("closure-closed", { symbol: a.symbol, id: open.committed.id }); }
       else if (open) {
-        log("closure-abandoned", { symbol: a.symbol, cutBlock: open.cutBlock, reason: "capacity returned before the commit point" });
-        // (W7) the abandon-branch alarms go here.
+        log("closure-abandoned", {
+          symbol: a.symbol, cutBlock: open.cutBlock, reason: "capacity returned before the commit point",
+          cutSuspect: open.cutSuspect ?? null, lastedS: Math.round((nowMs - open.cutAtMs) / 1000),
+        });
+        // W7.5: a blip the schedule never confirmed (sev-2), or a confirmed, witnessed, long closure that lost its row (sev-1).
+        abandonAlarms(open, nowMs, CFG.minClosureS);
         try { store.remove(open); } catch (e) { log("swap-file-remove-failed", { symbol: a.symbol, cutBlock: open.cutBlock, error: String(e) }); }
         delete state.open[w];
       }
@@ -1009,7 +1140,13 @@ async function tick(
     }
 
     const venue = venues.get(w);
-    const reopenMs = venue ? nextCapReturnMs(venue.limits, venue.sched, nowMs) : null;
+    // W7.3: a closure the old build opened has no ledger; it starts from the first read after this build's boot.
+    if (open && venue && !open.plan && !open.committed && !open.holidayLedger) open.holidayLedger = openLedger(venue);
+    // W7.2: the reopen is predicted with the closure's schedule: the latest sessions, the latest holidays and every
+    // entry the ledger kept. On the opening tick that is the latest read itself.
+    const sched = venue ? closureVenueSchedule(venue, open?.holidayLedger) : null;
+    const reopenMs = venue && sched ? nextCapReturnMs(venue.limits, sched, nowMs) : null;
+    const anchor: CutAnchor = { nowMs, block, midE18: read.priceE18, poolSnap, pool: a.pool };
 
     if (!open) {
       const last = state.lastPrint[w];
@@ -1025,20 +1162,32 @@ async function tick(
         cutBlockHash: block.hash,
         cutRead: cutReadOf(poolSnap, a.pool),
         coverage: { ranges: [], rows: 0 },
+        // W7: the holiday list as read now starts the closure's ledger.
+        holidayLedger: openLedger(venue),
       };
-      // (W7) the cut check of a new closure goes here.
+      // W7.4: was this a scheduled cut? The opening tick is the only one that sees the schedule at the cut itself.
+      // No venue: cutSuspect stays unset, which blocks the backfill and planning until a venue is read.
+      if (venue && sched) {
+        try { onCutCheck(fresh, checkCut(fresh, venue.limits, sched, nowMs, CFG.tickMs), anchor); }
+        catch (e) { log("cut-check-error", { symbol: a.symbol, error: String(e) }); }
+      }
       state.open[w] = fresh;
       // A file left at this path is a re-cut at the same block: start it empty, as its coverage is.
       try { store.remove(fresh); } catch (e) { log("swap-file-remove-failed", { symbol: a.symbol, cutBlock: block.number, error: String(e) }); }
       log("closure-open", {
         symbol: a.symbol, cutBlock: block.number, midAtCut: read.priceE18,
         reopen: reopenMs === null ? null : new Date(reopenMs).toISOString(),
-        witnessedCut: witnessed,
+        witnessedCut: witnessed, cutSuspect: fresh.cutSuspect ?? null,
       });
       continue;
     }
 
-    // (W7) the cut check and recut of an open closure go here.
+    // W7.4: the cut check and recut of an open closure, every tick until it has a plan. A recut moves the cut to
+    // this tick (new cutBlock, hash, read, mid; empty coverage) and removes the old file first.
+    if (venue && sched && !open.plan && !open.committed) {
+      try { onCutCheck(open, checkCut(open, venue.limits, sched, nowMs, CFG.tickMs), anchor); }
+      catch (e) { log("cut-check-error", { symbol: a.symbol, error: String(e) }); }
+    }
     // The predicted reopen is refreshed until a plan exists, then frozen: the plan's settleAfter is what counts.
     if (reopenMs !== null && !open.committed && !open.plan) open.reopenMs = reopenMs;
   }
@@ -1290,6 +1439,13 @@ async function commitPass(
       }
       continue;
     }
+    // W7: a closure whose cut the venue schedule has not confirmed (unchecked, suspect or unanchorable) is never
+    // planned. A plan that already exists (frozen before this build) is sent as frozen.
+    // (W7 -> W4b) buildPlan's step 1 takes the venue evidence from venueEvidenceFor(c, venue, nowMs, settleAfterS)
+    // (venueTime.ts), before any network call: it commits this closure's schedule (ledger included), defers when the
+    // live prediction moved, and refuses unless that schedule walked from the cut gives settleAfterS (I10, what every
+    // verifier re-derives) and says the market is shut now (I11). HEAD's buildPlan below still commits the latest list.
+    if (!c.plan && c.cutSuspect !== false) continue;
     if (c.reopenMs - c.cutAtMs < CFG.minClosureS * 1000) {
       if (!c.skipLogged) {
         c.skipLogged = true;
