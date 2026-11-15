@@ -12,6 +12,11 @@
  * - an open closure recorded on chain whose commitment is empty is un-committed so its frozen plan is retried
  *   while the commit window allows (`commitMissing`); the retry's simulation answers `ClosureExists` if it did
  *   mine after all.
+ * - an open closure whose plan was sent (attempts > 0) but is not recorded as committed is read too (review F2): an
+ *   attempt that timed out and mined, or a crash between a mined commit and its save, leaves `committed` unset, and
+ *   below COMMIT_FLOOR_S no further simulation would ever answer `ClosureExists`. A non-zero commitment cannot come
+ *   from a stale read, so one read adopts it (`planOnChain`), before the per-asset loop can close or abandon the
+ *   closure. A zero read (`planNotOnChain`) is what lets that loop abandon such a closure.
  *
  * A read can be older than what it is compared with (CO m1): an id whose receipt block is known is skipped
  * until the read is at least 10 blocks past it, and a disagreement acts only when two consecutive reconciled
@@ -59,7 +64,7 @@ export interface RowLike {
   symbol: string;
   cutBlock: number;
   committed?: CommittedLike;
-  plan?: unknown;
+  plan?: { id: string; attempts: number };
   settled?: unknown;
   settleAttempts?: number;
 }
@@ -76,6 +81,8 @@ export interface Corrections {
   reopened: string[];              // recent ids the chain shows NOT settled inside their window: back to pending
   lostAfterWindow: string[];       // recent ids not settled and past the window: expire
   commitMissing: string[];         // open ids recorded on chain whose commitments(id).committedAt == 0
+  planOnChain: string[];           // plan ids of open closures sent but not recorded, whose commitment exists: adopt
+  planNotOnChain: string[];        // plan ids of open closures sent but not recorded, read as absent at this block
 }
 
 export const RECENT_KEEP_MS = 24 * 3_600_000;
@@ -116,9 +123,10 @@ export function reconcileCalls(state: StateLike, scorecard: string, cursor: { re
     if (!calls.has(label)) calls.set(label, { label, target: scorecard, callData: scorecardAbi.encodeFunctionData("settlements", [id]) });
   };
   for (const c of Object.values(state.open)) {
-    if (!c.committed?.onChain) continue;
-    const label = `commitment:${lc(c.committed.id)}`;
-    if (!calls.has(label)) calls.set(label, { label, target: scorecard, callData: scorecardAbi.encodeFunctionData("commitments", [c.committed.id]) });
+    const id = c.committed?.onChain ? c.committed.id : (!c.committed && c.plan && c.plan.attempts > 0 ? c.plan.id : null);
+    if (id === null) continue;
+    const label = `commitment:${lc(id)}`;
+    if (!calls.has(label)) calls.set(label, { label, target: scorecard, callData: scorecardAbi.encodeFunctionData("commitments", [id]) });
   }
   for (const c of state.pending) if (c.committed?.onChain && !c.settled) settlement(c.committed.id);
   const recent = state.recent ?? [];
@@ -180,7 +188,7 @@ export async function readChainBook(
  * missing or failed read. `chainNowS` is the pinned block's timestamp.
  */
 export function reconcile(state: StateLike, book: ChainBook, chainNowS: number, settleDelayS: number, streak: Map<string, number>): Corrections {
-  const out: Corrections = { settledOnChain: [], reopened: [], lostAfterWindow: [], commitMissing: [] };
+  const out: Corrections = { settledOnChain: [], reopened: [], lostAfterWindow: [], commitMissing: [], planOnChain: [], planNotOnChain: [] };
   const fresh = (block: number | undefined) => block === undefined || book.atBlock >= block + RECONCILE_CONFIRM_BLOCKS;
   const tracked = new Set<string>();
 
@@ -210,6 +218,13 @@ export function reconcile(state: StateLike, book: ChainBook, chainNowS: number, 
   }
 
   for (const c of Object.values(state.open)) {
+    if (!c.committed && c.plan && c.plan.attempts > 0) {
+      // Sent, not recorded: a non-zero commitment is never a stale read, so one read is enough either way.
+      const at = book.committedAt.get(lc(c.plan.id));
+      if (at === undefined || at === null) continue;
+      (at !== 0n ? out.planOnChain : out.planNotOnChain).push(c.plan.id);
+      continue;
+    }
     if (!c.committed?.onChain) continue;
     const key = `commit:${lc(c.committed.id)}`;
     tracked.add(key);
@@ -275,7 +290,7 @@ export function rowFromRecent(ref: SettledRef): RowLike & { committed: Committed
   };
 }
 
-export interface ApplyReport { settled: number; reopened: number; expired: number; uncommitted: number; commitLost: number }
+export interface ApplyReport { settled: number; reopened: number; expired: number; uncommitted: number; commitLost: number; adopted: number }
 
 /**
  * Apply the corrections to the books. Effects go through `d`, so main.ts keeps its types and its file store:
@@ -284,6 +299,8 @@ export interface ApplyReport { settled: number; reopened: number; expired: numbe
  * - lostAfterWindow: to `expired`; sev-1 `keeper:books-disagree:<id>`.
  * - commitMissing: sev-1 `keeper:books-disagree:<id>`; `committed` deleted when `d.canRetryCommit` (a plan
  *   exists and toReopenS >= COMMIT_FLOOR_S), else log `commit-lost`.
+ * - planOnChain: `d.adoptPlan(row)` records the commitment from the frozen plan (it is our row: the id comes from our
+ *   own bundle root); sev-2 `keeper:commit-found:<symbol>`.
  * The alarm keys carry the id so two rows disagreeing in one tick both page (the queue coalesces by key).
  */
 export function applyCorrections<R extends RowLike>(
@@ -292,12 +309,13 @@ export function applyCorrections<R extends RowLike>(
     nowMs: number;
     canRetryCommit(row: R): boolean;
     revive(ref: SettledRef): R;
+    adoptPlan?(row: R): void;
     remove(row: { wrapper: string; cutBlock: number }): void;
     raise(sev: 1 | 2, key: string, message: string): void;
     log(event: string, fields?: Record<string, unknown>): void;
   },
 ): ApplyReport {
-  const rep: ApplyReport = { settled: 0, reopened: 0, expired: 0, uncommitted: 0, commitLost: 0 };
+  const rep: ApplyReport = { settled: 0, reopened: 0, expired: 0, uncommitted: 0, commitLost: 0, adopted: 0 };
   const removeFile = (row: { wrapper?: string; cutBlock?: number; symbol: string }) => {
     if (!row.wrapper || row.cutBlock === undefined || row.cutBlock === 0) return;
     try { d.remove({ wrapper: row.wrapper, cutBlock: row.cutBlock }); }
@@ -351,6 +369,16 @@ export function applyCorrections<R extends RowLike>(
       d.log("commit-lost", { symbol: row.symbol, id: row.committed.id, tx: row.committed.txHash ?? "", cutBlock: row.cutBlock });
       rep.commitLost++;
     }
+  }
+
+  for (const id of corr.planOnChain) {
+    const row = Object.values(state.open).find((c) => !c.committed && c.plan && lc(c.plan.id) === lc(id));
+    if (!row || !d.adoptPlan) continue;
+    d.adoptPlan(row);
+    if (!row.committed) continue;
+    d.raise(2, `keeper:commit-found:${row.symbol}`,
+      `${row.symbol} commit ${id} is on chain although no attempt reported it mined (a timeout, or a restart before its save); recorded, it will be settled`);
+    rep.adopted++;
   }
 
   pruneRecent(state, d.nowMs);

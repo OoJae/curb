@@ -19,7 +19,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { Wallet, Transaction, Interface } from "ethers";
 import {
   loadConfig, attributionHealth, clockSkewStep, archiveStep, CLOCK_SKEW_MAX_S, ARCHIVE_BACKLOG_MS, backfillBusy,
-  sendCommit, settleRows,
+  sendCommit, settleRows, outboxMinedIn, abandonDecision, ABANDON_HOLD_MAX_MS,
 } from "./main.ts";
 import { Sender } from "./tx/sender.ts";
 import type { RpcFn } from "./tx/sender.ts";
@@ -688,7 +688,7 @@ test("W5: settlePass decides with canSettle( and does not read health.isKeeper",
 test("W5: reconcile runs before commitPass( and settlePass( inside its own try", () => {
   const src = SRC();
   const tick = fnBody(src, "async function tick(");
-  const rec = tick.indexOf("await reconcileStep(state, block, nowMs);");
+  const rec = tick.indexOf("await reconcileStep(state, block, nowMs, health);");
   assert.ok(rec > 0 && rec < tick.indexOf("await commitPass(") && rec < tick.indexOf("await settlePass("));
   const step = fnBody(src, "async function reconcileStep(");
   const tryAt = step.indexOf("try {");
@@ -1224,4 +1224,129 @@ test("W3: disk and memory reach /healthz every tick, and a filling disk pages", 
   assert.match(od, /const alarm = diskAlarm\(du\.freeMb\);\n\s*if \(alarm\) raise\(\.\.\.alarm\);/);
   assert.match(od, /^function observeDisk[^]*try \{[^]*\} catch \(e\) \{ log\("disk-check-error"/);
   assert.match(src, /const diskMonitor = createDiskMonitor\(CFG\.dataDir\);/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Review of the transaction path (nov/review/tx.md): F1, F2, F3, F5.
+// ---------------------------------------------------------------------------------------------
+
+test("W5 review F1: an UnknownClosure reached through a failed first endpoint keeps the row owed and pages", async () => {
+  // nov/review/tx/f1-unknownclosure-fallback.ts: Sender.call moves to the next endpoint on ANY error and throws the
+  // last one's, so endpoint 0 timing out and a stale endpoint 1 is enough to read UnknownClosure for a live row.
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-f1-"));
+  const unknown = scorecardErrors.encodeErrorResult("UnknownClosure", [ROW151_ID]);
+  const rpc: RpcFn = async (url, method, params) => {
+    if (method === "eth_call") {
+      if (url === "https://a") throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+      throw Object.assign(new Error("execution reverted"), { data: unknown });
+    }
+    if (method === "eth_sendRawTransaction") return Transaction.from(params[0] as string).hash;
+    throw new Error(`not reached: ${method}`);
+  };
+  const sender = new Sender({ wallet: new Wallet("0x" + "4c".repeat(32)), rpcs: ["https://a", "https://b"], chainId: 196,
+    dbPath: join(dir, "outbox.sqlite"), rpc, errorInterface: scorecardErrors });
+  const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [pendingRow151()], recent: [], expired: [] } as never as { pending: unknown[]; expired: unknown[] };
+  const t = settleDeps(sender, ROW151_SETTLE_AFTER + 300 + 60);
+  try { await settleRows(state as never, t.d); } finally { rmSync(dir, { recursive: true, force: true }); }
+  assert.equal(state.pending.length, 1, "kept: one endpoint's word never expires a row");
+  assert.equal(state.expired.length, 0);
+  assert.deepEqual(t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:commit-lost:${ROW151_ID}`]], "but a person is paged");
+  assert.deepEqual(t.removed, [], "and its file is kept");
+});
+
+test("W5 review F3: a row with a settle in flight is expired only on a settlements(id) read past the deadline", async () => {
+  const deadline = ROW151_SETTLE_AFTER + 300 + 21_600;
+  const mk = (attempts: number) => ({ lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [{ ...pendingRow151(), settleAttempts: attempts }], recent: [], expired: [] } as never as {
+    pending: unknown[]; expired: Array<{ reason: string }>; recent: Array<{ id: string }>;
+  });
+  const run = async (attempts: number, chainNowS: number, read: boolean | null) => {
+    const s = mk(attempts);
+    const t = settleDeps(null, chainNowS, { settledRead: () => read });
+    await settleRows(s as never, t.d);
+    return { s, t };
+  };
+  // Never sent: the window rule alone expires it, as before.
+  let r = await run(0, deadline - 59, null);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length], [0, 1]);
+  // Sent at deadline - 61 and maybe still in flight: no read, or a read before the deadline -> kept, no page.
+  for (const [now, read] of [[deadline - 59, null], [deadline - 59, false], [deadline, false], [deadline + 1, null]] as const) {
+    r = await run(1, now, read);
+    assert.deepEqual([r.s.pending.length, r.s.expired.length, r.t.alarms.length], [1, 0, 0], `${now - deadline} ${read}`);
+  }
+  // The in-flight settle mined: settled, not expired.
+  r = await run(1, deadline - 59, true);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length, r.s.recent.length], [0, 0, 1]);
+  // A read past the deadline that shows it unsettled: now it is final.
+  r = await run(1, deadline + 1, false);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length], [0, 1]);
+  assert.deepEqual(r.t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:settle-expired:${ROW151_ID}`]]);
+  // Reads failing for an hour past the deadline: expired anyway (nothing can mine after it), still paged.
+  r = await run(1, deadline + 3_601, null);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length], [0, 1]);
+});
+
+test("W5 review F2: a closure whose plan was sent is never abandoned (or its file deleted) until reconcile has read commitments(plan.id)", () => {
+  const plan = { id: "0x" + "AB".repeat(32), attempts: 2 };
+  const absent = (atBlock: number, ...ids: string[]) => ({ atBlock, ids: new Set(ids.map((x) => x.toLowerCase())) });
+  const t0 = 1_000_000;
+  // Never sent: abandoned as before.
+  assert.equal(abandonDecision(undefined, absent(-1), 100, undefined, t0), "abandon");
+  assert.equal(abandonDecision({ ...plan, attempts: 0 }, absent(-1), 100, undefined, t0), "abandon");
+  // Sent, and reconcile has not read it at this block (skipped, timed out, or an older block): held, file kept.
+  assert.equal(abandonDecision(plan, absent(-1), 100, undefined, t0), "hold");
+  assert.equal(abandonDecision(plan, absent(99, plan.id), 100, t0, t0 + 60_000), "hold", "a read at another block does not count");
+  // Read absent at this very block (capacity is back at it, so nothing can commit after it): abandoned, file deleted.
+  assert.equal(abandonDecision(plan, absent(100, plan.id), 100, t0, t0 + 30_000), "abandon");
+  // No read for the whole hold: abandoned with the file KEPT (and a sev-1).
+  assert.equal(abandonDecision(plan, absent(-1), 100, t0, t0 + ABANDON_HOLD_MAX_MS - 1), "hold");
+  assert.equal(abandonDecision(plan, absent(-1), 100, t0, t0 + ABANDON_HOLD_MAX_MS), "abandon-keep-file");
+  // Wiring: the abandon branch asks first, deletes the file only on a plain "abandon".
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const branch = tick.slice(tick.indexOf("else if (open) {"), tick.indexOf("delete state.open[w];", tick.indexOf('log("closure-abandoned"')));
+  assert.match(branch, /const decision = abandonStep\(open, block\.number, nowMs\);\n\s*if \(decision === "hold"\) continue;\n\s*log\("closure-abandoned"/);
+  assert.match(branch, /if \(decision === "abandon"\) \{\n\s*try \{ store\.remove\(open\); \}/);
+  assert.equal(branch.split("store.remove(").length - 1, 1);
+  // Reconcile adopts a plan found on chain, and records what it read absent, before the per-asset loop runs.
+  const step = fnBody(src, "async function reconcileStep(");
+  assert.match(step, /adoptPlan: \(c\) => adoptPlan\(c, nowMs, health\),/);
+  assert.match(step, /onchainWatch\.planAbsent = \{ atBlock: block\.number, ids: new Set\(corr\.planNotOnChain/);
+  assert.ok(tick.indexOf("await reconcileStep(") < tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;"));
+});
+
+test("W5 review F5: an earlier attempt that mined is booked as ours, with its hash and block, from the outbox", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-f5-"));
+  const dbPath = join(dir, "outbox.sqlite");
+  const rpc: RpcFn = async (_u, method, params) => {
+    switch (method) {
+      case "eth_call": return "0x";
+      case "eth_estimateGas": return "0x1cd97";
+      case "eth_getBlockByNumber": return { baseFeePerGas: "0x1312d00" };
+      case "eth_getTransactionCount": return "0x7";
+      case "eth_sendRawTransaction": return Transaction.from(params[0] as string).hash;
+      case "eth_getTransactionReceipt": return { status: "0x1", blockNumber: "0x46efbbe", gasUsed: "0x1cd97" };
+      default: throw new Error(method);
+    }
+  };
+  try {
+    const sender = new Sender({ wallet: new Wallet("0x" + "4c".repeat(32)), rpcs: ["https://a"], chainId: 196, dbPath, rpc, now: () => 1, sleep: async () => {} });
+    const root = "0x" + "51".repeat(32);
+    const p = await sender.prepare(SCORECARD_ADDR, "0x" + "c3cc18b3" + "22".repeat(32), { id: `settle:${root}:1`, kind: "settle", targetMs: 0 });
+    await sender.broadcastAndWait(p);
+    assert.deepEqual(outboxMinedIn(dbPath, `settle:${root}:`), { hash: p.hash, block: 74_382_270 });
+    assert.equal(outboxMinedIn(dbPath, `settle:${"0x" + "52".repeat(32)}:`), null);
+    assert.equal(outboxMinedIn(dbPath, `commit:${root}:`), null);
+    assert.equal(outboxMinedIn(join(dir, "missing.sqlite"), `settle:${root}:`), null, "never throws");
+    // settleRows books an AlreadySettled row as ours when our earlier attempt mined (a crash before its save).
+    const revert = scorecardErrors.encodeErrorResult("AlreadySettled", [ROW151_ID]);
+    const h = chainHarness({ receipt: () => null, revert: () => revert });
+    const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [{ ...pendingRow151(), settleAttempts: 1 }], recent: [], expired: [] } as never as { pending: unknown[]; recent: Array<{ tx: string; block?: number; by?: string }> };
+    const t = settleDeps(h.sender, ROW151_SETTLE_AFTER + 360, { minedEarlier: (prefix: string) => outboxMinedIn(dbPath, prefix) });
+    try { await settleRows(state as never, t.d); } finally { h.cleanup(); }
+    assert.deepEqual(state.recent.map((r) => [r.tx, r.block, r.by]), [[p.hash, 74_382_270, "keeper"]]);
+    assert.equal(t.health.settledTotal, 1);
+    assert.deepEqual(t.events, ["settled"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

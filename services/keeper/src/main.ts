@@ -23,6 +23,7 @@ import {
   renameSync, openSync, fsyncSync, closeSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AbiCoder, Interface, getAddress, keccak256, toUtf8Bytes } from "ethers";
@@ -56,7 +57,10 @@ import type { PublishHealth } from "./publish.ts";
 import { createAlarms, ALARM_FLUSH_BUDGET_MS } from "./alarms.ts";
 import { orphanReport, orphanClosureFiles, createDiskMonitor, diskAlarm, memUsage, DISK_BYTES_EVERY_MS } from "./retention.ts";
 import type { AlarmsHealth } from "./alarms.ts";
-import { sendOnce, maxNonceRpc, commitAttempt, canSettle, settleStep, settleOutcome, settleLateAlarm, settleWindow } from "./outcome.ts";
+import {
+  sendOnce, maxNonceRpc, commitAttempt, canSettle, settleStep, settleOutcome, settleLateAlarm, settleWindow, SETTLE_EXPIRY_GRACE_S,
+} from "./outcome.ts";
+import type { MinedEarlier } from "./outcome.ts";
 import {
   reconcileCalls, readChainBook, reconcile, applyCorrections, recordSettled, recordExpired, rowFromRecent, pruneRecent,
   closureCountCall, decodeClosureCount, RECONCILE_DEADLINE_MS,
@@ -1074,7 +1078,7 @@ async function tick(
 
   // 5. (W5) The books against Scorecard at the pinned block: its own multicall, raced against 5 s, in its own try.
   // It runs before both passes and never blocks a send: on a timeout or an error nothing is corrected this tick.
-  await reconcileStep(state, block, nowMs);
+  await reconcileStep(state, block, nowMs, health);
 
   // Refresh the issuer/venue inputs on their own slow clock; they change on the order of days.
   for (const a of assets) {
@@ -1158,13 +1162,18 @@ async function tick(
       state.lastPrint[w] = { priceE18: read.priceE18.toString(), atMs: nowMs };
       if (open?.committed) { state.pending.push(open); delete state.open[w]; log("closure-closed", { symbol: a.symbol, id: open.committed.id }); }
       else if (open) {
+        // Review F2: a closure whose plan was sent may be on chain; abandon it only once reconcile read it absent.
+        const decision = abandonStep(open, block.number, nowMs);
+        if (decision === "hold") continue;
         log("closure-abandoned", {
           symbol: a.symbol, cutBlock: open.cutBlock, reason: "capacity returned before the commit point",
           cutSuspect: open.cutSuspect ?? null, lastedS: Math.round((nowMs - open.cutAtMs) / 1000),
         });
         // W7.5: a blip the schedule never confirmed (sev-2), or a confirmed, witnessed, long closure that lost its row (sev-1).
         abandonAlarms(open, nowMs, CFG.minClosureS);
-        try { store.remove(open); } catch (e) { log("swap-file-remove-failed", { symbol: a.symbol, cutBlock: open.cutBlock, error: String(e) }); }
+        if (decision === "abandon") {
+          try { store.remove(open); } catch (e) { log("swap-file-remove-failed", { symbol: a.symbol, cutBlock: open.cutBlock, error: String(e) }); }
+        }
         delete state.open[w];
       }
       continue;
@@ -1305,7 +1314,91 @@ const onchainWatch = {
   streak: new Map<string, number>(),
   lastOkBlock: null as number | null,
   skipped: 0,
+  /** This tick's settlements(id) reads (review F3), reset at the start of every reconcileStep: null when not read. */
+  settledNow: null as Map<string, boolean | null> | null,
+  /** Plan ids of sent-but-unrecorded closures read as absent at `atBlock` (review F2), reset every reconcileStep. */
+  planAbsent: { atBlock: -1, ids: new Set<string>() },
 };
+
+/**
+ * Review F5: the receipt the outbox recorded for an earlier attempt of the same row (`commit:<root>:` or
+ * `settle:<root>:`), so a ClosureExists or AlreadySettled refusal is booked as ours, with its hash and block. Opens the
+ * Sender's outbox read-only on its own connection; never throws (null when unknown).
+ */
+export function outboxMinedIn(dbPath: string, idPrefix: string): { hash: string; block: number } | null {
+  if (!existsSync(dbPath)) return null;
+  let db: DatabaseSync | null = null;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true });
+    const row = db.prepare(
+      "select hash, block_number from outbox where substr(id, 1, ?) = ? and state = 'mined' and block_number is not null order by updated_ms desc limit 1",
+    ).get(idPrefix.length, idPrefix) as { hash: string; block_number: number } | undefined;
+    return row ? { hash: row.hash, block: Number(row.block_number) } : null;
+  } catch { return null; }
+  finally { try { db?.close(); } catch { /* ignore */ } }
+}
+const outboxMined: MinedEarlier = (prefix) => outboxMinedIn(join(CFG.dataDir, "keeper-outbox.sqlite"), prefix);
+
+/**
+ * Review F2: a closure whose plan was sent (attempts > 0) but is not recorded as committed may still be on chain (an
+ * attempt that timed out and mined, a crash before the save). When capacity returns it is abandoned only once this
+ * tick's reconciliation read commitments(plan.id) as absent at this very block: capacity is back at it, so no commit
+ * can land after it. Without that read the closure is held (its file kept) for up to ABANDON_HOLD_MAX_MS, then
+ * abandoned with its file KEPT and a sev-1, so a person can check and settle by hand.
+ */
+export const ABANDON_HOLD_MAX_MS = 15 * 60_000;
+export type AbandonDecision = "abandon" | "hold" | "abandon-keep-file";
+
+/** The rule above, pure: `absent` is this tick's reconciliation (plan ids read as absent at `absent.atBlock`). */
+export function abandonDecision(
+  plan: { id: string; attempts: number } | undefined, absent: { atBlock: number; ids: Set<string> },
+  atBlock: number, heldSinceMs: number | undefined, nowMs: number,
+): AbandonDecision {
+  if (!plan || plan.attempts === 0) return "abandon";                                      // never sent: nothing on chain
+  if (absent.atBlock === atBlock && absent.ids.has(plan.id.toLowerCase())) return "abandon";   // read absent at this block
+  if (heldSinceMs === undefined || nowMs - heldSinceMs < ABANDON_HOLD_MAX_MS) return "hold";
+  return "abandon-keep-file";
+}
+
+const abandonHolds = new Map<string, number>();
+
+/** The abandon branch's decision for one closure, with its hold bookkeeping, log line and alarm. */
+function abandonStep(open: Closure, atBlock: number, nowMs: number): AbandonDecision {
+  const key = `${open.wrapper.toLowerCase()}:${open.cutBlock}`;
+  const decision = abandonDecision(open.plan, onchainWatch.planAbsent, atBlock, abandonHolds.get(key), nowMs);
+  if (decision === "hold") {
+    if (!abandonHolds.has(key)) {
+      abandonHolds.set(key, nowMs);
+      log("closure-abandon-held", { symbol: open.symbol, cutBlock: open.cutBlock, plan: open.plan?.id, attempts: open.plan?.attempts,
+        reason: "capacity returned; the plan was sent and Scorecard has not been read for it yet" });
+    }
+    return decision;
+  }
+  abandonHolds.delete(key);
+  if (decision === "abandon-keep-file") {
+    raise(1, `keeper:abandon-unconfirmed:${open.symbol}`,
+      `${open.symbol}: plan ${open.plan!.id} was sent ${open.plan!.attempts} time(s) and Scorecard could not be read for it in ${Math.round(ABANDON_HOLD_MAX_MS / 60_000)} min; `
+      + `abandoning the closure and KEEPING its swap file: check commitments(${open.plan!.id}) and settle by hand if it is on chain`);
+  }
+  return decision;
+}
+
+/** Review F2: a sent plan found on chain by the reconciliation is recorded as committed, as a ClosureExists would. */
+function adoptPlan(c: Closure, nowMs: number, health: Health): void {
+  const plan = c.plan;
+  if (!plan || c.committed) return;
+  const m = outboxMined(`commit:${plan.root}:`);
+  c.committed = {
+    id: plan.id, root: plan.root, settleAfterS: plan.settleAfterS, markE18: plan.markE18, bandBps: plan.bandBps,
+    onChain: true, txHash: m?.hash ?? "", atMs: nowMs, ...(m ? { block: m.block } : {}),
+  };
+  health.committedTotal++;
+  health.lastCommit = { symbol: c.symbol, id: plan.id, root: plan.root, mark: plan.markE18, tx: m?.hash ?? "", block: m?.block ?? null };
+  log("committed", {
+    symbol: c.symbol, id: plan.id, root: plan.root, settleAfter: new Date(plan.settleAfterS * 1000).toISOString(),
+    mark: plan.markE18, band: plan.bandBps, tx: m?.hash ?? "", block: m?.block ?? null, attempt: plan.attempts, via: "reconcile",
+  });
+}
 
 type SendPort = Pick<Sender, "prepare" | "broadcastAndWait">;
 
@@ -1334,7 +1427,7 @@ function sendTx(sender: SendPort, to: string, data: string, meta: { id: string; 
  */
 export async function sendCommit(
   c: Closure,
-  d: { sender: SendPort | null; health: Health; nowMs: number; lastChance: boolean; save(): void },
+  d: { sender: SendPort | null; health: Health; nowMs: number; lastChance: boolean; save(): void; minedEarlier?: MinedEarlier },
   cfg: { mode: string; scorecard: string } = CFG,
 ): Promise<void> {
   const plan = c.plan;
@@ -1356,7 +1449,7 @@ export async function sendCommit(
   }
   const sender = d.sender;
   const r = await commitAttempt(c as Closure & { plan: CommitPlan }, {
-    save: d.save, nowMs: d.nowMs, lastChance: d.lastChance,
+    save: d.save, nowMs: d.nowMs, lastChance: d.lastChance, minedEarlier: d.minedEarlier ?? outboxMined,
     send: (id) => sendTx(sender, cfg.scorecard, plan.data, { id, kind: "commit", targetMs: d.nowMs }),
   });
   log(r.event, r.fields);
@@ -1420,7 +1513,9 @@ function closureFromRecent(ref: SettledRef): Closure {
  * on chain, at the pinned block, raced against 5 s. Corrections need two consecutive disagreeing reads and a read at
  * least 10 blocks past a known receipt. Never throws; a skipped reconciliation corrects nothing.
  */
-async function reconcileStep(state: State, block: { number: number; hash: string; timestamp: number; rpc: string }, nowMs: number): Promise<void> {
+async function reconcileStep(state: State, block: { number: number; hash: string; timestamp: number; rpc: string }, nowMs: number, health: Health): Promise<void> {
+  onchainWatch.settledNow = null;
+  onchainWatch.planAbsent = { atBlock: -1, ids: new Set() };
   try {
     pruneRecent(state, nowMs);
     if (CFG.scorecard === ZERO) return;
@@ -1428,14 +1523,17 @@ async function reconcileStep(state: State, block: { number: number; hash: string
     if (calls.length > 0) {
       const book = await readChainBook(block, calls, CFG.rpcs, RECONCILE_DEADLINE_MS);
       const corr = reconcile(state, book, block.timestamp, CFG.settleDelayS, onchainWatch.streak);
+      onchainWatch.settledNow = book.settled;
+      onchainWatch.planAbsent = { atBlock: block.number, ids: new Set(corr.planNotOnChain.map((id) => id.toLowerCase())) };
       const rep = applyCorrections(state, corr, {
         nowMs,
         canRetryCommit: (c) => c.plan !== undefined && Math.floor((c.plan.settleAfterS * 1000 - Date.now()) / 1000) >= CFG.commitFloorS,
         revive: closureFromRecent,
+        adoptPlan: (c) => adoptPlan(c, nowMs, health),
         remove: (c) => store.remove(c),
         raise, log,
       });
-      if (rep.settled + rep.reopened + rep.expired + rep.uncommitted + rep.commitLost > 0) log("reconciled", { block: block.number, ...rep });
+      if (rep.settled + rep.reopened + rep.expired + rep.uncommitted + rep.commitLost + rep.adopted > 0) log("reconciled", { block: block.number, ...rep });
     }
     onchainWatch.lastOkBlock = block.number;
   } catch (e) {
@@ -1750,6 +1848,8 @@ async function settlePass(state: State, sender: Sender | null, health: Health, c
   await settleRows(state, {
     mode: CFG.mode, scorecard: CFG.scorecard, settleDelayS: CFG.settleDelayS, sender, health,
     balanceWei: onchainWatch.lastBalanceWei, chainNowS, nowMs, save: () => saveState(state), raise, log,
+    minedEarlier: outboxMined,
+    settledRead: (id) => onchainWatch.settledNow?.get(id.toLowerCase()) ?? null,
   });
 }
 
@@ -1762,6 +1862,10 @@ export async function settleRows(
     save(): void; raise(sev: 1 | 2, key: string, message: string): void; log(event: string, fields?: Record<string, unknown>): void;
     /** W3: how a finished row's swap file is deleted (default: the module's store; tests pass a recorder). */
     removeFile?: RemoveFile;
+    /** Review F5: an earlier attempt's mined receipt from the outbox, by id prefix. */
+    minedEarlier?: MinedEarlier;
+    /** Review F3: this tick's settlements(id).settled read at the pinned block; null when not read. */
+    settledRead?(id: string): boolean | null;
   },
 ): Promise<void> {
   const { chainNowS, nowMs } = d;
@@ -1779,6 +1883,23 @@ export async function settleRows(
         continue;
       }
       if (step.action === "expire") {
+        // Review F3: a settle sent near deadline - 61 may still mine. Such a row is expired only on a read past the
+        // deadline that shows it unsettled (after the deadline nothing can mine), or SETTLE_EXPIRY_GRACE_S after it.
+        if ((c.settleAttempts ?? 0) > 0) {
+          const { deadline } = settleWindow(owed.committed.settleAfterS, d.settleDelayS);
+          const read = d.settledRead?.(owed.committed.id) ?? null;
+          if (read === true) {
+            const m = d.minedEarlier?.(`settle:${owed.committed.root}:`) ?? null;
+            settleRow(state, owed, { tx: m?.hash ?? "", block: m?.block, by: m ? "keeper" : "chain", atMs: nowMs }, d.removeFile);
+            if (m) { d.health.settledTotal++; d.health.lastSettle = { symbol: c.symbol, id: owed.committed.id, tx: m.hash, block: m.block }; }
+            d.log(m ? "settled" : "settled-by-other", { symbol: c.symbol, id: owed.committed.id, via: "settlements-read", ...(m ? { tx: m.hash, block: m.block } : {}) });
+            continue;
+          }
+          if (!(read === false && chainNowS > deadline) && chainNowS <= deadline + SETTLE_EXPIRY_GRACE_S) {
+            d.log("settle-expiry-deferred", { symbol: c.symbol, id: owed.committed.id, read, deadline });
+            continue;
+          }
+        }
         expireRow(state, owed, step.reason, nowMs, d.removeFile);
         d.log("settle-expired", { symbol: c.symbol, id: owed.committed.id, reason: step.reason });
         d.raise(...step.alarm);
@@ -1792,7 +1913,7 @@ export async function settleRows(
         // A sender id distinct from the commit's, and distinct per attempt: the outbox is keyed on it.
         const o = await sendTx(d.sender, d.scorecard, scorecardAbi.encodeFunctionData("settle", [owed.committed.id]),
           { id: `settle:${owed.committed.root}:${attempt}`, kind: "settle", targetMs: nowMs });
-        const v = settleOutcome(o, row, attempt);
+        const v = settleOutcome(o, row, attempt, d.minedEarlier);
         d.log(v.event, v.fields);
         if (v.books === "settled") {
           settleRow(state, owed, { tx: v.tx, block: v.block, by: v.by, atMs: nowMs }, d.removeFile);

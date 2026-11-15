@@ -39,7 +39,7 @@ const recentRef = (over: Partial<SettledRef> = {}): SettledRef => ({
   wrapper: W, cutBlock: 74_370_000, attempts: 1, by: "keeper", ...over,
 });
 const emptyState = (): StateLike<Row> => ({ open: {}, pending: [], recent: [], expired: [] });
-const none = { settledOnChain: [], reopened: [], lostAfterWindow: [], commitMissing: [] };
+const none = { settledOnChain: [], reopened: [], lostAfterWindow: [], commitMissing: [], planOnChain: [], planNotOnChain: [] };
 
 test("row 151 replay: a reverted settle stays owed and the next tick settles it", () => {
   const state = emptyState();
@@ -147,7 +147,7 @@ test("a read before the receipt block + 10 is ignored", () => {
 test("a committed open row with no commitment is un-committed when the window allows, on the second read", () => {
   const mk = () => {
     const state = emptyState();
-    state.open[W] = { wrapper: W, symbol: "wTCENTx", cutBlock: 76_000_000, plan: { attempts: 1 }, committed: { id: ID2, root: ROOT151, settleAfterS: 1, onChain: true, txHash: "0xc", atMs: 0, block: 500 } };
+    state.open[W] = { wrapper: W, symbol: "wTCENTx", cutBlock: 76_000_000, plan: { id: ID2, attempts: 1 }, committed: { id: ID2, root: ROOT151, settleAfterS: 1, onChain: true, txHash: "0xc", atMs: 0, block: 500 } };
     return state;
   };
   const state = mk();
@@ -160,7 +160,7 @@ test("a committed open row with no commitment is un-committed when the window al
   const rep = applyCorrections(state, c, { nowMs: 1, canRetryCommit: () => true, revive: (r) => rowFromRecent(r) as Row, remove: () => {}, raise: (s, k, m) => alarms.push([s, k, m]), log: (e) => logs.push(e) });
   assert.equal(rep.uncommitted, 1);
   assert.equal(state.open[W].committed, undefined, "the frozen plan will be retried");
-  assert.deepEqual(state.open[W].plan, { attempts: 1 }, "the plan is kept");
+  assert.deepEqual(state.open[W].plan, { id: ID2, attempts: 1 }, "the plan is kept");
   assert.deepEqual(alarms.map((a) => a.slice(0, 2)), [[1, `keeper:books-disagree:${ID2}`]]);
   // Too late to retry: committed is kept and the loss is logged.
   const late = mk();
@@ -275,4 +275,38 @@ test("closureCount is read for /healthz only", () => {
   assert.equal(decodeClosureCount({ ...call, success: true, returnData: ret }), 233);
   assert.equal(decodeClosureCount({ ...call, success: false, returnData: "0x" }), null);
   assert.equal(decodeClosureCount(undefined), null);
+});
+
+test("review F2: a closure whose plan was sent but is not recorded is read, adopted when on chain, confirmed absent when not", () => {
+  const mk = (attempts: number) => {
+    const state = emptyState();
+    state.open[W] = { wrapper: W, symbol: "wTCENTx", cutBlock: 76_000_000, plan: { id: ID2, attempts } };
+    return state;
+  };
+  // Never sent: nothing to read.
+  assert.deepEqual(reconcileCalls(mk(0), SCORECARD, { recent: 0 }), []);
+  // Sent (the last attempt timed out): commitments(plan.id) is read.
+  const state = mk(2);
+  assert.deepEqual(reconcileCalls(state, SCORECARD, { recent: 0 }).map((c) => c.label), [`commitment:${ID2}`]);
+  // One non-zero read adopts it (a stale node cannot show a commitment that does not exist); no streak, no block guard.
+  const streak = new Map<string, number>();
+  const found = reconcile(state, book(10, {}, { [ID2]: 1_793_150_409n }), 1, DELAY, streak);
+  assert.deepEqual(found, { ...none, planOnChain: [ID2] });
+  const adopted: unknown[] = [];
+  const alarms: Array<[number, string, string]> = [];
+  const rep = applyCorrections(state, found, {
+    nowMs: 7, canRetryCommit: () => false, revive: (r) => rowFromRecent(r) as Row, remove: () => {},
+    adoptPlan: (row) => { adopted.push(row); row.committed = { id: ID2, root: ROOT151, settleAfterS: 1, onChain: true, txHash: "", atMs: 7 }; },
+    raise: (s, k, m) => alarms.push([s, k, m]), log: () => {},
+  });
+  assert.equal(rep.adopted, 1);
+  assert.equal(adopted.length, 1);
+  assert.ok(state.open[W].committed?.onChain);
+  assert.deepEqual(alarms.map((a) => a.slice(0, 2)), [[2, "keeper:commit-found:wTCENTx"]]);
+  // Recorded now: the usual committed read takes over.
+  assert.deepEqual(reconcileCalls(state, SCORECARD, { recent: 0 }).map((c) => c.label), [`commitment:${ID2}`]);
+  // A zero read is reported as absent at this block (what lets the per-asset loop abandon it); a failed read is nothing.
+  assert.deepEqual(reconcile(mk(1), book(11, {}, { [ID2]: 0n }), 1, DELAY, streak), { ...none, planNotOnChain: [ID2] });
+  assert.deepEqual(reconcile(mk(1), book(12, {}, { [ID2]: null }), 1, DELAY, streak), none);
+  assert.equal(streak.size, 0);
 });

@@ -256,17 +256,30 @@ test("commitAttempt: reverted is sev-1 and records nothing", async () => {
   assert.deepEqual(r.alarm?.slice(0, 2), [1, "keeper:commit-reverted:wTCENTx:75773120"]);
 });
 
-test("commitAttempt: ClosureExists proves an earlier attempt mined (decoded or raw)", async () => {
+test("commitAttempt: ClosureExists proves an earlier attempt mined (decoded or raw), and is booked as our commit", async () => {
   for (const reason of [`ClosureExists(${ID})`, scorecardErrors.encodeErrorResult("ClosureExists", [ID])]) {
     const c = closureOf(planOf(3));
     const r = await commitAttempt(c, deps({ kind: "refused", reason }).d);
-    assert.equal(r.result, "already-onchain");
-    assert.equal(r.event, "commit-already-onchain");
+    // Review F5: the id comes from our own bundle root, so the row on chain is ours: logged `committed`, counted.
+    assert.equal(r.result, "committed");
+    assert.equal(r.event, "committed");
+    assert.equal(r.fields.via, "ClosureExists");
     assert.equal(c.committed?.onChain, true);
-    assert.equal(c.committed?.txHash, "");
+    assert.equal(c.committed?.txHash, "", "no outbox lookup given: hash unknown");
     assert.equal(c.committed?.block, undefined);
     assert.equal(r.alarm, undefined);
   }
+  // With the outbox lookup: the earlier attempt's hash and block.
+  const c = closureOf(planOf(1));
+  const asked: string[] = [];
+  const d = { ...deps({ kind: "refused", reason: `ClosureExists(${ID})` }).d, minedEarlier: (p: string) => { asked.push(p); return { hash: "0xearly", block: 75_776_000 }; } };
+  const r = await commitAttempt(c, d);
+  assert.deepEqual(asked, [`commit:${ROOT}:`]);
+  assert.deepEqual([c.committed?.txHash, c.committed?.block, r.fields.tx, r.fields.block], ["0xearly", 75_776_000, "0xearly", 75_776_000]);
+  // A lookup that throws never breaks the booking.
+  const c2 = closureOf(planOf(1));
+  await commitAttempt(c2, { ...deps({ kind: "refused", reason: `ClosureExists(${ID})` }).d, minedEarlier: () => { throw new Error("SQLITE_BUSY"); } });
+  assert.deepEqual([c2.committed?.onChain, c2.committed?.txHash], [true, ""]);
 });
 
 test("commitAttempt: any other refusal and any error are sev-1 commit-failed", async () => {
@@ -443,10 +456,16 @@ test("settleOutcome: what each outcome does to the books", () => {
   assert.deepEqual(rev.books === "keep" && rev.alarm?.slice(0, 2), [2, `keeper:settle-reverted:${ID}`]);
   const other = v({ kind: "refused", reason: `AlreadySettled(${ID})` });
   assert.deepEqual([other.books, other.books === "settled" && other.by, other.event], ["settled", "chain", "settled-by-other"]);
+  // Review F5: when our own earlier attempt mined (the outbox says so), AlreadySettled is our settle.
+  const ours = settleOutcome({ kind: "refused", reason: `AlreadySettled(${ID})` }, row, 2, (p) => (p === `settle:${ROOT}:` ? { hash: "0xmine", block: 74_382_270 } : null));
+  assert.deepEqual([ours.books, ours.books === "settled" && ours.by, ours.books === "settled" && ours.tx, ours.books === "settled" && ours.block, ours.event],
+    ["settled", "keeper", "0xmine", 74_382_270, "settled"]);
   const exp = v({ kind: "refused", reason: `TooLate(${ID},22900)` });
   assert.deepEqual([exp.books, exp.books === "expire" && exp.reason, exp.books === "expire" && exp.alarm[1]], ["expire", "window-closed", `keeper:settle-expired:${ID}`]);
+  // Review F1: UnknownClosure can be one stale endpoint's word: kept (retried), never expired by it, but paged.
   const lost = v({ kind: "refused", reason: `UnknownClosure(${ID})` });
-  assert.deepEqual([lost.books, lost.books === "expire" && lost.reason, lost.books === "expire" && lost.alarm[1]], ["expire", "unknown-closure", `keeper:commit-lost:${ID}`]);
+  assert.deepEqual([lost.books, lost.event, lost.books === "keep" && lost.alarm?.[0], lost.books === "keep" && lost.alarm?.[1]],
+    ["keep", "settle-unknown-closure", 1, `keeper:commit-lost:${ID}`]);
   const fault = v({ kind: "refused", reason: "NoPriceSource(0x41333Df9E7639188BBfca5522dC4844398Af9f9E)" });
   assert.deepEqual([fault.books, fault.books === "keep" && fault.alarm?.[0], fault.books === "keep" && fault.alarm?.[1]], ["keep", 1, `keeper:settle-fault:${ID}`]);
   for (const o of [{ kind: "refused", reason: "PriceDeviates(-237294,-237347)" }, { kind: "pending", message: "p" }, { kind: "error", message: "e" }] as SendOutcome[]) {

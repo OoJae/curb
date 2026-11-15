@@ -170,10 +170,17 @@ export interface Committed {
 
 export type AlarmSpec = [1 | 2, string, string];
 
+/**
+ * Review F5: the receipt of an earlier attempt of the same row that the outbox recorded as mined (status 1), looked up
+ * by id prefix (`commit:<root>:` or `settle:<root>:`). Lets a refusal that proves an earlier attempt landed
+ * (`ClosureExists`, `AlreadySettled`) be booked as ours, with its hash and block. Null when unknown.
+ */
+export type MinedEarlier = (idPrefix: string) => { hash: string; block: number } | null;
+
 export interface CommitAttemptResult {
-  /** committed | already-onchain | superseded | reverted | pending | failed | persist-failed | skipped */
+  /** committed | superseded | reverted | pending | failed | persist-failed | skipped */
   result: string;
-  /** The log event the caller writes: committed, commit-already-onchain, commit-superseded, commit-reverted, commit-failed, state-persist-failed. */
+  /** The log event the caller writes: committed, commit-superseded, commit-reverted, commit-failed, state-persist-failed. */
   event: string;
   fields: Record<string, unknown>;
   /** The caller raises it with `alarms.raise` (never awaited). */
@@ -188,10 +195,12 @@ export interface CommitAttemptResult {
  * throws: undo, `persist-failed`, NO send); send under id `commit:<root>:<attempts>`; apply the outcome; save
  * again if the books changed. At most one attempt per closure per tick is the caller's rule; the next
  * attempt's simulation settles every ambiguity (`ClosureExists` means an earlier attempt mined).
+ * A `ClosureExists` refusal is booked as `committed` (the id comes from our own bundle root, so the row on chain is
+ * ours), with the hash and block of the earlier attempt when the outbox recorded it as mined (`d.minedEarlier`).
  */
 export async function commitAttempt(
   c: { symbol: string; cutBlock: number; plan: CommitPlan; committed?: Committed },
-  d: { save(): void; send(id: string): Promise<SendOutcome>; nowMs: number; lastChance: boolean },
+  d: { save(): void; send(id: string): Promise<SendOutcome>; nowMs: number; lastChance: boolean; minedEarlier?: MinedEarlier },
 ): Promise<CommitAttemptResult> {
   const plan = c.plan;
   const base = { symbol: c.symbol, id: plan.id, root: plan.root };
@@ -254,9 +263,10 @@ export async function commitAttempt(
       break;
     case "refused":
       if (isError(o.reason, "ClosureExists")) {
-        // The contract refusing a duplicate is proof an earlier attempt mined.
-        record("");
-        out = { result: "already-onchain", event: "commit-already-onchain", fields: { ...base, attempt }, outcome: o };
+        // The contract refusing a duplicate is proof an earlier attempt of this plan mined: it is our row.
+        const m = lookup(d.minedEarlier, `commit:${plan.root}:`);
+        record(m?.hash ?? "", m?.block);
+        out = { result: "committed", event: "committed", fields: committedFields(m?.hash ?? "", m?.block ?? null, { via: "ClosureExists" }), outcome: o };
       } else {
         out = { result: "failed", event: "commit-failed", fields: { ...base, attempt, error: `refused: ${o.reason}` }, outcome: o, alarm: failedAlarm(`refused: ${o.reason}`) };
       }
@@ -278,6 +288,12 @@ export async function commitAttempt(
   return out;
 }
 
+/** A MinedEarlier lookup that never throws. */
+function lookup(f: MinedEarlier | undefined, prefix: string): { hash: string; block: number } | null {
+  if (!f) return null;
+  try { return f(prefix); } catch { return null; }
+}
+
 // ---------------------------------------------------------------------------------------------
 // settles
 // ---------------------------------------------------------------------------------------------
@@ -290,6 +306,11 @@ export const SETTLE_WINDOW_S = 21_600;
 export const SETTLE_SEND_MARGIN_S = 60;
 /** Page when a settle is still owed this long after its window opened (5 of the 6 hours are left for a person). */
 export const SETTLE_LATE_S = 3_600;
+/**
+ * Review F3: a row whose settle may still be in flight at `deadline - 60` is expired only on a settlements(id) read
+ * past the deadline (after it nothing can mine); if no read succeeds, it is expired this long after the deadline.
+ */
+export const SETTLE_EXPIRY_GRACE_S = 3_600;
 /** 0.0001 OKB: about 40 settles at 118,167 gas. */
 export const SETTLE_MIN_BALANCE_WEI = 100_000_000_000_000n;
 
@@ -304,8 +325,10 @@ export type SettleRefusal = "done" | "expired" | "lost" | "wait" | "fault";
  * What a refused settle simulation means.
  * `AlreadySettled` done; `TooLate` expired; `UnknownClosure` lost; `NoPriceSource` fault; `TooEarly`,
  * `MarketStillShut`, `PriceDeviates`, `PriceUnreadable` and anything undecoded wait (retry next tick).
- * A refusal is only ever reported when every endpoint refused (the Sender tries the next RPC on any error),
- * so one lagging node cannot by itself make a live row look unknown.
+ * A refusal is the word of ONE endpoint: Sender.call moves to the next endpoint on any error (a timeout, a rate
+ * limit) and reports the last one's answer, so a single stale node can answer `UnknownClosure` for a live row.
+ * `done` and `expired` cannot come from a stale node (it shows less state and an earlier timestamp, never more);
+ * `lost` can, so it never expires a row by itself (settleOutcome keeps the row and pages).
  */
 export function classifySettleRefusal(reason: string): SettleRefusal {
   const r = String(reason).trim();
@@ -350,11 +373,13 @@ export function settleStep(
 
 export type SettleVerdict =
   | { books: "settled"; by: "keeper" | "chain"; tx: string; block?: number; event: "settled" | "settled-by-other"; fields: Record<string, unknown> }
-  | { books: "keep"; event: "settle-superseded" | "settle-reverted" | "settle-fault" | "settle-retry"; fields: Record<string, unknown>; alarm?: AlarmSpec }
+  | { books: "keep"; event: "settle-superseded" | "settle-reverted" | "settle-fault" | "settle-retry" | "settle-unknown-closure"; fields: Record<string, unknown>; alarm?: AlarmSpec }
   | { books: "expire"; reason: "window-closed" | "unknown-closure"; event: "settle-expired" | "commit-lost"; fields: Record<string, unknown>; alarm: AlarmSpec };
 
 /** What a settle attempt's outcome does to the books (W5.4). `attempt` is the attempt number that was sent. */
-export function settleOutcome(o: SendOutcome, row: { symbol: string; committed: { id: string; root: string } }, attempt: number): SettleVerdict {
+export function settleOutcome(
+  o: SendOutcome, row: { symbol: string; committed: { id: string; root: string } }, attempt: number, minedEarlier?: MinedEarlier,
+): SettleVerdict {
   const { id, root } = row.committed;
   const base = { symbol: row.symbol, id, attempt };
   switch (o.kind) {
@@ -375,7 +400,12 @@ export function settleOutcome(o: SendOutcome, row: { symbol: string; committed: 
       };
     case "refused": {
       const k = classifySettleRefusal(o.reason);
-      if (k === "done") return { books: "settled", by: "chain", tx: "", event: "settled-by-other", fields: { ...base, reason: o.reason } };
+      if (k === "done") {
+        // Review F5: an earlier attempt of ours that mined (a timeout, or a crash before its save) is booked as ours.
+        const m = lookup(minedEarlier, `settle:${root}:`);
+        if (m) return { books: "settled", by: "keeper", tx: m.hash, block: m.block, event: "settled", fields: { ...base, tx: m.hash, block: m.block, via: "AlreadySettled" } };
+        return { books: "settled", by: "chain", tx: "", event: "settled-by-other", fields: { ...base, reason: o.reason } };
+      }
       if (k === "expired") {
         return {
           books: "expire", reason: "window-closed", event: "settle-expired", fields: { ...base, reason: o.reason },
@@ -383,9 +413,11 @@ export function settleOutcome(o: SendOutcome, row: { symbol: string; committed: 
         };
       }
       if (k === "lost") {
+        // Review F1: possibly one stale endpoint's word. Keep the row (simulations cost no gas) and page; a row that
+        // really is unknown is expired by the window rule at deadline - 60.
         return {
-          books: "expire", reason: "unknown-closure", event: "commit-lost", fields: { ...base, reason: o.reason },
-          alarm: [1, `keeper:commit-lost:${id}`, `row ${id} (${row.symbol}) is unknown to Scorecard (${o.reason}): the keeper recorded a commit that is not on chain`],
+          books: "keep", event: "settle-unknown-closure", fields: { ...base, error: `refused: ${o.reason}` },
+          alarm: [1, `keeper:commit-lost:${id}`, `settle of ${id} (${row.symbol}) refused ${o.reason}: Scorecard (or one stale RPC) does not know this row; still retrying every tick until its window closes`],
         };
       }
       if (k === "fault") {
