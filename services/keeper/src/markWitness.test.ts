@@ -337,3 +337,70 @@ test("end to end: the frozen plan is never rewritten, every attempt is signed wi
   assert.equal(String(scorecardAbi.decodeFunctionData("settle", settleSigned.data)[0]).toLowerCase(), row.id.toLowerCase());
   rmSync(dir, { recursive: true, force: true });
 });
+
+// --- deploy 2: the era of a row's swap evidence, bound to the commit (W8a) -------------------------------------
+
+import { LeafKind, buildTree, loadTree } from "./tree.ts";
+import type { Leaf } from "./tree.ts";
+import { RECESS, strictRecessInputs } from "./fixtures/markFixtures.test.ts";
+
+/** Drop every CHAIN_CALL leaf and re-root: the bundle a keeper could publish to dodge the era rule. */
+function withoutChainRead(bundle: { tree: unknown; json: Record<string, string>; marks: unknown[] }) {
+  const leaves = [...loadTree(bundle.tree as never).entries()].map(([, v]: [number, Leaf]) => v).filter(([k]) => Number(k) !== LeafKind.CHAIN_CALL);
+  const { root, tree } = buildTree(leaves);
+  return { ...bundle, inputRoot: root, tree: tree.dump() };
+}
+
+test("checkMarkRound reports the era", () => {
+  const { bundle, row, tx } = build();
+  const c = check(bundle, row, tx);
+  assert.equal(c.reproduced, true);
+  assert.equal(c.evidence.era, "pre-swap-fix");
+  assert.equal(c.evidence.complete, null);
+  assert.ok(c.evidence.notes[0].startsWith("pre-fix row"), c.evidence.notes[0]);
+  // The same row, with the era's first block below its read block: strict, and it commits no scan ranges.
+  const s = checkMarkRound(bundle, row, tx, 196, SCORECARD, COMMIT_AT_S, undefined, { swapEvidenceFromBlock: 71_000_000 });
+  assert.equal(s.reproduced, false);
+  assert.equal(s.evidence.era, "swap-evidence");
+  assert.ok(s.failures.some((f) => f.includes("commits no scan ranges")), s.failures.join("; "));
+});
+
+test("a bundle without a usable read block is never lenient", () => {
+  const { bundle, row } = build();
+  const b = withoutChainRead(bundle);
+  const r = { ...row, inputRoot: b.inputRoot, id: closureId(W, REOPEN_S, b.inputRoot) };
+  const strict = checkMarkRound(b, r, null, 196, SCORECARD, COMMIT_AT_S, undefined, { swapEvidenceFromBlock: COMMIT_BLOCK });
+  assert.equal(strict.evidence.era, "swap-evidence");
+  assert.equal(strict.reproduced, false);
+  assert.ok(strict.failures.some((f) => f.includes("no single usable pinned chain read")), strict.failures.join("; "));
+  // Even where the commit block alone would say pre-fix, the row does not reproduce.
+  const pre = checkMarkRound(b, r, null, 196, SCORECARD, COMMIT_AT_S);
+  assert.equal(pre.evidence.era, "pre-swap-fix");
+  assert.equal(pre.reproduced, false);
+  assert.ok(pre.failures.some((f) => f.includes("no single usable pinned chain read")), pre.failures.join("; "));
+});
+
+test("a strict row built from real swap evidence reproduces, and the era follows its read block", () => {
+  const round = buildMarkRound(strictRecessInputs("wXIAOx"));
+  const m = round.marks[0];
+  const XIAO = "0x076CF393E701839FC7a5832D2c68AaFA235682AE";
+  const MARK2 = "curb.scorecard.mark/2";
+  const r: CommittedRow = {
+    id: closureId(XIAO, m.settleAfterS, round.root), wrapper: XIAO, settleAfter: m.settleAfterS, committedBlock: RECESS.pinnedBlock + 20,
+    mark: m.mark.markE18.toString(), bandBps: m.mark.bandBps, inputRoot: round.root, methodDigest: methodDigestOf(MARK2),
+    lastPrint: null, closingVwap: null, staleOracle: null, txHash: "0x" + "ee".repeat(32),
+  };
+  const committedAtS = Math.floor(round.bundle.evaluatedAtMs / 1000) + 12;
+  const bundle = JSON.parse(JSON.stringify(round.bundle));
+  const c = checkMarkRound(bundle, r, null, 196, SCORECARD, committedAtS, undefined, { swapEvidenceFromBlock: RECESS.pinnedBlock - 100 });
+  assert.deepEqual(c.failures, []);
+  assert.equal(c.reproduced, true);
+  assert.deepEqual(c.evidence, {
+    era: "swap-evidence", complete: true,
+    notes: ["the cut mid is not bound to a committed pool read (closure opened before this keeper build)"],
+  });
+  const p = checkMarkRound(bundle, r, null, 196, SCORECARD, committedAtS, undefined, { swapEvidenceFromBlock: RECESS.pinnedBlock + 1 });
+  assert.equal(p.reproduced, true);
+  assert.equal(p.evidence.era, "pre-swap-fix");
+  assert.ok(p.evidence.notes[0].includes("before block 75776393") && p.evidence.notes[0].includes("swap lists present but not checked"), p.evidence.notes[0]);
+});

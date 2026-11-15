@@ -404,3 +404,279 @@ test("mark/1 bundles still build and verify exactly as before", () => {
   ], "mark/1's PARAMS shape is unchanged");
   assert.deepEqual(verifyMarkBundleOffline(bundle).failures, []);
 });
+
+// --- deploy 2: swap evidence, by era (W8a) ---------------------------------------------------------------------
+
+import { getAddress } from "ethers";
+import {
+  RECESS as NOV13, ROOTS, inputsFromBundle, leafValue, loadBundle, recessRows, slot0Of, specOf, strictRecessInputs,
+} from "./fixtures/markFixtures.test.ts";
+import type { RecessSymbol } from "./fixtures/markFixtures.test.ts";
+import { swapListDigest } from "./swapEvidence.ts";
+import type { CutRead, SwapEvidenceFields } from "./swapEvidence.ts";
+
+const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
+const strictly = (b: unknown) => verifyMarkBundleOffline(clone(b) as never, { era: "swap-evidence" });
+const has = (xs: string[], s: string) => xs.some((x) => x.includes(s));
+
+/** Rewrite the leaf list itself (drop or add leaves) and re-root, keeping the convenience copy in step. */
+function rerootLeaves(bundle: MarkBundleJson, edit: (leaves: Leaf[], json: Record<string, string>) => Leaf[]) {
+  const json: Record<string, string> = { ...bundle.json };
+  const next = edit([...loadTree(bundle.tree).entries()].map(([, v]: [number, Leaf]) => v), json);
+  const { root, tree } = buildTree(next);
+  const claims = next.filter(([k]) => Number(k) === LeafKind.CLAIM).map(([, , h]) => JSON.parse(json[h]));
+  return { ...bundle, inputRoot: root, tree: tree.dump(), json, marks: claims };
+}
+
+test("legacy fixtures stay reproduced, with notes", () => {
+  const v = verifyMarkBundleOffline(clone(buildMarkRound(inputs()).bundle));
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.failures, []);
+  assert.equal(v.era, "pre-swap-fix", "read at block 71,200,000: a row already on chain");
+  assert.equal(v.evidenceComplete, null);
+  assert.ok(has(v.notes, "swap lists present but not checked"), v.notes.join(" | "));
+  assert.ok(has(v.notes, "swapsDuringClosure=4 but closureSwaps lists 1"), v.notes.join(" | "));
+  assert.ok(has(v.notes, "is not the price after the last committed closing swap"), v.notes.join(" | "));
+  assert.ok(!has(v.notes, "decoded no pool Swap logs"), "E0 is only for empty lists");
+  // Still pre-fix once the era's first block is set (every legacy read block is far below any real cutover).
+  assert.equal(verifyMarkBundleOffline(clone(buildMarkRound(inputs()).bundle), { swapEvidenceFromBlock: 75_776_413 }).era, "pre-swap-fix");
+});
+
+test("the same legacy bundle fails strict mode", () => {
+  const v = strictly(buildMarkRound(inputs()).bundle);
+  assert.equal(v.ok, false);
+  assert.equal(v.era, "swap-evidence");
+  assert.ok(v.failures[0].includes("commits no scan ranges"), v.failures.join(" | "));
+});
+
+test("without swap evidence the swaps leaf is exactly the pre-fix shape: every archived fixture rebuilds to its own root", () => {
+  for (const root of Object.values(ROOTS)) assert.equal(buildMarkRound(inputsFromBundle(loadBundle(root))).root, root);
+});
+
+test("the six holiday rows reproduce from the commit instant, neutrally", () => {
+  for (const [root, fromCut] of [[ROOTS.holiday2Oct, "2026-10-01T01:30:00"], [ROOTS.holiday20Oct, "2026-10-19T01:30:00"]]) {
+    const v = verifyMarkBundleOffline(loadBundle(root));
+    assert.equal(v.ok, true, root);
+    assert.deepEqual(v.failures, []);
+    assert.equal(v.era, "pre-swap-fix");
+    const e6 = v.notes.find((n) => n.includes("reopen re-derived from the commit instant"));
+    assert.ok(e6, v.notes.join(" | "));
+    assert.ok(e6.includes(fromCut), e6);
+    assert.ok(!e6.includes("holiday the issuer"), "E6 asserts no cause");
+    assert.ok(v.notes[0].startsWith("pre-fix row") && v.notes[0].includes("decoded no pool Swap logs"));
+  }
+});
+
+test("the fallback never applies in strict mode", () => {
+  const v = strictly(loadBundle(ROOTS.holiday2Oct));
+  assert.equal(v.ok, false);
+  assert.ok(has(v.failures, "reopen mismatch"), v.failures.join(" | "));
+  assert.ok(!has(v.notes, "reopen re-derived"));
+});
+
+test("the fallback rejects a reopen the commit instant does not give", () => {
+  const i = inputsFromBundle(loadBundle(ROOTS.holiday2Oct));
+  i.closures[0].settleAfterS += 86_400;
+  i.closures[0].venue!.predictedReopenMs += 86_400_000;
+  const v = verifyMarkBundleOffline(clone(buildMarkRound(i).bundle));
+  assert.equal(v.ok, false);
+  assert.ok(has(v.failures, "reopen mismatch"), v.failures.join(" | "));
+  assert.ok(!has(v.notes, "reopen re-derived"));
+});
+
+test("the US pre-fix row is surfaced, not failed", () => {
+  const v = verifyMarkBundleOffline(loadBundle(ROOTS.us9Nov));
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.failures, []);
+  assert.ok(has(v.notes, "pre-fix row"));
+  assert.ok(has(v.notes, "decoded no pool Swap logs"));
+  assert.ok(has(v.notes, "moved -373.9 bp"), v.notes.join(" | "));
+  assert.ok(has(v.notes, "-2.2 bp from the pool mid at the cut block"), v.notes.join(" | "));
+});
+
+test("a strict v2 bundle built from real evidence verifies", () => {
+  const r = buildMarkRound(strictRecessInputs("wXIAOx"));
+  assert.equal(r.marks[0].row.markE18, "3701436175140696810");
+  assert.equal(r.marks[0].row.bandBps, 37);
+  const v = strictly(r.bundle);
+  assert.deepEqual(v.failures, []);
+  assert.equal(v.ok, true);
+  assert.equal(v.evidenceComplete, true);
+  assert.deepEqual(v.notes, ["the cut mid is not bound to a committed pool read (closure opened before this keeper build)"]);
+  // Under the default era (the placeholder: every read block is pre-fix) it is a pre-fix row with lists.
+  const d = verifyMarkBundleOffline(clone(r.bundle));
+  assert.equal(d.ok, true);
+  assert.equal(d.era, "pre-swap-fix");
+  assert.ok(d.notes[0].startsWith("pre-fix row") && d.notes[0].includes("swap lists present but not checked"), d.notes[0]);
+  // And once the era's first block is at or below its read block, it is strict by default.
+  const s = verifyMarkBundleOffline(clone(r.bundle), { swapEvidenceFromBlock: NOV13.pinnedBlock });
+  assert.equal(s.era, "swap-evidence");
+  assert.equal(s.ok, true);
+  // The two other recess rows too: a swap in the cut block only, and nothing traded.
+  for (const sym of ["wTCENTx", "wMEITx"] as RecessSymbol[]) assert.deepEqual(strictly(buildMarkRound(strictRecessInputs(sym)).bundle).failures, [], sym);
+});
+
+/** The wMEITx recess row with a cut read: the pool did not trade, so its pinned slot0 IS the slot0 at the cut. */
+function meitCutRead(): CutRead {
+  return { blockNumber: NOV13.cutBlock, blockHash: "0x" + "ab".repeat(32), blockTimestamp: 1794542157, slot0: slot0Of(loadBundle(ROOTS.recessMEIT), "wMEITx") };
+}
+
+test("a cut read binds midAtCut: the wMEITx round with its cut read verifies with no note", () => {
+  const v = strictly(buildMarkRound(strictRecessInputs("wMEITx", meitCutRead())).bundle);
+  assert.deepEqual(v.failures, []);
+  assert.deepEqual(v.notes, []);
+});
+
+type Closure0 = MarkInputs["closures"][number];
+type Tamper = [id: string, text: string, sym: RecessSymbol, mutate: (i: MarkInputs, c: Closure0, ev: SwapEvidenceFields) => void, cutRead?: boolean];
+
+const XIAO_POOL = "0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417";
+const TCENT_POOL = "0xC89d8b547ceA7CdeAa7474E7a90B6baD01fE992f";
+
+const TAMPERS: Tamper[] = [
+  ["S1", "commits no scan ranges", "wXIAOx", (_i, _c, ev) => { (ev as { evidence: string }).evidence = "curb.scorecard.swaps/1"; }],
+  ["S1 (no v2 keys)", "commits no scan ranges", "wXIAOx", (_i, c) => { delete c.swapEvidence; }],
+  ["S2 pool", "pool", "wXIAOx", (_i, _c, ev) => { ev.pool = TCENT_POOL; }],
+  ["S2 topic0", "topic0", "wXIAOx", (_i, _c, ev) => { ev.topic0 = "0x" + "00".repeat(32); }],
+  ["S3", "closing range", "wXIAOx", (_i, _c, ev) => { ev.closingRange = { fromBlock: NOV13.closingFrom + 1, toBlock: NOV13.cutBlock }; }],
+  ["S4", "closure range", "wXIAOx", (_i, _c, ev) => { ev.closureRange = { fromBlock: NOV13.cutBlock + 1, toBlock: NOV13.pinnedBlock - 1 }; }],
+  ["S5", "gaps", "wXIAOx", (_i, _c, ev) => { ev.gaps = [[75_776_100, 75_776_200]]; }],
+  ["S5 order", "gaps", "wXIAOx", (_i, _c, ev) => { ev.gaps = [[75_776_300, 75_776_310], [75_776_100, 75_776_200]]; ev.complete = false; }],
+  ["S6", "closing swaps", "wXIAOx", (_i, _c, ev) => { ev.closingComplete = false; }],
+  ["S6 order", "closing swaps", "wXIAOx", (_i, c) => { c.closingSwaps = [...c.closingSwaps]; [c.closingSwaps[0], c.closingSwaps[1]] = [c.closingSwaps[1], c.closingSwaps[0]]; }],
+  ["S7", "closure swaps", "wXIAOx", (_i, c, ev) => { const b = c.closureSwaps[5].blockNumber; ev.gaps = [[b, b]]; ev.complete = false; }],
+  ["S8 block", "cut read", "wMEITx", (_i, _c, ev) => { ev.cutRead = { ...ev.cutRead!, blockNumber: NOV13.cutBlock + 1 }; }, true],
+  ["S8 hash", "cut read", "wMEITx", (_i, _c, ev) => { ev.cutBlockHash = "0x" + "cd".repeat(32); }, true],
+  ["S8 slot0", "cut read", "wMEITx", (_i, _c, ev) => { ev.cutRead = { ...ev.cutRead!, slot0: slot0Of(loadBundle(ROOTS.recessMEIT), "wXIAOx") }; }, true],
+  ["S8 counts", "counts", "wXIAOx", (_i, _c, ev) => { ev.counts = { ...ev.counts, closingLogs: ev.counts.closingLogs + 1 }; }],
+  ["S9", "swapsDuringClosure", "wXIAOx", (_i, c) => { c.input = { ...c.input, swapsDuringClosure: c.input.swapsDuringClosure - 1 }; }],
+  ["S10 digest", "digest", "wXIAOx", (_i, c, ev) => { ev.closureDigest = swapListDigest(c.closureSwaps.slice(1)); }],
+  ["S10 omitted", "omitted", "wXIAOx", (_i, _c, ev) => { ev.closureOmitted = { fromIndex: 5000, toIndex: 9999 }; }],
+  ["S11", "closingVwap", "wXIAOx", (_i, c) => { c.input = { ...c.input, closingVwapE18: c.input.closingVwapE18! + 1n }; }],
+  ["S12", "lastPrint", "wXIAOx", (_i, c) => { c.input = { ...c.input, lastPrintE18: c.input.lastPrintE18 + 1n }; }],
+  ["S13", "mid at the cut", "wXIAOx", (_i, c) => { c.input = { ...c.input, midAtCutE18: c.input.midAtCutE18 + 1n }; }],
+  ["S14", "midNow", "wXIAOx", (_i, c, ev) => {
+    const K = c.closureSwaps.slice(0, -1);
+    c.closureSwaps = K;
+    c.input = { ...c.input, swapsDuringClosure: K.length };
+    Object.assign(ev, { closureCount: K.length, counts: { ...ev.counts, closureLogs: K.length }, closureDigest: swapListDigest(K) });
+  }],
+  ["S14 no swap", "midNow", "wMEITx", (_i, c) => { c.input = { ...c.input, midNowE18: c.input.midNowE18 + 1n }; }],
+  ["S15", "slot0", "wXIAOx", (i) => {
+    const want = `slot0:${getAddress(XIAO_POOL)}`;
+    const other = i.chain.results.find((r) => r.label === `slot0:${getAddress(TCENT_POOL)}`)!.returnData;
+    i.chain = { ...i.chain, results: i.chain.results.map((r) => (r.label === want ? { ...r, returnData: other } : r)) };
+  }],
+  ["S16", "venue", "wXIAOx", (_i, c) => { delete c.venue; }],
+  ["S17", "cutBlockHash", "wXIAOx", (_i, _c, ev) => { ev.cutBlockHash = "0x1234"; }],
+  ["S18", "the committed schedule says the market was open at the cut", "wXIAOx", (_i, c) => {
+    c.cutAtMs = Date.parse("2026-11-13T03:52:00Z");
+    c.venue = { ...c.venue!, cutAtMs: c.cutAtMs };
+  }],
+  ["S19", "cut time", "wXIAOx", (_i, c) => { c.venue = { ...c.venue!, cutAtMs: c.venue!.cutAtMs + 1000 }; }],
+  ["S20", "predicted reopen", "wXIAOx", (_i, c) => { c.venue = { ...c.venue!, predictedReopenMs: c.venue!.predictedReopenMs + 1000 }; }],
+  ["S21", "holidaysKept", "wXIAOx", (_i, c) => {
+    c.venue = { ...c.venue!, holidaysKept: [{ startsAt: "2026-11-12T16:00:00.000Z", endsAt: "2026-11-13T16:00:00.000Z", kind: "Closed", firstSeenMs: 1, lastSeenMs: 2 }] };
+  }],
+];
+
+test("each strict check catches its own tamper, and only the evidence checks fail", () => {
+  for (const [id, text, sym, mutate, withCutRead] of TAMPERS) {
+    const i = strictRecessInputs(sym, withCutRead ? meitCutRead() : null);
+    assert.deepEqual(strictly(buildMarkRound(i).bundle).failures, [], `${id}: the unmutated bundle is clean`);
+    mutate(i, i.closures[0], i.closures[0].swapEvidence!);
+    const v = strictly(buildMarkRound(i).bundle);
+    assert.equal(v.ok, false, `${id} was not caught`);
+    assert.ok(has(v.failures, text), `${id}: no failure contains "${text}": ${v.failures.join(" | ")}`);
+    // buildMarkRound keeps the claim consistent with markinput, so nothing but the evidence checks can fail.
+    assert.ok(v.failures.every((f) => f.startsWith("swap evidence for ")), `${id}: ${v.failures.join(" | ")}`);
+  }
+});
+
+test("the swaps leaf's settleAfterS is bound to the claim", () => {
+  const b = buildMarkRound(strictRecessInputs("wXIAOx")).bundle;
+  const w = leafValue(b, LeafKind.CLAIM).wrapper.toLowerCase();
+  const v = strictly(reroot(clone(b), (k, s, x) => (k === LeafKind.FETCH_LOG && s === subjectOf(`swaps:${w}`) ? { ...x, settleAfterS: x.settleAfterS + 1 } : undefined)));
+  assert.equal(v.ok, false);
+  assert.ok(has(v.failures, "settleAfterS"), v.failures.join(" | "));
+});
+
+test("the era fails closed", () => {
+  const b = buildMarkRound(strictRecessInputs("wXIAOx")).bundle;
+  const noRead = rerootLeaves(clone(b), (leaves) => leaves.filter(([k]) => Number(k) !== LeafKind.CHAIN_CALL));
+  const i = strictRecessInputs("wXIAOx");
+  i.chain = { ...i.chain, block: { ...i.chain.block, number: "75776392" as unknown as number } };
+  const stringBlock = buildMarkRound(i).bundle;
+  const twoReads = rerootLeaves(clone(b), (leaves, json) => {
+    const chain = leaves.find(([k]) => Number(k) === LeafKind.CHAIN_CALL)!;
+    const other = { ...JSON.parse(json[chain[2]]), block: { number: 70_000_000, hash: "0x" + "77".repeat(32), timestamp: 1 } };
+    const h = hashJson(other);
+    json[h] = jcs(other);
+    return [...leaves, [LeafKind.CHAIN_CALL, subjectOf(`multicall@${other.block.hash}`), h] as Leaf];
+  });
+  for (const [name, x] of [["no CHAIN_CALL", noRead], ["string block", stringBlock], ["two CHAIN_CALLs", twoReads]] as const) {
+    const v = verifyMarkBundleOffline(clone(x));
+    assert.equal(v.era, "swap-evidence", name);
+    assert.equal(v.ok, false, name);
+    assert.ok(has(v.failures, "pinned chain read"), `${name}: ${v.failures.join(" | ")}`);
+    assert.ok(v.notes.includes("era unknown: checked as swap-evidence"), `${name}: ${v.notes.join(" | ")}`);
+  }
+});
+
+test("block-time drift is a note, never a failure", () => {
+  const i = strictRecessInputs("wXIAOx");
+  i.chain = { ...i.chain, block: { ...i.chain.block, timestamp: i.chain.block.timestamp + 120 } };
+  const v = strictly(buildMarkRound(i).bundle);
+  assert.equal(v.ok, true, v.failures.join(" | "));
+  assert.ok(has(v.notes, "one block per second"), v.notes.join(" | "));
+  assert.ok(has(v.notes, "(+119 s off)"), v.notes.join(" | "));
+});
+
+test("strict notes: gaps, a closing window not committed, a truncated list", () => {
+  const i = strictRecessInputs("wMEITx");
+  const ev = i.closures[0].swapEvidence!;
+  ev.gaps = [[75_774_000, 75_774_999]];
+  ev.complete = false;
+  ev.closingComplete = false;
+  const v = strictly(buildMarkRound(i).bundle);
+  assert.deepEqual(v.failures, []);
+  assert.equal(v.evidenceComplete, false);
+  assert.ok(has(v.notes, "closure scan incomplete: gaps 75774000..75774999"), v.notes.join(" | "));
+  assert.ok(has(v.notes, "closing window not committed"), v.notes.join(" | "));
+});
+
+test("a malformed v2 leaf is a failure, never a throw", () => {
+  const b = buildMarkRound(strictRecessInputs("wXIAOx")).bundle;
+  const w = leafValue(b, LeafKind.CLAIM).wrapper.toLowerCase();
+  const garbage: unknown[] = [
+    { gaps: "x", closingSwaps: null, closureSwaps: [{ blockNumber: "1" }], counts: [], closureOmitted: 5, cutRead: "x" },
+    { closingRange: null, closureRange: [], closureCount: -1, cutBlock: 1.5 },
+    { cutRead: { blockNumber: NOV13.cutBlock, blockHash: "0x" + "ab".repeat(32), blockTimestamp: 1, slot0: "0xzz" }, cutBlockHash: "0x" + "ab".repeat(32) },
+  ];
+  for (const g of garbage) {
+    const x = reroot(clone(b), (k, s, v) => (k === LeafKind.FETCH_LOG && s === subjectOf(`swaps:${w}`) ? { ...v, ...(g as object) } : undefined));
+    const v = strictly(x);
+    assert.equal(v.ok, false, JSON.stringify(g));
+    assert.ok(v.failures.length > 0);
+  }
+});
+
+test("a pre-fix row with garbage lists still verifies (notes are never failures)", () => {
+  const b = buildMarkRound(inputs()).bundle;
+  const w = W.toLowerCase();
+  const x = reroot(clone(b), (k, s, v) => (k === LeafKind.FETCH_LOG && s === subjectOf(`swaps:${w}`) ? { ...v, closingSwaps: [{ nonsense: true }], closureSwaps: "no" } : undefined));
+  const v = verifyMarkBundleOffline(x);
+  assert.deepEqual(v.failures, []);
+  assert.ok(v.notes[0].startsWith("pre-fix row"));
+});
+
+test("several claims in one bundle: each note names its symbol", () => {
+  const i = inputs();
+  const W2 = "0x076CF393E701839FC7a5832D2c68AaFA235682AE";
+  i.specs = [...i.specs, { wrapper: W2, symbol: "XIAOx", pool: XIAO_POOL, equityIsToken0: true, equityDecimals: 18, stableDecimals: 6 }];
+  i.closures = [...i.closures, { ...i.closures[0], wrapper: W2, symbol: "XIAOx", input: { ...i.closures[0].input, wrapper: W2, symbol: "XIAOx" } }];
+  const v = verifyMarkBundleOffline(clone(buildMarkRound(i).bundle));
+  assert.equal(v.ok, true, v.failures.join(" | "));
+  assert.ok(v.notes.some((n) => n.startsWith("TCENTx: pre-fix row")) && v.notes.some((n) => n.startsWith("XIAOx: pre-fix row")), v.notes.join(" | "));
+  void specOf; void recessRows;
+});
