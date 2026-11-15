@@ -28,7 +28,7 @@ import type { PoolSpec, RawSwapLog, SwapRow } from "./pools.ts";
 export type RpcKind = "rate-limit" | "not-yet" | "malformed-request" | "transport" | "rpc";
 export type RpcAnswer<T> =
   | { ok: true; result: T; ms: number }
-  | { ok: false; kind: RpcKind; httpStatus: number; code: number | null; message: string; ms: number };
+  | { ok: false; kind: RpcKind; httpStatus: number; code: number | null; message: string; ms: number; timedOut?: true };
 
 /** Never start a request with less than this left on the caller's deadline. */
 export const MIN_REQUEST_MS = 500;
@@ -46,7 +46,7 @@ export async function rpcRaw<T>(url: string, method: string, params: unknown[], 
                                 fetchImpl: typeof fetch = fetch): Promise<RpcAnswer<T>> {
   const t0 = Date.now();
   const ms = () => Date.now() - t0;
-  const fail = (kind: RpcKind, httpStatus: number, code: number | null, message: string): RpcAnswer<T> =>
+  const fail = (kind: RpcKind, httpStatus: number, code: number | null, message: string): Extract<RpcAnswer<T>, { ok: false }> =>
     ({ ok: false, kind, httpStatus, code, message: message.slice(0, 300), ms: ms() });
   const wait = Math.max(0, Math.floor(timeoutMs));
   const ctrl = new AbortController();
@@ -54,7 +54,7 @@ export async function rpcRaw<T>(url: string, method: string, params: unknown[], 
   const timedOut = new Promise<RpcAnswer<T>>((resolve) => {
     timer = setTimeout(() => {
       ctrl.abort(new Error(`timeout after ${wait} ms`));
-      resolve(fail("transport", 0, null, `${method}: timeout after ${wait} ms`));
+      resolve({ ...fail("transport", 0, null, `${method}: timeout after ${wait} ms`), timedOut: true });
     }, wait);
   });
   const work = (async (): Promise<RpcAnswer<T>> => {
@@ -139,6 +139,11 @@ export interface ScanOptions {
   heads: number[];                         // per endpoint, from readHeads; -1 = unknown (never asked)
   endpointOrder: "first" | "roundRobin";   // roundRobin applies only to chunks ending <= min(known heads) - 200
   now?: () => number; fetchImpl?: typeof fetch;
+  /**
+   * Endpoints (by index) that timed out earlier under the caller's budget: never asked again. scanRange adds every
+   * endpoint that times out; a caller that splits one budget over several calls (fillForCommit) passes one set.
+   */
+  slow?: Set<number>;
 }
 export interface ScanRow extends SwapRow { blockHash: string | null }
 export interface ScanStats {
@@ -199,6 +204,7 @@ export async function scanRange(rpcs: string[], specs: PoolSpec[], from: number,
     if (to < from || want.size === 0) return out;          // never from > to, never an empty address list
     const addresses = [...want.values()].map((w) => w.pool);
     const left = () => o.deadlineMs - (now() - t0);
+    const slow = o.slow ?? new Set<number>();
 
     for (let k = 0, b = from; b <= to; k++, b += LOG_RANGE) {
       if (stats.chunks >= o.maxChunks) { out.stopReason = "chunk-budget"; break; }
@@ -211,16 +217,21 @@ export async function scanRange(rpcs: string[], specs: PoolSpec[], from: number,
       let clean: Answer | null = null;
       let partial: Answer | null = null;
       let outOfTime = false;
-      for (const idx of order) {
-        const head = o.heads[idx];
-        if (!Number.isSafeInteger(head) || head < end) continue;   // HARD RULE: never ask above a reported head
+      // HARD RULE: never ask above a reported head. An endpoint that timed out under this budget is not asked again.
+      const eligible = order.filter((idx) => Number.isSafeInteger(o.heads[idx]) && o.heads[idx] >= end && !slow.has(idx));
+      for (const [n, idx] of eligible.entries()) {
         const budget = left();
         if (budget < MIN_REQUEST_MS) { outOfTime = true; break; }
+        // While another endpoint could still answer this chunk, a request gets about half the time left (at least
+        // MIN_REQUEST_MS): one slow endpoint must not use the budget the other needs.
+        const another = eligible.slice(n + 1).some((j) => !slow.has(j));
+        const timeoutMs = Math.min(MAX_REQUEST_MS, another ? Math.max(MIN_REQUEST_MS, Math.floor(budget / 2)) : budget);
         const url = rpcs[idx];
         const a = await rpcRaw<unknown>(url, "eth_getLogs",
           [{ address: addresses, topics: [SWAP_TOPIC0], fromBlock: hex(b), toBlock: hex(end) }],
-          Math.min(MAX_REQUEST_MS, budget), fetchImpl);
+          timeoutMs, fetchImpl);
         if (!a.ok) {
+          if (a.timedOut) slow.add(idx);
           stats.refusals.push({ endpoint: url, kind: a.kind, code: a.code, message: a.message });
           if (a.kind === "malformed-request") stats.programmingErrors++;
           continue;
@@ -290,11 +301,17 @@ function readAnswer(result: unknown, b: number, end: number, want: Map<string, {
   let unmatched = 0;
   for (const l of result as Array<RawSwapLog & { blockHash?: unknown }>) {
     const w = want.get(lower(l.address));
-    if (!w || !Array.isArray(l.topics) || lower(l.topics[0]) !== SWAP_TOPIC0) { unmatched++; continue; }
-    const ds = newSwapScanStats();
-    const row = decodeSwapLog(l, w.spec, ds);
+    if (!w) { unmatched++; continue; }                             // not a requested pool: cannot be our Swap
     const blockNumber = parseQuantity(l.blockNumber)!;
     const logIndex = parseQuantity(l.logIndex)!;
+    // The request filters on topic0 = Swap, so a log of a requested pool without it is an endpoint fault, never a
+    // valid answer: like an undecodable log, ask the next endpoint, else its block is a hole (never covered).
+    if (!Array.isArray(l.topics) || lower(l.topics[0]) !== SWAP_TOPIC0) {
+      failed.push({ pool: w.pool, blockNumber, logIndex, error: Array.isArray(l.topics) ? `topic0 ${String(l.topics[0]).slice(0, 66)} is not Swap` : "log has no topics" });
+      continue;
+    }
+    const ds = newSwapScanStats();
+    const row = decodeSwapLog(l, w.spec, ds);
     if (!row) {
       failed.push({ pool: w.pool, blockNumber, logIndex, error: ds.undecodable[0]?.error ?? "undecodable" });
       continue;

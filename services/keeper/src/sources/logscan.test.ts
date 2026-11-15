@@ -142,21 +142,51 @@ test("an out-of-chunk block or removed:true rejects that answer and the other en
   assert.deepEqual(r.rows, CLEAN.rows);
 });
 
-test("a foreign address or a wrong topic0 is dropped, the rest of the answer kept", async () => {
+test("a foreign address is dropped, the rest of the answer kept", async () => {
   const calls: Call[] = [];
   const r = await scanRange(RPCS, ALL, FROM, TO, opts(stub((ep, f) => {
     if (f && ep === 0 && Number(f.fromBlock) === FROM) {
       const l = serve(FIXTURE.logs, f);
-      return { body: [...l,
-        { ...l[1], address: "0x000000000000000000000000000000000000dead" },
-        { ...l[2], topics: ["0x" + "11".repeat(32), ...l[2].topics.slice(1)] }] };
+      return { body: [...l, { ...l[1], address: "0x000000000000000000000000000000000000dead" }] };
     }
     return node()(ep, f);
   }, calls)));
-  assert.equal(r.stats.unmatched, 2);
+  assert.equal(r.stats.unmatched, 1);
   assert.ok(calls.every((c) => c.url === RPCS[0]), "no request to endpoint 1");
   assert.deepEqual(r.rows, CLEAN.rows);
   assert.equal(r.stats.anomalies, 0);
+});
+
+// Review F1: the request filters on topic0 = Swap, so a requested pool's log without it is an endpoint fault.
+const XIAO_LOG = FIXTURE.logs.findIndex((l) => l.address.toLowerCase() === XIAO.pool.toLowerCase() && Number(l.logIndex) === 97);
+const garbles: Array<[string, (l: RawLog) => RawLog]> = [
+  ["topics removed", (l) => { const { topics: _t, ...rest } = l; return rest as RawLog; }],
+  ["topic0 garbled", (l) => ({ ...l, topics: ["0x" + "11".repeat(32), ...l.topics.slice(1)] })],
+  ["topics empty", (l) => ({ ...l, topics: [] })],
+];
+const garbled = (g: (l: RawLog) => RawLog) => FIXTURE.logs.map((l, i) => (i === XIAO_LOG ? g(l) : l));
+
+test("a requested pool's log with missing or wrong topics is asked of the other endpoint, never dropped", async () => {
+  for (const [name, g] of garbles) {
+    const calls: Call[] = [];
+    const r = await scanRange(RPCS, ALL, FROM, TO, opts(stub((ep, f) => (ep === 0 ? node(garbled(g)) : node())(ep, f), calls)));
+    assert.equal(r.stats.unmatched, 0, name);
+    assert.equal(r.stats.decodeRetries, 1, name);
+    assert.equal(r.stats.servedBy[RPCS[1]], 1, `${name}: chunk 1 served by endpoint 1`);
+    assert.equal(r.holes.size, 0, name);
+    assert.deepEqual(r.rows, CLEAN.rows, `${name}: wXIAOx keeps all 4 swaps`);
+  }
+});
+
+test("a requested pool's log no endpoint returns with a Swap topic0 is a hole, not a covered block", async () => {
+  for (const [name, g] of garbles) {
+    const r = await scanRange(RPCS, ALL, FROM, TO, opts(stub(node(garbled(g)))));
+    assert.equal(r.servedTo, TO, name);
+    assert.deepEqual(r.holes.get(XIAO.pool), [Number(FIXTURE.logs[XIAO_LOG].blockNumber)], name);
+    assert.equal(r.stats.decodeFailed.length, 1, name);
+    assert.match(r.stats.decodeFailed[0].error, /topic|topics/, name);
+    assert.equal(r.rows.get(XIAO.pool)!.length, 3, name);
+  }
 });
 
 const truncated = (logs: RawLog[]) => logs.map((l, i) => (i === 0 ? { ...l, data: l.data.slice(0, 2 + 64 * 3) } : l));
@@ -195,13 +225,15 @@ test("budgets stop the scan cleanly", async () => {
   const r = await scanRange(RPCS, ALL, FROM, TO, opts(stub(node()), { maxChunks: 1 }));
   assert.equal(r.servedTo, 75773119);
   assert.equal(r.stopReason, "chunk-budget");
-  // Nothing starts with less than 500 ms left: the first chunk takes 800 ms of a 1,200 ms deadline.
+  // Nothing starts with less than 500 ms left. Every answer takes 600 ms; deadline 1,500 ms. Chunk 1: endpoint 0 may
+  // wait 750 ms (half, endpoint 1 could still answer) and is served at 600 ms. Chunk 2: it may wait 500 ms, times
+  // out, and the 400 ms left are too few to ask endpoint 1.
   const calls: Call[] = [];
-  const slow = stub((ep, f) => new Promise((res) => setTimeout(() => res(node()(ep, f)), 800)), calls);
-  const r2 = await scanRange(RPCS, ALL, FROM, TO, opts(slow, { deadlineMs: 1_200 }));
+  const slow = stub((ep, f) => new Promise((res) => setTimeout(() => res(node()(ep, f)), 600)), calls);
+  const r2 = await scanRange(RPCS, ALL, FROM, TO, opts(slow, { deadlineMs: 1_500 }));
   assert.equal(r2.servedTo, 75773119);
   assert.equal(r2.stopReason, "time-budget");
-  assert.equal(calls.length, 1);
+  assert.deepEqual(calls.map((c) => RPCS.indexOf(c.url)), [0, 0]);
 });
 
 test("a hanging request never outlives the deadline", async () => {
@@ -212,6 +244,27 @@ test("a hanging request never outlives the deadline", async () => {
   assert.ok(r.stopReason === "time-budget" || r.stopReason === "unserved", String(r.stopReason));
   assert.equal(r.servedTo, FROM - 1);
   assert.equal(r.stats.refusals[0]?.kind, "transport");
+});
+
+test("a slow first endpoint gets about half the time left, and is not asked again once it timed out (review F2)", async () => {
+  const calls: Call[] = [];
+  const t0 = performance.now();
+  // Endpoint 0 never answers (it honours its abort signal); endpoint 1 answers at once. Before the fix endpoint 0
+  // took min(8 s, time left), the whole budget, and endpoint 1 was never asked.
+  const r = await scanRange(RPCS, ALL, FROM, TO, opts(stub((ep, f) => (ep === 0 ? "hang" : node()(ep, f)), calls), { deadlineMs: 4_000 }));
+  const took = performance.now() - t0;
+  assert.equal(r.servedTo, TO);
+  assert.equal(r.stopReason, null);
+  assert.deepEqual(calls.map((c) => RPCS.indexOf(c.url)), [0, 1, 1], "chunk 1: 0 then 1; chunk 2: 1 only");
+  assert.ok(took > 1_900 && took < 2_600, `endpoint 0 was given about half of 4 s (took ${Math.round(took)} ms)`);
+  assert.deepEqual(r.rows, CLEAN.rows);
+  // With only one eligible endpoint the request may take all the time left, still bounded by the deadline.
+  const one: Call[] = [];
+  const t1 = performance.now();
+  const r1 = await scanRange(RPCS, ALL, FROM, TO, opts(stub(() => "hang", one), { deadlineMs: 1_200, heads: [HIGH, -1] }));
+  assert.equal(one.length, 1);
+  assert.ok(performance.now() - t1 < 1_300);
+  assert.equal(r1.stopReason, "unserved", "the only endpoint timed out and is not asked again");
 });
 
 test("round-robin for historical chunks", async () => {
