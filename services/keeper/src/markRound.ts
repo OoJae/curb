@@ -42,6 +42,16 @@ export interface VenueEvidence {
   limitsPerPeriod: PeriodLimits;
   schedule: ExchangeSchedule["schedule"];
   predictedReopenMs: number;
+  /**
+   * Deploy 2 (venueTime.ts): holiday entries this closure's ledger kept although the issuer's latest list no
+   * longer has them. They are inside `schedule.holidays`; this says which ones did not come from the latest
+   * body, so `exchangeBodyHash` (which names that body) stays honest. Absent on older rows.
+   */
+  holidaysKept?: Array<{ startsAt: string; endsAt: string; kind: string; firstSeenMs: number; lastSeenMs: number }>;
+  /** When the latest venue body was read. */
+  latestReadAtMs?: number;
+  /** When this closure's holiday ledger started (later than the cut for a closure open at a keeper start). */
+  holidayLedgerSinceMs?: number;
 }
 
 export interface MarkInputs {
