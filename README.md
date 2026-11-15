@@ -344,7 +344,7 @@ Curb never holds or moves the raw rebasing token. If you compare a wrapper price
   Scorecard grades the pool five minutes after the reopen, a thin pool moves little in the fifteen minutes from the
   commit to that read, and over the whole record the replayed mark is still slightly worse than the last print
   (57.79 bp). One committed row (wTCENTx, reopen 28 Oct 01:30Z) was never graded: the keeper's settle transaction
-  reverted and was not retried before the six-hour window closed. Five minutes after a reopen, when the Scorecard
+  reverted and was not retried before the six-hour window closed ([D-17](docs/DECISIONS.md)). Five minutes after a reopen, when the Scorecard
   reads it, a pool can lag the real market (wTCENTx's pool −13 bp against 0700.HK −114 bp on 25 Sep).
 - **Every demo counterparty is a team wallet, and says so.** The first paid call (24 Sep, $0.01) was the team's
   Agentic Wallet paying the team's revenue wallet. It proves the payment rail, not demand. The W3/W4 demos run
@@ -366,7 +366,9 @@ Curb never holds or moves the raw rebasing token. If you compare a wrapper price
   30 minutes are not marked. A closure whose start the keeper did not witness is not marked.
 - **Published errata.** The first seven MarketClock rounds (14 Sep) overstated capacity 100x. Regimes were
   correct throughout ([D-7](docs/DECISIONS.md)). Every Scorecard row before block ⟨N⟩ was marked without the
-  pools' swaps ([D-15](docs/DECISIONS.md)).
+  pools' swaps ([D-15](docs/DECISIONS.md)). Six rows of the 2 Oct and 20 Oct holiday closures commit a holiday list
+  that no longer held the holiday, so `curb-verify` 0.1.0 prints `NOT REPRODUCED` for them; their marks and reopen
+  times are right ([D-16](docs/DECISIONS.md)). One row of 28 Oct was never graded ([D-17](docs/DECISIONS.md)).
 - **Receipts are unsigned.** Round bundles, mark bundles and host B's witness statements are public and
   write-once in `archive.curb.markets`. The paid API's receipts are not: they are only as trustworthy as the API
   host's disk.

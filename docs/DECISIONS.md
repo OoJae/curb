@@ -484,6 +484,13 @@ the same instant or catches us.
 closure, weekends and holidays, plus the US names' own closures. Holidays need no special case: they
 fall out of `sessionAt()`, so a Friday close predicts Monday and 30 Sep predicts 2 Oct.
 
+> **Note, ⟨DATE_D16⟩ (D-16).** "Holidays need no special case" was true of the prediction and not of the evidence.
+> The keeper predicted 2 Oct from 30 Sep, and 20 Oct from 16 Oct, correctly. But each bundle committed the holiday list
+> as it stood ten minutes before the reopen, after the issuer had dropped the holiday the closure spanned, so a
+> verifier walking that schedule from the cut "gets a different instant" for six rows that are not wrong, and
+> `curb-verify` 0.1.0 prints `NOT REPRODUCED` for them. From block ⟨N⟩ the committed schedule keeps every holiday seen
+> during the closure.
+
 **A closure whose start was not witnessed is not marked.** After a restart the keeper has no observed
 last print, and "the mid at the cut" would really be a mid from the middle of the closure. The row
 would quietly claim a baseline it never saw. One fewer row is the correct answer.
@@ -996,3 +1003,121 @@ keeper). From block ⟨N⟩ an empty swap list in a complete bundle means the po
 100-block steps (the public RPC refuses wider ranges). The bundles: `https://archive.curb.markets/marks/<inputRoot>.json`,
 whose `swaps:<wrapper>` leaves are empty and whose `markinput` leaves carry `midAtCutE18` and `midNowE18`. The decode:
 `services/keeper/src/sources/pools.test.ts`.
+
+---
+
+## D-16 — Six holiday rows that the published verifier cannot re-derive (⟨DATE_D16⟩)
+
+**Status: FIXED for rows read from block ⟨N⟩ (deploy 2, ⟨DATE⟩). The six rows stay on chain unchanged. Their marks,
+reopen times and grades are right; their evidence does not show the holiday that justifies the reopen time.**
+
+**What happened.** The keeper predicts a row's reopen by walking the venue schedule forward from the present, every
+tick, and commits the venue schedule as it last read it, ten minutes before the reopen. The issuer's holiday list
+looks forward only: it drops a holiday once it has passed. The XHKG entry for 1 Oct (`2026-09-30T16:00Z` to
+`2026-10-01T16:00Z`) was last seen in a bundle on 30 Sep at 04:50Z and was gone by the 2 Oct 01:20Z commits, whose
+schedule lists 19 Oct and 24–25 Dec. A verifier walks the committed schedule from the committed cut. For the 30 Sep
+cut that walk reopens on Thu 1 Oct at 01:30Z, a day before the committed reopen of Fri 2 Oct at 01:30Z, and the check
+fails. The 16 Oct closure failed the same way over the 19 Oct holiday. Read from the 20 Oct bundle, the issuer already
+lists 24–25 Dec and 31 Dec, so without a fix the same would happen there.
+
+| row | asset | cut (UTC) | reopen committed | commit block | input root | graded against the last print (Curb / last print, bp) |
+|---|---|---|---|---|---|---|
+| 41 | wTCENTx | 30 Sep 07:55:31 | 2 Oct 01:30 | 72,134,989 | `0xfa506041…` | win (25 / 26) |
+| 42 | wXIAOx | 30 Sep 07:55:31 | 2 Oct 01:30 | 72,134,994 | `0x3dafc1b6…` | loss (125 / 113) |
+| 43 | wMEITx | 30 Sep 07:55:31 | 2 Oct 01:30 | 72,134,999 | `0xd81c7e07…` | loss (61 / 52) |
+| 113 | wTCENTx | 16 Oct 07:55:37 | 20 Oct 01:30 | 73,690,190 | `0xf1da8c47…` | win (16 / 92) |
+| 114 | wXIAOx | 16 Oct 07:55:37 | 20 Oct 01:30 | 73,690,194 | `0x4db753ad…` | loss (154 / 55) |
+| 115 | wMEITx | 16 Oct 07:55:37 | 20 Oct 01:30 | 73,690,199 | `0x67daecc7…` | win (130 / 214) |
+
+What `curb-verify` (0.1.0, and this repository before deploy 2) prints for each of them, here for row 41:
+
+    FAIL    reopen mismatch for wTCENTx: schedule gives 1790818200, row settles after 1790904600
+    NOT REPRODUCED
+
+The marks re-derive; only the reopen check fails. This was not caused by the swap defect of D-15, and nothing about it
+changes the grades: the rows settled after the reopens they predicted, and the contract read the reopen price itself.
+
+**What this record said that was wrong.** D-10: "Holidays need no special case … 30 Sep predicts 2 Oct" (true of the
+prediction, not of the evidence), and "A verifier re-runs the same pure function and either gets the same instant or
+catches us": for these six rows it gets a different instant without anything being wrong. D-10 carries a note.
+
+**The fix (deploy 2).** Each open closure keeps a holiday ledger: the union of every holiday list the keeper read
+during the closure. An entry the issuer drops after its start, or less than 24 hours before it, is kept, because that
+is the forward-only pruning above. An entry withdrawn more than 24 hours before its start is dropped, because that is
+a correction (the issuer withdrew two mistaken XHKG entries 7 to 10 days ahead on 18 Sept, D-4). The schedule a row is
+predicted with and committed with is the latest read plus the kept entries, and the venue leaf says which entries were
+kept and since when the ledger ran (`holidaysKept`, `latestReadAtMs`, `holidayLedgerSinceMs`). Before signing, the
+keeper walks the committed schedule from the cut and refuses to commit unless it gives the committed reopen. With the
+pruned entry added back, the cut-walk of the 2 Oct and 20 Oct bundles gives `2026-10-02T01:30:00Z` and
+`2026-10-20T01:30:00Z`, their committed reopens.
+
+It had to be running before the Thanksgiving closure (cut Thu 26 Nov 00:55Z, reopen Fri 27 Nov 01:00Z): walked from
+that cut, the US schedule gives 27 Nov with the entry and 26 Nov without it, so a row committed after the issuer
+pruned it would have failed like these six. The 27 Nov early close (rows of Mon 30 Nov) is the second case.
+
+One risk is accepted with the 24-hour margin: an entry the issuer withdraws on the day itself (a typhoon closure
+cancelled hours ahead, say) is kept, the predicted reopen is a day late, capacity returns first, and that closure gets
+no row. The keeper pages it as `closure-missed`.
+
+**What the verifier says now about the six.** For rows read before block ⟨N⟩ only, when the walk from the cut misses
+the committed reopen, the verifier in this repository walks the same committed schedule from the commit instant,
+which is how the keeper computed the reopen. It accepts the row if, and only if, the walk from the cut lands before
+the commit and the walk from the commit gives the committed reopen, and it prints `REPRODUCED` with a note that never
+changes the exit code:
+
+    EVIDENCE reopen re-derived from the commit instant: walked from the cut, the committed schedule gives
+             2026-10-01T01:30:00.000Z, before the commit at <iso>; walked from the commit instant it gives the
+             committed settleAfter 2026-10-02T01:30:00.000Z, which is how the keeper computed it. The bundle
+             does not show whether a holiday dropped from the issuer's list or the closure was not continuous.
+
+The note is worded to say only what the bytes show. The rule cannot prove the market stayed shut from the cut to the
+commit: a keeper that was down across a reopen would write exactly such a row, and the rule would accept it. That is
+why the cause for these six is stated here, from the issuer's lists, and not by the tool. Over the 233 bundles archived
+by 14 Nov the rule fires on exactly these six roots. Before the repository is pushed and before npm 0.2.0, the set of
+rows that get this note must be exactly these six; the run over every row before block ⟨N⟩ gave: ⟨E6_GATE⟩. Rows read
+from block ⟨N⟩ never get the fallback. `npx -y curb-verify` (0.1.0) keeps printing `NOT REPRODUCED` for the six until
+0.2.0 is published.
+
+---
+
+## D-17 — One row was never graded: a reverted settle was counted as settled (28 Oct 2026, disclosed ⟨DATE_D16⟩)
+
+**Status: FIXED from deploy 2 (⟨DATE⟩): the keeper reads the status of every transaction it sends. Row 151 can never
+be graded. It stays on chain, committed and unsettled, and `skill()` counts 232 settled of the 233 rows committed by
+14 Nov.**
+
+**What happened.** Row 151: wTCENTx, the 27→28 Oct overnight closure, committed 28 Oct at 01:20:09Z (block 74,381,373,
+tx `0x5b77fe39…28ff`, id `0xfc88b5db…2ecf`), mark 49.9415 against a last print of 49.2183, reopen 01:30:00Z. The
+keeper's settle,
+[`0x287805da…9af5`](https://www.oklink.com/xlayer/tx/0x287805daf1ad38c0cfc6a89d53f75857475c53dd825b86db7e7c065f55ca9af5),
+was mined in block 74,382,270 at 01:35:06Z with status 0: reverted, 118,167 gas, no logs. Replayed at the block before
+it, `settle(id)` reverts `PriceDeviates(-237294, -237347)`: the pool's spot sat 53 ticks from its 120-second average,
+and the guard allows 50. The keeper had simulated the call a block or two earlier, when it would have succeeded; a
+swap at 01:35:02Z moved the spot before its transaction landed. The other two rows of that closure settled in blocks
+74,382,272 and 74,382,274.
+
+`settlePass` did not read the receipt's status. It logged the row as settled, dropped it from the rows it owed, and
+never retried. A settle at any moment from 01:35:11Z to about 07:25Z would have succeeded. The six-hour window closed
+at 07:35:00Z (`settleAfter` + 300 s + 6 h), and `settle` now reverts `TooLate`. The keeper's `/healthz` counted 218
+settles since its 24 Sept boot; the chain holds 217. The commit path had the same omission; no commit has reverted
+(every commitment the keeper recorded exists on chain).
+
+Not a hidden win: had the settle read the pool at the spot of that moment (tick −237294, price 49.5422), the mark's
+error would have been about 81 bp and the last print's about 65 bp. That is an estimate; a settle at any later moment
+would have read a different price.
+
+**What the public surfaces said.** The MCP tool labels the row `expired-unsettled`, which is right. /scorecard counts
+it as waiting ("1 more mark is committed and waiting for the reopen", and the row as pending), which is wrong, and the
+paid discount curve reports it in `pendingSettlement`. The README's Honest limits names the row.
+
+**The fix (deploy 2).** Every transaction goes through one send path that reads the receipt: a reverted settle stays
+owed and is retried on later ticks inside its window, and pages if it is still owed an hour after it became settleable;
+a window that closes moves the row to an `expired` list and pages; a reverted commit pages; a replaced transaction that
+mines instead of the keeper's own is never taken for it. Each tick the keeper also checks its books against Scorecard
+and pages when they disagree. The guard trips on about 3% of settles (6 of 218 since 24 Sept, 5 of them caught in
+simulation), because the keeper settles on the first tick after the reopen plus 300 s, when the pool is busiest; a
+retry inside the window removes the loss.
+
+**What the verifier says.** `curb-verify tx` on the commit transaction of such a row prints `not settled; settle
+window closed <iso> (TooLate: this row can no longer be graded)` (in this repository after deploy 2, on npm from
+0.2.0). No row is re-committed or re-marked; row 151 keeps its mark and has no grade.
