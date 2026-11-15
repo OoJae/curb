@@ -48,11 +48,17 @@ import { nextCapReturnMs } from "./reopen.ts";
 import type { PeriodLimits } from "./reopen.ts";
 import type { ExchangeSchedule, TradingObject } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
-import { Sender, RevertedInSimulation, PendingUnresolved, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
+import { Sender, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
 import { publisherFromEnv } from "./publish.ts";
 import type { PublishHealth } from "./publish.ts";
 import { createAlarms, ALARM_FLUSH_BUDGET_MS } from "./alarms.ts";
 import type { AlarmsHealth } from "./alarms.ts";
+import { sendOnce, maxNonceRpc, commitAttempt, canSettle, settleStep, settleOutcome, settleLateAlarm, settleWindow } from "./outcome.ts";
+import {
+  reconcileCalls, readChainBook, reconcile, applyCorrections, recordSettled, recordExpired, rowFromRecent, pruneRecent,
+  closureCountCall, decodeClosureCount, RECONCILE_DEADLINE_MS,
+} from "./reconcile.ts";
+import type { SettledRef, ExpiredRef } from "./reconcile.ts";
 
 const MODES = ["shadow", "live"];
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -228,6 +234,8 @@ interface Committed {
   onChain: boolean;
   txHash: string;
   atMs: number;
+  /** Receipt block of the commit, when known (deploy 2, W5); absent after a ClosureExists proof. */
+  block?: number;
 }
 
 /**
@@ -286,6 +294,10 @@ interface State {
   pending: Closure[];
   /** Written by saveState (deploy 2, W6); never required on load. */
   v?: 2;
+  /** W5: rows this keeper settled (or saw settled), kept 24 h and re-read on chain by the reconciliation. */
+  recent?: SettledRef[];
+  /** W5: rows whose settle window closed unsettled, or that Scorecard does not know (last 50). */
+  expired?: ExpiredRef[];
 }
 
 const statePath = () => join(CFG.dataDir, "keeper-state.json");
@@ -592,15 +604,10 @@ export function backfillBusy(
 }
 
 /**
- * Something that changes whenever commitPass or settlePass sends: compared before and after them to tell whether
- * this tick sent a transaction. (W5 may replace it with the passes' own report of a send.)
+ * Transactions handed to the Sender since boot (W5): every commit and settle goes through `sendTx`, so comparing
+ * the count before and after the two passes says whether this tick sent anything (the backfill's busy rule).
  */
-function sendMark(state: State, health: Health): string {
-  let attempts = 0;
-  for (const c of Object.values(state.open)) attempts += c.plan?.attempts ?? 0;
-  for (const c of state.pending) attempts += c.settleAttempts ?? 0;
-  return `${health.committedTotal}:${health.settledTotal}:${attempts}`;
-}
+const sendWatch = { sends: 0 };
 
 /** Closures the backfill fills (W2.7): tracked closures, due earliest first. */
 function backfillEligible(state: State, assets: Asset[]): Array<Tracked & { dueMs: number }> {
@@ -829,7 +836,9 @@ async function main() {
     wallet: key.wallet, rpcs: CFG.rpcs, chainId: CFG.chainId, dbPath: join(CFG.dataDir, "keeper-outbox.sqlite"),
     errorInterface: scorecardAbi,
     dataSuffix: CFG.dataSuffix,
-    rpc: async (url, method, params) => {
+    // W5 (KM 6.4): the pending nonce is the HIGHEST count any endpoint reports within 1.5 s of the first answer,
+    // never the first endpoint's (a lagging one twice returned an old count). Every other method passes through.
+    rpc: maxNonceRpc(async (url, method, params) => {
       const res = await fetch(url, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
@@ -838,7 +847,7 @@ async function main() {
       const j = (await res.json()) as { result?: unknown; error?: { message: string; data?: string } };
       if (j.error) throw Object.assign(new Error(j.error.message), { data: j.error.data });
       return j.result;
-    },
+    }, CFG.rpcs),
   }) : null;
 
   const client = new XStocksClient();
@@ -887,6 +896,7 @@ async function tick(
     ]),
     { label: "isKeeper", target: CFG.scorecard, callData: scorecardAbi.encodeFunctionData("isKeeper", [health.address]) },
     balanceCall(health.address),
+    closureCountCall(CFG.scorecard),   // W5: /healthz only (no arithmetic on it, CO m2)
   ];
   const chain = await multicallAt(block, calls, CFG.rpcs);
   const { snapshot: poolSnap, reads } = assets.length > 0
@@ -899,9 +909,18 @@ async function tick(
   // an empty return must read as "not a keeper", never as a decode crash that kills the tick.
   const ik = chain.results.find((r) => r.label === "isKeeper");
   health.isKeeper = decodeOr(false, () => Boolean(scorecardAbi.decodeFunctionResult("isKeeper", ik!.returnData)[0]), ik);
-  const bal = decodeBalance(chain.results[chain.results.length - 1]);
-  health.balanceWei = bal === null ? undefined : bal.toString();
-  health.armed = CFG.mode === "live" && health.isKeeper && (bal ?? 0n) >= CFG.lowBalanceWei;
+  // W5: found by label (the multicall no longer ends with it), and an unreadable balance keeps the last one that
+  // decoded instead of reading as 0. Settles decide on that same last known balance (canSettle).
+  const balRes = chain.results.find((r) => r.label === balanceCall(health.address).label);
+  const bal = decodeOr<bigint | null>(null, () => decodeBalance(balRes!), balRes);
+  if (bal !== null) { onchainWatch.lastBalanceWei = bal; health.balanceWei = bal.toString(); }
+  const knownBal = onchainWatch.lastBalanceWei;
+  health.armed = CFG.mode === "live" && health.isKeeper && knownBal !== null && knownBal >= CFG.lowBalanceWei;
+  onchainWatch.closureCount = decodeClosureCount(chain.results.find((r) => r.label === "closureCount")) ?? onchainWatch.closureCount;
+
+  // 5. (W5) The books against Scorecard at the pinned block: its own multicall, raced against 5 s, in its own try.
+  // It runs before both passes and never blocks a send: on a timeout or an error nothing is corrected this tick.
+  await reconcileStep(state, block, nowMs);
 
   // Refresh the issuer/venue inputs on their own slow clock; they change on the order of days.
   for (const a of assets) {
@@ -1032,13 +1051,14 @@ async function tick(
     catch (e) { log("swap-ingest-error", { error: String(e) }); }
   }
 
-  const sendsBefore = sendMark(state, health);
+  const sendsBefore = sendWatch.sends;
   await commitPass(state, assets, venues, poolSnap, reads, sender, health, digest, nowMs);
-  await settlePass(state, sender, health, nowS, nowMs);
-  const sentThisTick = sendMark(state, health) !== sendsBefore;
+  await settlePass(state, sender, health, block.timestamp, nowMs);
+  const sentThisTick = sendWatch.sends !== sendsBefore;
 
   health.open = Object.keys(state.open).length;
   health.pending = state.pending.length;
+  health.onchain = onchainHealth(state, block.timestamp);
 
   // 12. The end-of-tick write (W6). A failure pages and fails the tick, but only after this tick's alarms are out.
   let persistError: unknown = null;
@@ -1087,6 +1107,159 @@ async function tick(
     await backfillStep(state, assets, heads, busy, tickStartMs);
     swapHealth(state, health, block.number);
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// transactions and the books (W5): the one send path, commit outcomes, settles, reconciliation
+// ---------------------------------------------------------------------------------------------
+
+/** In-memory W5 state. Nothing here is persisted. */
+const onchainWatch = {
+  /** The last balance read that decoded (null until one does): `armed` and canSettle use it. */
+  lastBalanceWei: null as bigint | null,
+  /** Scorecard.closureCount() at the last tick that read it; shown on /healthz, never compared. */
+  closureCount: null as number | null,
+  /** The reconciliation's rotation through `recent` and its two-read streaks (reconcile.ts). */
+  cursor: { recent: 0 },
+  streak: new Map<string, number>(),
+  lastOkBlock: null as number | null,
+  skipped: 0,
+};
+
+type SendPort = Pick<Sender, "prepare" | "broadcastAndWait">;
+
+/** The keeper's only send path (W5.2): every commit and settle goes through sendOnce, which reads the receipt status. */
+function sendTx(sender: SendPort, to: string, data: string, meta: { id: string; kind: "commit" | "settle"; targetMs: number }) {
+  sendWatch.sends++;
+  return sendOnce(sender, to, data, meta);
+}
+
+/**
+ * W5.3: everything that happens to a closure after its frozen plan is on disk (W6). The ONE caller of
+ * commitAttempt, and so the one place a commit is signed. commitPass (W4b's loop) calls it once per due closure
+ * per tick, after `saveState` returned with `c.plan` set:
+ *
+ *     await sendCommit(c, { sender, health, nowMs, lastChance, save: () => saveState(state) });
+ *
+ * - `CFG.mode !== "live"`: the shadow branch, as HEAD (log shadow-mark; committed {onChain: false}).
+ * - live without a Sender, or not armed (isKeeper and LOW_BALANCE_WEI): nothing is recorded; log
+ *   commit-held-unarmed and sev-1 keeper:commit-held-unarmed:<symbol>; retried next tick. (HEAD turned this into a
+ *   permanent shadow mark, SFS B1.)
+ * - otherwise commitAttempt: attempts++ then `d.save()` before the send (an attempt that cannot be saved sends
+ *   nothing), sendOnce, the outcome applied to `c.committed` (only status 1 of our transaction, an earlier attempt of
+ *   the same plan, or a ClosureExists refusal records it), `d.save()` again if the books changed.
+ * `lastChance`: the next tick would fall below COMMIT_FLOOR_S, so an unresolved transaction pages sev-1, not sev-2.
+ * It never throws for an outcome; alarms are queued, never awaited. `cfg` exists for tests only.
+ */
+export async function sendCommit(
+  c: Closure,
+  d: { sender: SendPort | null; health: Health; nowMs: number; lastChance: boolean; save(): void },
+  cfg: { mode: string; scorecard: string } = CFG,
+): Promise<void> {
+  const plan = c.plan;
+  if (!plan || c.committed) return;
+  if (cfg.mode !== "live") {
+    log("shadow-mark", {
+      symbol: c.symbol, id: plan.id, root: plan.root,
+      settleAfter: new Date(plan.settleAfterS * 1000).toISOString(),
+      mark: plan.markE18, band: plan.bandBps,
+    });
+    c.committed = { id: plan.id, root: plan.root, settleAfterS: plan.settleAfterS, markE18: plan.markE18, bandBps: plan.bandBps, onChain: false, txHash: "", atMs: d.nowMs };
+    return;
+  }
+  if (!d.health.armed || !d.sender) {
+    log("commit-held-unarmed", { symbol: c.symbol, root: plan.root, sender: d.sender !== null, isKeeper: d.health.isKeeper, balanceWei: d.health.balanceWei ?? null });
+    raise(1, `keeper:commit-held-unarmed:${c.symbol}`,
+      `commit for ${c.symbol} is due but the keeper cannot send it (sender=${d.sender !== null}, isKeeper=${d.health.isKeeper}, balanceWei=${d.health.balanceWei ?? "unknown"}); retrying every tick`);
+    return;
+  }
+  const sender = d.sender;
+  const r = await commitAttempt(c as Closure & { plan: CommitPlan }, {
+    save: d.save, nowMs: d.nowMs, lastChance: d.lastChance,
+    send: (id) => sendTx(sender, cfg.scorecard, plan.data, { id, kind: "commit", targetMs: d.nowMs }),
+  });
+  log(r.event, r.fields);
+  if (r.alarm) raise(...r.alarm);
+  if (r.saveError) log("state-persist-failed", { where: "commit-outcome", symbol: c.symbol, error: r.saveError });
+  const recorded = c.committed as Committed | undefined;   // set by commitAttempt
+  if (r.result === "committed" && recorded) {
+    d.health.committedTotal++;
+    d.health.lastCommit = { symbol: c.symbol, id: plan.id, root: plan.root, mark: plan.markE18, tx: recorded.txHash, block: recorded.block ?? null };
+  }
+}
+
+function dropPending(state: State, c: Closure): void {
+  state.pending = state.pending.filter((x) => x !== c);
+}
+
+/** A row the chain has settled (by us or anyone): out of `pending`, into `recent`. */
+function settleRow(state: State, c: Closure & { committed: Committed }, how: { tx: string; block?: number; by: "keeper" | "chain"; atMs: number }): void {
+  dropPending(state, c);
+  c.settled = { txHash: how.tx, atMs: how.atMs };
+  recordSettled(state, c, how);
+  // (W3) the settled row's swap file is deleted here: store.remove(c), wrapped (it can throw on EIO).
+}
+
+/** A row that can no longer be settled: out of `pending`, into `expired` (last 50). */
+function expireRow(state: State, c: Closure & { committed: Committed }, reason: ExpiredRef["reason"], atMs: number): void {
+  dropPending(state, c);
+  recordExpired(state, c, reason, atMs);
+  // (W3) the expired row's swap file is deleted here: store.remove(c), wrapped (it can throw on EIO).
+}
+
+/** A recent row the chain shows unsettled, back in `pending` with its attempt numbering (reconcile.ts). */
+function closureFromRecent(ref: SettledRef): Closure {
+  const r = rowFromRecent(ref);
+  return {
+    wrapper: r.wrapper, symbol: r.symbol, cutAtMs: 0, cutBlock: r.cutBlock, midAtCutE18: "0", preCutMidE18: null,
+    witnessedCut: true, reopenMs: null, swapCount: 0, settleAttempts: r.settleAttempts,
+    committed: {
+      id: r.committed.id, root: r.committed.root, settleAfterS: r.committed.settleAfterS, markE18: "", bandBps: 0,
+      onChain: true, txHash: r.committed.txHash, atMs: r.committed.atMs,
+      ...(r.committed.block !== undefined ? { block: r.committed.block } : {}),
+    },
+  };
+}
+
+/**
+ * Tick step 5 (W5.5): settlements(id) for every owed and recent row, commitments(id) for every open closure recorded
+ * on chain, at the pinned block, raced against 5 s. Corrections need two consecutive disagreeing reads and a read at
+ * least 10 blocks past a known receipt. Never throws; a skipped reconciliation corrects nothing.
+ */
+async function reconcileStep(state: State, block: { number: number; hash: string; timestamp: number; rpc: string }, nowMs: number): Promise<void> {
+  try {
+    pruneRecent(state, nowMs);
+    if (CFG.scorecard === ZERO) return;
+    const calls = reconcileCalls(state, CFG.scorecard, onchainWatch.cursor);
+    if (calls.length > 0) {
+      const book = await readChainBook(block, calls, CFG.rpcs, RECONCILE_DEADLINE_MS);
+      const corr = reconcile(state, book, block.timestamp, CFG.settleDelayS, onchainWatch.streak);
+      const rep = applyCorrections(state, corr, {
+        nowMs,
+        canRetryCommit: (c) => c.plan !== undefined && Math.floor((c.plan.settleAfterS * 1000 - Date.now()) / 1000) >= CFG.commitFloorS,
+        revive: closureFromRecent,
+        remove: (c) => store.remove(c),
+        raise, log,
+      });
+      if (rep.settled + rep.reopened + rep.expired + rep.uncommitted + rep.commitLost > 0) log("reconciled", { block: block.number, ...rep });
+    }
+    onchainWatch.lastOkBlock = block.number;
+  } catch (e) {
+    onchainWatch.skipped++;
+    log("reconcile-skipped", { block: block.number, error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** /healthz `onchain` (W10.3): Scorecard's own count beside the keeper's books. */
+function onchainHealth(state: State, chainNowS: number): NonNullable<Health["onchain"]> {
+  const pastDue = state.pending
+    .filter((c) => c.committed?.onChain && chainNowS > settleWindow(c.committed.settleAfterS, CFG.settleDelayS).readyAt + 600)
+    .map((c) => c.committed!.id);
+  return {
+    closureCount: onchainWatch.closureCount, pending: state.pending.length, pendingPastDue: pastDue.slice(0, 10),
+    recent: state.recent?.length ?? 0, expired: state.expired?.length ?? 0,
+    reconcile: { lastOkBlock: onchainWatch.lastOkBlock, skipped: onchainWatch.skipped },
+  };
 }
 
 async function commitPass(
@@ -1146,54 +1319,10 @@ async function commitPass(
         continue;
       }
     }
-    const plan = c.plan;
-    // (W5) Everything from here to the end of the loop body becomes `await sendCommit(c, {...})`.
-
-    if (!health.armed || !sender) {
-      log("shadow-mark", {
-        symbol: c.symbol, id: plan.id, root: plan.root,
-        settleAfter: new Date(plan.settleAfterS * 1000).toISOString(),
-        mark: plan.markE18, band: plan.bandBps,
-      });
-      c.committed = { id: plan.id, root: plan.root, settleAfterS: plan.settleAfterS, markE18: plan.markE18, bandBps: plan.bandBps, onChain: false, txHash: "", atMs: nowMs };
-      continue;
-    }
-
-    // W6: the attempt number is on disk before its outbox id is signed, so a restart never re-uses an id and a
-    // signature orphaned by a crash ('unsent' in the outbox) is never broadcast. Unsaved: undo, send nothing.
-    plan.attempts++;
-    try { saveState(state); }
-    catch (e) {
-      plan.attempts--;
-      log("state-persist-failed", { where: "attempt", symbol: c.symbol, attempt: plan.attempts + 1, error: String(e) });
-      raise(1, "keeper:state-persist-failed", `cannot persist commit attempt ${plan.attempts + 1} for ${c.symbol}; nothing was sent: ${String(e)}`);
-      continue;
-    }
-    try {
-      const receipt = await sender.broadcastAndWait(
-        await sender.prepare(CFG.scorecard, plan.data, { id: `commit:${plan.root}:${plan.attempts}`, kind: "commit", targetMs: nowMs }));
-      c.committed = { id: plan.id, root: plan.root, settleAfterS: plan.settleAfterS, markE18: plan.markE18, bandBps: plan.bandBps, onChain: true, txHash: receipt.hash, atMs: nowMs };
-      health.committedTotal++;
-      health.lastCommit = { symbol: c.symbol, id: plan.id, root: plan.root, mark: plan.markE18, tx: receipt.hash, block: receipt.blockNumber };
-      log("committed", {
-        symbol: c.symbol, id: plan.id, root: plan.root,
-        settleAfter: new Date(plan.settleAfterS * 1000).toISOString(),
-        mark: plan.markE18, band: plan.bandBps, tx: receipt.hash, block: receipt.blockNumber,
-      });
-    } catch (e) {
-      const reason = e instanceof RevertedInSimulation ? e.reason : "";
-      if (/ClosureExists/i.test(reason)) {
-        // The contract refusing a duplicate is proof our earlier attempt mined.
-        c.committed = { id: plan.id, root: plan.root, settleAfterS: plan.settleAfterS, markE18: plan.markE18, bandBps: plan.bandBps, onChain: true, txHash: "", atMs: nowMs };
-        log("commit-already-onchain", { symbol: c.symbol, id: plan.id, root: plan.root });
-        continue;
-      }
-      const msg = e instanceof RevertedInSimulation ? `refused: ${reason}`
-        : e instanceof PendingUnresolved ? e.message
-        : e instanceof Error ? e.message : String(e);
-      log("commit-failed", { symbol: c.symbol, root: plan.root, attempt: plan.attempts, error: msg });
-      raise(1, `keeper:commit-failed:${c.symbol}:${c.cutBlock}`, `commit for ${c.symbol} failed: ${msg}`);
-    }
+    // W5.3: everything after the saved plan is sendCommit's: shadow, held-unarmed, or one commitAttempt.
+    // (W4b) keeps this call and computes lastChance from the previous tick's duration; until then, one tick ahead.
+    const lastChance = toReopenS - CFG.tickMs / 1000 < CFG.commitFloorS;
+    await sendCommit(c, { sender, health, nowMs, lastChance, save: () => saveState(state) });
   }
 }
 
@@ -1300,41 +1429,85 @@ async function buildPlan(
     };
 }
 
-async function settlePass(state: State, sender: Sender | null, health: Health, nowS: number, nowMs: number) {
-  const still: Closure[] = [];
-  for (const c of state.pending) {
-    if (!c.committed || c.settled) continue;
-    const settleAfterS = c.committed.settleAfterS;
-    if (nowS < settleAfterS + CFG.settleDelayS) { still.push(c); continue; }
-    if (!health.armed || !sender || !c.committed.onChain) { still.push(c); continue; }
-    c.settleAttempts = (c.settleAttempts ?? 0) + 1;
+/**
+ * W5.4: settle every row this keeper owes, on chain time (`chainNowS` is the pinned block's timestamp: Scorecard
+ * compares block.timestamp, not the VPS clock). Each row is isolated: a throw keeps that row and moves on.
+ * - Sent only inside [readyAt, deadline - 60] (readyAt = settleAfter + SETTLE_DELAY, deadline = readyAt +
+ *   SETTLE_WINDOW) and only when canSettle: live, a Sender, the last known balance >= 0.0001 OKB. No isKeeper:
+ *   settle is permissionless (CO m6). The attempt counter is saved first; if that save fails the settle still goes
+ *   out (settle is idempotent on chain, and the next attempt number is new either way).
+ * - Only a status-1 receipt of OUR settle, or of an earlier attempt of the same row that a replacement superseded,
+ *   settles a row. A status-0 receipt (row 151: PriceDeviates on chain) keeps it owed, and the next tick retries.
+ * - Refused AlreadySettled: settled by the chain. TooLate, or past deadline - 60: expired, sev-1. UnknownClosure:
+ *   expired as commit-lost, sev-1. NoPriceSource: kept, sev-1. Anything else: kept, retried.
+ * - Still owed an hour after readyAt: sev-1 keeper:settle-late:<id> (5 of the 6 hours are left for a person).
+ */
+async function settlePass(state: State, sender: Sender | null, health: Health, chainNowS: number, nowMs: number): Promise<void> {
+  await settleRows(state, {
+    mode: CFG.mode, scorecard: CFG.scorecard, settleDelayS: CFG.settleDelayS, sender, health,
+    balanceWei: onchainWatch.lastBalanceWei, chainNowS, nowMs, save: () => saveState(state), raise, log,
+  });
+}
+
+/** settlePass with its configuration and effects passed in (exported for the W5 tests). */
+export async function settleRows(
+  state: State,
+  d: {
+    mode: string; scorecard: string; settleDelayS: number; sender: SendPort | null;
+    health: Pick<Health, "settledTotal" | "lastSettle">; balanceWei: bigint | null; chainNowS: number; nowMs: number;
+    save(): void; raise(sev: 1 | 2, key: string, message: string): void; log(event: string, fields?: Record<string, unknown>): void;
+  },
+): Promise<void> {
+  const { chainNowS, nowMs } = d;
+  const can = canSettle(d.mode, d.sender !== null, d.balanceWei);
+  for (const c of [...state.pending]) {
     try {
-      // A sender id distinct from the commit's, and distinct per attempt: the outbox is keyed on it.
-      const receipt = await sender.broadcastAndWait(
-        await sender.prepare(CFG.scorecard, scorecardAbi.encodeFunctionData("settle", [c.committed.id]),
-          { id: `settle:${c.committed.root}:${c.settleAttempts}`, kind: "settle", targetMs: nowMs }));
-      c.settled = { txHash: receipt.hash, atMs: nowMs };
-      health.settledTotal++;
-      health.lastSettle = { symbol: c.symbol, id: c.committed.id, tx: receipt.hash, block: receipt.blockNumber };
-      log("settled", { symbol: c.symbol, id: c.committed.id, tx: receipt.hash, block: receipt.blockNumber });
-    } catch (e) {
-      const reason = e instanceof RevertedInSimulation ? e.reason : "";
-      if (/AlreadySettled/i.test(reason)) {
-        // settle() is permissionless: someone else graded the row, which is the design working.
-        c.settled = { txHash: "", atMs: nowMs };
-        log("settled-by-other", { symbol: c.symbol, id: c.committed.id });
+      if (!c.committed || c.settled) { dropPending(state, c); continue; }   // as HEAD: nothing left to settle
+      const owed = c as Closure & { committed: Committed };
+      const row = { symbol: c.symbol, committed: owed.committed };
+      const step = settleStep(row, chainNowS, d.settleDelayS, can);
+      if (step.action === "drop-shadow") {
+        dropPending(state, c);
+        d.log("shadow-row-dropped", { symbol: c.symbol, id: owed.committed.id });
         continue;
       }
-      const msg = e instanceof RevertedInSimulation ? `refused: ${reason}` : e instanceof Error ? e.message : String(e);
-      log("settle-retry", { symbol: c.symbol, id: c.committed.id, error: msg });
-      still.push(c);
-      // settle() is permissionless, so a row that stays unsettled is not lost -- but it is ours to notice.
-      if (nowS > settleAfterS + 3 * 3600) {
-        raise(1, `keeper:settle-stuck:${c.committed.id}`, `row ${c.committed.id} (${c.symbol}) unsettled 3h after its reopen: ${msg}`);
+      if (step.action === "expire") {
+        expireRow(state, owed, step.reason, nowMs);
+        d.log("settle-expired", { symbol: c.symbol, id: owed.committed.id, reason: step.reason });
+        d.raise(...step.alarm);
+        continue;
       }
+      if (step.action === "send" && d.sender) {
+        c.settleAttempts = (c.settleAttempts ?? 0) + 1;
+        const attempt = c.settleAttempts;
+        try { d.save(); }
+        catch (e) { d.log("settle-counter-unsaved", { symbol: c.symbol, id: owed.committed.id, attempt, error: String(e) }); }
+        // A sender id distinct from the commit's, and distinct per attempt: the outbox is keyed on it.
+        const o = await sendTx(d.sender, d.scorecard, scorecardAbi.encodeFunctionData("settle", [owed.committed.id]),
+          { id: `settle:${owed.committed.root}:${attempt}`, kind: "settle", targetMs: nowMs });
+        const v = settleOutcome(o, row, attempt);
+        d.log(v.event, v.fields);
+        if (v.books === "settled") {
+          settleRow(state, owed, { tx: v.tx, block: v.block, by: v.by, atMs: nowMs });
+          if (v.by === "keeper") {
+            d.health.settledTotal++;
+            d.health.lastSettle = { symbol: c.symbol, id: owed.committed.id, tx: v.tx, block: v.block ?? null };
+          }
+          continue;
+        }
+        if (v.books === "expire") {
+          expireRow(state, owed, v.reason, nowMs);
+          d.raise(...v.alarm);
+          continue;
+        }
+        if (v.alarm) d.raise(...v.alarm);
+      }
+      const late = settleLateAlarm(row, chainNowS, d.settleDelayS);
+      if (late) d.raise(...late);
+    } catch (e) {
+      d.log("settle-error", { symbol: c.symbol, id: c.committed?.id ?? null, error: e instanceof Error ? e.message : String(e) });
     }
   }
-  state.pending = still;
 }
 
 function startHttp(health: Health) {

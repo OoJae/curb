@@ -16,11 +16,14 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
-import { Wallet } from "ethers";
+import { Wallet, Transaction, Interface } from "ethers";
 import {
   loadConfig, attributionHealth, clockSkewStep, archiveStep, CLOCK_SKEW_MAX_S, ARCHIVE_BACKLOG_MS, backfillBusy,
+  sendCommit, settleRows,
 } from "./main.ts";
 import { Sender } from "./tx/sender.ts";
+import type { RpcFn } from "./tx/sender.ts";
+import { scorecardErrors } from "./outcome.ts";
 
 const MAIN = fileURLToPath(new URL("./main.ts", import.meta.url));
 const BUILDER_SUFFIX = "0x6464377535306e636b74356537323966100080218021802180218021802180218021";
@@ -454,4 +457,242 @@ test("W2: a tick is busy inside a commit window, a settle window, or after a sen
   assert.equal(busy([], [row(nowS - 300 - 601)]), false);
   assert.equal(busy([], [row(nowS - 300, { settled: { txHash: "0x" } })]), false);
   assert.equal(busy([], [], true), true, "a transaction was sent this tick");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W5 (transaction outcomes, settles, reconciliation) wired into main.ts.
+// ---------------------------------------------------------------------------------------------
+
+const SCORECARD_ADDR = "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f";
+const ROW151_ID = "0xfc88b5dbe6d0ab024e18027980626b2c97165f387c85159bbd111bf5c6122ecf";
+const ROW151_SETTLE_AFTER = 1_793_151_000;                  // 28 Oct 2026 01:30:00Z; readyAt 01:35:00Z
+const settleIface = new Interface(["function settle(bytes32 id)"]);
+
+/** The keeper's real Sender over a mock chain; `receipt()` and `revert()` decide what the chain says. */
+function chainHarness(o: { receipt: () => { status: string; blockNumber: string; gasUsed: string } | null; revert?: () => string | null }) {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-w5-"));
+  const clock = { t: 1_000_000 };
+  const sent: string[] = [];
+  const rpc: RpcFn = async (_url, method, params) => {
+    switch (method) {
+      case "eth_call": { const d = o.revert?.() ?? null; if (d) throw Object.assign(new Error("execution reverted"), { data: d }); return "0x"; }
+      case "eth_estimateGas": return "0x" + (118_167).toString(16);
+      case "eth_getBlockByNumber": return { baseFeePerGas: "0x1312d00" };
+      case "eth_getTransactionCount": return "0x7";
+      case "eth_sendRawTransaction": sent.push(Transaction.from(params[0] as string).hash!); return sent.at(-1);
+      case "eth_getTransactionReceipt": return o.receipt();
+      case "eth_getTransactionByHash": return { hash: params[0] };
+      default: throw new Error(`unexpected ${method}`);
+    }
+  };
+  const sender = new Sender({
+    wallet: new Wallet("0x" + "4c".repeat(32)), rpcs: ["https://a"], chainId: 196, dbPath: join(dir, "outbox.sqlite"),
+    rpc, now: () => clock.t, sleep: async (ms) => { clock.t += ms; }, errorInterface: scorecardErrors,
+  });
+  return { sender, sent, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+function pendingRow151() {
+  return {
+    wrapper: "0x41333Df9E7639188BBfca5522dC4844398Af9f9E", symbol: "wTCENTx", cutAtMs: 0, cutBlock: 74_370_000,
+    midAtCutE18: "1", preCutMidE18: "1", witnessedCut: true, reopenMs: ROW151_SETTLE_AFTER * 1000, swapCount: 0,
+    committed: { id: ROW151_ID, root: "0x" + "51".repeat(32), settleAfterS: ROW151_SETTLE_AFTER, markE18: "1", bandBps: 1, onChain: true, txHash: "0xc0", atMs: 0 },
+  };
+}
+
+function settleDeps(sender: unknown, chainNowS: number, over: Record<string, unknown> = {}) {
+  const alarms: Array<[number, string, string]> = [];
+  const events: string[] = [];
+  const health = { settledTotal: 0 } as { settledTotal: number; lastSettle?: Record<string, unknown> };
+  let saves = 0;
+  const d = {
+    mode: "live", scorecard: SCORECARD_ADDR, settleDelayS: 300, sender, health, balanceWei: 10n ** 16n, chainNowS,
+    nowMs: chainNowS * 1000, save: () => { saves++; }, raise: (s: 1 | 2, k: string, m: string) => { alarms.push([s, k, m]); },
+    log: (e: string) => { events.push(e); }, ...over,
+  };
+  return { d: d as never, alarms, events, health, saves: () => saves };
+}
+
+test("W5: a settle mined with status 0 (row 151, PriceDeviates on chain) is NOT settled; the next tick settles it", async () => {
+  let status = "0x0";
+  const h = chainHarness({ receipt: () => ({ status, blockNumber: "0x46efbbe", gasUsed: "0x1cd97" }) });
+  const row = pendingRow151();
+  const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [row], recent: [], expired: [] } as never as {
+    pending: unknown[]; recent: Array<{ id: string; tx: string; block?: number }>; expired: unknown[];
+  };
+  const t1 = settleDeps(h.sender, 1_793_151_306);            // 01:35:06Z, the minute row 151's settle reverted
+  await settleRows(state as never, t1.d);
+  assert.equal(h.sent.length, 1, "the settle was sent");
+  assert.equal(state.pending.length, 1, "status 0 keeps the row owed");
+  assert.equal(state.recent.length, 0);
+  assert.equal(t1.health.settledTotal, 0, "never counted as settled");
+  assert.deepEqual(t1.events, ["settle-reverted"]);
+  assert.deepEqual(t1.alarms.map((a) => a.slice(0, 2)), [[2, `keeper:settle-reverted:${ROW151_ID}`]]);
+  assert.equal(t1.saves(), 1, "the attempt counter is saved before the send");
+  status = "0x1";
+  const t2 = settleDeps(h.sender, 1_793_151_336);            // the next tick
+  await settleRows(state as never, t2.d);
+  assert.equal(h.sent.length, 2);
+  assert.equal(state.pending.length, 0);
+  assert.deepEqual(state.recent.map((r) => [r.id, r.tx, r.block]), [[ROW151_ID, h.sent[1], 74_382_270]]);
+  assert.equal(t2.health.settledTotal, 1);
+  assert.deepEqual(t2.events, ["settled"]);
+  h.cleanup();
+});
+
+test("W5: a refused settle simulation sends nothing and keeps the row; AlreadySettled settles it without a send", async () => {
+  let revert: string | null = scorecardErrors.encodeErrorResult("PriceDeviates", [-237294, -237347]);
+  const h = chainHarness({ receipt: () => ({ status: "0x1", blockNumber: "0x1", gasUsed: "0x1" }), revert: () => revert });
+  const row = pendingRow151();
+  const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [row], recent: [], expired: [] } as never as { pending: unknown[]; recent: unknown[] };
+  const t1 = settleDeps(h.sender, 1_793_151_306);
+  await settleRows(state as never, t1.d);
+  assert.equal(h.sent.length, 0);
+  assert.equal(state.pending.length, 1);
+  assert.deepEqual(t1.events, ["settle-retry"]);
+  revert = scorecardErrors.encodeErrorResult("AlreadySettled", [ROW151_ID]);
+  const t2 = settleDeps(h.sender, 1_793_151_336);
+  await settleRows(state as never, t2.d);
+  assert.equal(h.sent.length, 0);
+  assert.deepEqual([state.pending.length, state.recent.length, t2.health.settledTotal], [0, 1, 0]);
+  assert.deepEqual(t2.events, ["settled-by-other"]);
+  h.cleanup();
+});
+
+test("W5: settles keep to Scorecard's window and need gas, not isKeeper", async () => {
+  const h = chainHarness({ receipt: () => ({ status: "0x1", blockNumber: "0x1", gasUsed: "0x1" }) });
+  const mk = () => ({ lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [pendingRow151()], recent: [], expired: [] } as never as { pending: unknown[]; expired: Array<{ id: string; reason: string }> });
+  const readyAt = ROW151_SETTLE_AFTER + 300, deadline = readyAt + 21_600;
+  // One second early: kept, nothing sent.
+  let s = mk();
+  await settleRows(s as never, settleDeps(h.sender, readyAt - 1).d);
+  assert.deepEqual([h.sent.length, s.pending.length], [0, 1]);
+  // Underfunded or unknown balance, or shadow mode: kept, nothing sent; an hour after readyAt it pages.
+  for (const over of [{ balanceWei: 10n ** 14n - 1n }, { balanceWei: null }, { mode: "shadow" }, { sender: null }]) {
+    s = mk();
+    const t = settleDeps(over.sender === null ? null : h.sender, readyAt + 3_601, over);
+    await settleRows(s as never, t.d);
+    assert.deepEqual([h.sent.length, s.pending.length], [0, 1], JSON.stringify(over, (_, v) => (typeof v === "bigint" ? String(v) : v)));
+    assert.deepEqual(t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:settle-late:${ROW151_ID}`]]);
+  }
+  // Past deadline - 60: expired, sev-1, never sent.
+  s = mk();
+  const t = settleDeps(h.sender, deadline - 59);
+  await settleRows(s as never, t.d);
+  assert.deepEqual([h.sent.length, s.pending.length], [0, 0]);
+  assert.deepEqual(s.expired.map((e) => [e.id, e.reason]), [[ROW151_ID, "window-closed"]]);
+  assert.deepEqual(t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:settle-expired:${ROW151_ID}`]]);
+  // Inside the window with gas: sent (the health object carries no isKeeper at all).
+  s = mk();
+  await settleRows(s as never, settleDeps(h.sender, deadline - 60).d);
+  assert.deepEqual([h.sent.length, s.pending.length], [1, 0]);
+  h.cleanup();
+});
+
+test("W5: a commit mined with status 0 is not recorded; status 1 is, with its block", async () => {
+  let status = "0x0";
+  const h = chainHarness({ receipt: () => ({ status, blockNumber: "0x48434c0", gasUsed: "0x5000" }) });
+  const closure = (): Record<string, unknown> => ({
+    wrapper: "0x41333Df9E7639188BBfca5522dC4844398Af9f9E", symbol: "wTCENTx", cutAtMs: 0, cutBlock: 75_773_120,
+    midAtCutE18: "1", preCutMidE18: "1", witnessedCut: true, reopenMs: 1, swapCount: 0,
+    plan: { root: "0x" + "11".repeat(32), id: "0x" + "22".repeat(32), settleAfterS: 1, markE18: "1", bandBps: 1, data: "0x8ed83271" + "ab".repeat(32), attempts: 0 },
+  });
+  const health = { armed: true, isKeeper: true, committedTotal: 0 } as Record<string, unknown>;
+  let saves = 0;
+  const d = { sender: h.sender, health: health as never, nowMs: 1, lastChance: false, save: () => { saves++; } };
+  const c = closure();
+  await sendCommit(c as never, d, { mode: "live", scorecard: SCORECARD_ADDR });
+  assert.equal(c.committed, undefined, "a reverted commit records nothing");
+  assert.equal((c.plan as { attempts: number }).attempts, 1);
+  assert.equal(saves, 1, "the attempt was saved before the send; nothing after (no books changed)");
+  assert.equal(health.committedTotal, 0);
+  status = "0x1";
+  await sendCommit(c as never, d, { mode: "live", scorecard: SCORECARD_ADDR });
+  const rec = c.committed as unknown as { onChain: boolean; block: number };
+  assert.deepEqual([rec.onChain, rec.block], [true, 75_773_120]);
+  assert.equal(health.committedTotal, 1);
+  assert.equal(h.sent.length, 2);
+  // Committed closures are never sent again.
+  await sendCommit(c as never, d, { mode: "live", scorecard: SCORECARD_ADDR });
+  assert.equal(h.sent.length, 2);
+  h.cleanup();
+});
+
+test("W5: the shadow branch requires CFG.mode !== \"live\"; live but unarmed holds the commit and records nothing", async () => {
+  const mk = (): Record<string, unknown> => ({
+    wrapper: "0x41333Df9E7639188BBfca5522dC4844398Af9f9E", symbol: "wTCENTx", cutAtMs: 0, cutBlock: 1, midAtCutE18: "1",
+    preCutMidE18: "1", witnessedCut: true, reopenMs: 1, swapCount: 0,
+    plan: { root: "0x" + "11".repeat(32), id: "0x" + "22".repeat(32), settleAfterS: 1, markE18: "1", bandBps: 1, data: "0x", attempts: 0 },
+  });
+  const d = (armed: boolean, sender: unknown) => ({ sender: sender as never, health: { armed, isKeeper: armed, committedTotal: 0 } as never, nowMs: 5, lastChance: false, save: () => {} });
+  const live = { mode: "live", scorecard: SCORECARD_ADDR };
+  for (const [armed, sender] of [[false, {}], [true, null]] as const) {
+    const c = mk();
+    await sendCommit(c as never, d(armed, sender), live);
+    assert.equal(c.committed, undefined, "SFS B1: never a permanent shadow mark in live mode");
+    assert.equal((c.plan as { attempts: number }).attempts, 0, "nothing attempted");
+  }
+  const c = mk();
+  await sendCommit(c as never, d(false, null), { mode: "shadow", scorecard: SCORECARD_ADDR });
+  assert.deepEqual([(c.committed as { onChain: boolean }).onChain, (c.committed as { atMs: number }).atMs], [false, 5]);
+  const body = fnBody(SRC(), "export async function sendCommit(");
+  assert.ok(body.indexOf('if (cfg.mode !== "live") {') < body.indexOf('log("shadow-mark"'));
+  assert.match(body, /raise\(1, `keeper:commit-held-unarmed:\$\{c\.symbol\}`/);
+  assert.equal(SRC().split('log("shadow-mark"').length - 1, 1, "the shadow branch exists only in sendCommit");
+});
+
+test("W5: no .broadcastAndWait( in main.ts; every send goes through sendOnce", () => {
+  const src = SRC();
+  assert.doesNotMatch(src, /\.broadcastAndWait\(/);
+  assert.doesNotMatch(src, /\.prepare\(CFG\.scorecard/);
+  assert.equal(src.split("sendOnce(").length - 1, 1, "one call, in sendTx");
+  assert.match(fnBody(src, "function sendTx("), /sendWatch\.sends\+\+;\n\s*return sendOnce\(sender, to, data, meta\);/);
+  // The backfill's busy rule reads the passes' own send count.
+  const tick = fnBody(src, "async function tick(");
+  assert.match(tick, /const sendsBefore = sendWatch\.sends;\n\s*await commitPass\([^\n]*\n\s*await settlePass\([^\n]*\n\s*const sentThisTick = sendWatch\.sends !== sendsBefore;/);
+});
+
+test("W5: the balance is found by balanceCall(health.address).label and chain.results[chain.results.length - 1] is gone", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.doesNotMatch(SRC(), /chain\.results\[chain\.results\.length - 1\]/);
+  assert.match(tick, /chain\.results\.find\(\(r\) => r\.label === balanceCall\(health\.address\)\.label\)/);
+  // An unreadable balance keeps the last one that decoded instead of reading as 0.
+  assert.match(tick, /if \(bal !== null\) \{ onchainWatch\.lastBalanceWei = bal;/);
+  assert.match(tick, /health\.armed = CFG\.mode === "live" && health\.isKeeper && knownBal !== null && knownBal >= CFG\.lowBalanceWei;/);
+  assert.match(tick, /closureCountCall\(CFG\.scorecard\),/);
+});
+
+test("W5: the Sender is built with rpc: maxNonceRpc(", () => {
+  assert.match(fnBody(SRC(), "async function main()"), /rpc: maxNonceRpc\(async \(url, method, params\) => \{[^]*?\}, CFG\.rpcs\),/);
+});
+
+test("W5: sendCommit is the only caller of commitAttempt(", () => {
+  const src = SRC();
+  assert.equal(src.split("commitAttempt(").length - 1, 1);
+  assert.ok(fnBody(src, "export async function sendCommit(").includes("commitAttempt("));
+  const cp = fnBody(src, "async function commitPass(");
+  assert.match(cp, /await sendCommit\(c, \{ sender, health, nowMs, lastChance, save: \(\) => saveState\(state\) \}\);/);
+});
+
+test("W5: settlePass decides with canSettle( and does not read health.isKeeper", () => {
+  const src = SRC();
+  const pass = fnBody(src, "async function settlePass(") + fnBody(src, "export async function settleRows(");
+  assert.match(pass, /canSettle\(d\.mode, d\.sender !== null, d\.balanceWei\)/);
+  assert.match(pass, /balanceWei: onchainWatch\.lastBalanceWei, chainNowS/);
+  assert.doesNotMatch(pass, /isKeeper|\.armed/);
+  // Chain time, not the VPS clock.
+  assert.match(fnBody(src, "async function tick("), /await settlePass\(state, sender, health, block\.timestamp, nowMs\);/);
+});
+
+test("W5: reconcile runs before commitPass( and settlePass( inside its own try", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const rec = tick.indexOf("await reconcileStep(state, block, nowMs);");
+  assert.ok(rec > 0 && rec < tick.indexOf("await commitPass(") && rec < tick.indexOf("await settlePass("));
+  const step = fnBody(src, "async function reconcileStep(");
+  const tryAt = step.indexOf("try {");
+  assert.ok(tryAt > 0 && tryAt < step.indexOf("readChainBook("));
+  assert.match(step, /readChainBook\(block, calls, CFG\.rpcs, RECONCILE_DEADLINE_MS\)/);
+  assert.match(step, /\} catch \(e\) \{\n\s*onchainWatch\.skipped\+\+;\n\s*log\("reconcile-skipped"/);
+  assert.match(step, /revive: closureFromRecent,/);
 });
