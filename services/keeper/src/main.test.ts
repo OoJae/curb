@@ -930,3 +930,219 @@ test("W7: Thanksgiving-shaped: a holiday listed at the cut and pruned before the
   const strict = verifyMarkBundleOffline(JSON.parse(JSON.stringify(buildMarkRound(i).bundle)), { era: "swap-evidence" });
   assert.ok(!strict.failures.some((f) => /reopen|venue|cut time|predicted reopen|holidaysKept|open at the cut/.test(f)), strict.failures.join(" | "));
 });
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W4b (the commitPass loop and buildPlan).
+// ---------------------------------------------------------------------------------------------
+import { mock } from "node:test";
+import { mkdirSync, readdirSync } from "node:fs";
+import { commitTiming, closureId } from "./main.ts";
+import { RECESS, RECESS_ROOT_OF, recessRows, slot0Of } from "./fixtures/markFixtures.test.ts";
+import type { RecessSymbol } from "./fixtures/markFixtures.test.ts";
+
+test("W4b: venue checks run before any network call in buildPlan", () => {
+  const bp = fnBody(SRC(), "export async function buildPlan(");
+  const ve = bp.indexOf("venueEvidenceFor(");
+  assert.ok(ve > 0 && ve < bp.indexOf("fillForCommit("));
+  assert.doesNotMatch(bp.slice(0, ve), /await /, "nothing is awaited before the venue checks");
+  assert.match(bp, /const ve = venueEvidenceFor\(c, venue, nowMs, settleAfterS\);/);
+  assert.match(bp, /if \(ve\.kind === "defer"\) \{\n\s*if \(ve\.reopenMs !== null\) c\.reopenMs = ve\.reopenMs;/);
+  assert.match(bp, /venue: ve\.evidence,/, "the committed venue evidence is venueEvidenceFor's");
+});
+
+test("W4b: strict self-check before evidence is persisted", () => {
+  const src = SRC();
+  const bp = fnBody(src, "export async function buildPlan(");
+  const order = ["fillForCommit(", "assembleSwapEvidence(", "verifyMarkBundleOffline(", "persistOnce(", "publisher.enqueue("].map((n) => [n, bp.indexOf(n)] as const);
+  for (const [n, i] of order) assert.ok(i > 0, `${n} in buildPlan`);
+  for (let k = 1; k < order.length; k++) assert.ok(order[k - 1][1] < order[k][1], `${order[k - 1][0]} before ${order[k][0]}`);
+  assert.match(bp, /verifyMarkBundleOffline\(JSON\.parse\(JSON\.stringify\(round\.bundle\)\), \{ era: "swap-evidence" \}\)/);
+  assert.match(bp, /if \(!check\.ok\) \{[^]*?return undefined;/);
+  for (const gone of ["swapsInRange(", "fetchClosingWindow(", "blockHashOf(", "readSwapFile("]) assert.equal(src.includes(gone), false, gone);
+  // The fill is bounded, and a closure file that cannot be read is treated as uncovered, never as an empty pool.
+  assert.match(bp, /maxChunks: 20,\n\s*deadlineMs: Math\.min\(10_000, Math\.max\(2_000, CFG\.tickMs - \(Date\.now\(\) - t\.tickStartMs\) - 5_000\)\)/);
+  assert.match(bp, /let ranges: Array<\[number, number\]> = \[\];\n\s*try \{\n\s*const file = store\.read\(c, pinnedBlock\);/);
+});
+
+test("W4b: the plan is on disk before the first attempt", () => {
+  const src = SRC();
+  const cp = fnBody(src, "async function commitPass(");
+  const set = cp.indexOf("c.plan = built;");
+  const save = cp.indexOf("saveState(state)", set);
+  const send = cp.indexOf("sendCommit(", save);
+  assert.ok(set > 0 && save > set && send > save);
+  assert.equal(cp.split("buildPlan(").length - 1, 1);
+  assert.match(cp, /if \(!c\.plan\) \{\n\s*const built = await buildPlan\(/, "buildPlan( only inside if (!c.plan)");
+  const sc = fnBody(src, "export async function sendCommit(");
+  assert.ok(sc.includes("commitAttempt("));
+  assert.ok(!sc.includes("broadcastAndWait("));
+});
+
+test("W4b: closures are planned earliest reopen first, each with its own clock and try", () => {
+  const cp = fnBody(SRC(), "async function commitPass(");
+  const sort = cp.indexOf(".sort(");
+  const loop = cp.indexOf("for (const w of order) {");
+  assert.ok(sort > 0 && loop > sort, ".sort( precedes the loop");
+  const body = cp.slice(loop);
+  assert.match(body, /^for \(const w of order\) \{\n\s*const c = state\.open\[w\];\n\s*try \{/, "the loop body is one try");
+  assert.ok(body.indexOf("Date.now()") > 0, "a clock per closure");
+  assert.match(body, /\} catch \(e\) \{\n\s*log\("plan-error"[^\n]*\n\s*raise\(2, `keeper:plan-error:\$\{c\.symbol\}`/);
+  assert.match(cp, /const due = \(c: Closure\) => \(c\.plan \? c\.plan\.settleAfterS \* 1000 : c\.reopenMs \?\? Number\.POSITIVE_INFINITY\);/);
+  assert.match(cp, /const toReopenS = Math\.floor\(\(due\(c\) - nowMs\) \/ 1000\);/);
+});
+
+test("W4b: alarms are never awaited in commitPass or buildPlan", () => {
+  for (const fn of ["async function commitPass(", "export async function buildPlan("]) {
+    const body = fnBody(SRC(), fn);
+    assert.doesNotMatch(body, /await raise\(|await alarms\./, fn);
+  }
+});
+
+test("W4b: the must-commit point and the last chance, per closure", () => {
+  const cfg = { tickMs: 30_000, commitFloorS: 120 };
+  // Default 30 s ticks: stop waiting for data at T-390 s; the last tick that can still send is above T-150 s.
+  assert.deepEqual(commitTiming(390, 0, cfg), { nextTickS: 30, mustCommit: false, lastChance: false });
+  assert.deepEqual(commitTiming(389, 0, cfg), { nextTickS: 30, mustCommit: true, lastChance: false });
+  assert.equal(commitTiming(150, 0, cfg).lastChance, false);
+  assert.equal(commitTiming(149, 0, cfg).lastChance, true);
+  // A slow previous tick moves both earlier.
+  assert.equal(commitTiming(414, 45, cfg).nextTickS, 55);
+  assert.equal(commitTiming(414, 45, cfg).mustCommit, true);
+  assert.equal(commitTiming(415, 45, cfg).mustCommit, false);
+  const cp = fnBody(SRC(), "async function commitPass(");
+  assert.match(cp, /const \{ mustCommit, lastChance \} = commitTiming\(toReopenS, t\.lastTickS, CFG\);/);
+  assert.match(cp, /await buildPlan\(c, a, venue, assets, poolSnap, read\.priceE18, digest, \{ \.\.\.t, nowMs, mustCommit \}\)/);
+  // The main loop hands the tick its own start and the previous tick's duration.
+  const main = fnBody(SRC(), "async function main()");
+  assert.match(main, /await tick\(state, assets, venues, client, sender, health, digest, \{ tickStartMs: tickStart, lastTickS \}\);/);
+  assert.match(main, /lastTickS = \(Date\.now\(\) - tickStart\) \/ 1000;/);
+});
+
+test("W4b: the only refusals in buildPlan are the schedule's and D2's; a degraded row pages and is committed", () => {
+  const bp = fnBody(SRC(), "export async function buildPlan(");
+  assert.equal(bp.split('.kind === "refuse"').length - 1, 2, "venueEvidenceFor's (I10/I11) and assembleSwapEvidence's (D2)");
+  assert.match(bp, /raise\(1, `keeper:closing-window-incomplete:\$\{c\.symbol\}`/);
+  assert.match(bp, /raise\(ev\.degraded\.includes\("closure-inconsistent"\) \? 1 : 2, `keeper:swap-coverage-incomplete:\$\{c\.symbol\}`/);
+  // Block-time drift pages and never stops the plan.
+  const drift = bp.slice(bp.indexOf("const driftS"), bp.indexOf("// 5."));
+  assert.match(drift, /raise\(1, `keeper:block-time-drift:\$\{c\.symbol\}`/);
+  assert.doesNotMatch(drift, /return/);
+});
+
+/**
+ * End to end, no network: a second instance of main.ts (its own CFG: a temp DATA_DIR, shadow, SIGNAL=off, RPCS at a
+ * closed local port) runs the real buildPlan on the 13 Nov 2026 HK recess: the archived round's pinned read, venue,
+ * registry and mids, and the real Swap logs of the closing window and the closure written to the closure file.
+ */
+async function recessHarness() {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-w4b-"));
+  mkdirSync(join(dir, "marks"), { recursive: true });
+  mkdirSync(join(dir, "closures"), { recursive: true });
+  const params = leafValue(loadBundle(RECESS_ROOT_OF.wXIAOx), LeafKind.PARAMS, subjectOf("params"));
+  const vars: Record<string, string> = {
+    DATA_DIR: dir, MODE: "shadow", SIGNAL: "off", RPCS: "http://127.0.0.1:9", SCORECARD: params.scorecard, CLOCK: params.clock,
+    CHAIN_ID: String(params.chainId), HC_URL: "", HC_ALARM_URL: "",
+  };
+  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  let m: typeof import("./main.ts");
+  try { m = await import(new URL("./main.ts?w4b-e2e", import.meta.url).href); }
+  finally { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
+
+  const setup = (sym: RecessSymbol, o: { rows?: (r: ReturnType<typeof recessRows>) => ReturnType<typeof recessRows>; ranges?: Array<[number, number]>; cutRead?: boolean } = {}) => {
+    const b = loadBundle(RECESS_ROOT_OF[sym]);
+    const p = leafValue(b, LeafKind.PARAMS, subjectOf("params"));
+    const chain = leafValue(b, LeafKind.CHAIN_CALL);
+    const registry = leafValue(b, LeafKind.REGISTRY, subjectOf("registry"));
+    const claim = leafValue(b, LeafKind.CLAIM);
+    const w = String(claim.wrapper).toLowerCase();
+    const mi = leafValue(b, LeafKind.CA_SNAPSHOT, subjectOf(`markinput:${w}`));
+    const swaps = leafValue(b, LeafKind.FETCH_LOG, subjectOf(`swaps:${w}`));
+    const v = leafValue(b, LeafKind.HTTP_EXCHANGE, subjectOf(`venue:${w}`)) as VenueEvidence;
+    const assets = registry.pools.map((x: Record<string, unknown>) => ({ ...x, raw: "0x0000000000000000000000000000000000000000", rawSymbol: String(x.symbol).replace(/^w/, "") }));
+    const a = assets.find((x: { symbol: string }) => x.symbol === sym);
+    const venue = {
+      mic: v.mic, assetUrl: v.assetUrl, assetBodyHash: v.assetBodyHash, exchangeUrl: v.exchangeUrl, exchangeBodyHash: v.exchangeBodyHash,
+      limits: v.limitsPerPeriod, atMs: p.evaluatedAtMs - 60_000,
+      sched: { mic: v.mic, timezone: v.schedule.timezone, isOpen: false, currentSession: null, nextChangeAt: null, schedule: v.schedule } as unknown as ExchangeSchedule,
+    };
+    const rows = (o.rows ?? ((r) => r))(recessRows(sym));
+    writeFileSync(join(dir, "closures", `${w}-${swaps.cutBlock}.jsonl`),
+      rows.map((r) => JSON.stringify({ b: r.blockNumber, i: r.logIndex, q: r.equityAbs.toString(), p: r.priceE18.toString() }) + "\n").join(""));
+    const hash = "0x" + "ab".repeat(32);
+    const cutRead = o.cutRead ? { blockNumber: swaps.cutBlock, blockHash: hash, blockTimestamp: Math.floor(swaps.cutAtMs / 1000), slot0: slot0Of(b, sym) } : null;
+    const c = {
+      wrapper: claim.wrapper, symbol: sym, cutAtMs: swaps.cutAtMs, cutBlock: swaps.cutBlock,
+      midAtCutE18: mi.midAtCutE18, preCutMidE18: mi.lastPrintE18, witnessedCut: true, reopenMs: swaps.settleAfterS * 1000, swapCount: 0,
+      cutBlockHash: cutRead ? hash : null, cutRead, cutSuspect: false,
+      coverage: { ranges: o.ranges ?? [[RECESS.closingFrom, RECESS.pinnedBlock]], rows: rows.length },
+      refusals: undefined as number | undefined,
+    };
+    const poolSnap = { block: { ...chain.block, rpc: "http://127.0.0.1:9" }, results: chain.calls };
+    const t = (mustCommit: boolean) => ({ heads: [chain.block.number], chainNowS: chain.block.timestamp, lastTickS: 0, tickStartMs: Date.now(), nowMs: p.evaluatedAtMs, mustCommit });
+    const plan = (mustCommit = false) => m.buildPlan(c as never, a, venue as never, assets, poolSnap as never, BigInt(mi.midNowE18), String(p.codeDigest), t(mustCommit));
+    return { c, plan, settleAfterS: swaps.settleAfterS as number };
+  };
+  const bundleOf = (root: string) => JSON.parse(readFileSync(join(dir, "marks", `${root}.json`), "utf8"));
+  const marks = () => readdirSync(join(dir, "marks")).length;
+  return { setup, bundleOf, marks, done: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test("W4b: end to end, buildPlan on the real 13 Nov recess builds a plan whose bundle reproduces strictly (N below its read block)", async () => {
+  const events: Array<Record<string, unknown>> = [];
+  const quiet = mock.method(console, "log", (line: string) => { try { events.push(JSON.parse(line)); } catch { /* not ours */ } });
+  const h = await recessHarness();
+  const N = RECESS.pinnedBlock - 1;
+  try {
+    // wXIAOx: 9 closing swaps, 14 closure swaps, full coverage, no cut read (a closure opened by the old build).
+    const x = h.setup("wXIAOx");
+    const plan = await x.plan();
+    assert.ok(plan, JSON.stringify(events.filter((e) => /refused|deferred|self-check/.test(String(e.event)))));
+    assert.equal(plan.settleAfterS, x.settleAfterS);
+    assert.equal(plan.markE18, "3701436175140696810");
+    assert.equal(plan.bandBps, 37);
+    assert.equal(plan.id, closureId(x.c.wrapper, x.settleAfterS, plan.root));
+    const v = verifyMarkBundleOffline(h.bundleOf(plan.root), { swapEvidenceFromBlock: N });
+    assert.equal(v.era, "swap-evidence", "N is below the read block: the strict era");
+    assert.deepEqual(v.failures, []);
+    assert.equal(v.ok, true);
+    assert.equal(v.evidenceComplete, true);
+    assert.deepEqual(v.notes, ["the cut mid is not bound to a committed pool read (closure opened before this keeper build)"]);
+    const built = events.find((e) => e.event === "mark-built")!;
+    assert.deepEqual([built.closingSwaps, built.swaps, built.complete, built.closingComplete, built.degraded], [9, 14, true, true, []]);
+    // The same bytes under N above the read block are a pre-fix row, still ok.
+    assert.equal(verifyMarkBundleOffline(h.bundleOf(plan.root), { swapEvidenceFromBlock: RECESS.pinnedBlock + 1 }).era, "pre-swap-fix");
+
+    // wMEITx: nothing traded; its cut read is committed and binds midAtCut (S8): no note at all.
+    const y = h.setup("wMEITx", { cutRead: true });
+    const py = await y.plan();
+    assert.ok(py);
+    const vy = verifyMarkBundleOffline(h.bundleOf(py.root), { swapEvidenceFromBlock: N });
+    assert.deepEqual([vy.ok, vy.failures, vy.notes, vy.evidenceComplete], [true, [], [], true]);
+
+    // A tail gap before the must-commit point: the fill asks the (closed) RPC, cannot serve it, and the plan defers.
+    const before = h.marks();
+    const g = h.setup("wXIAOx", { ranges: [[RECESS.closingFrom, RECESS.pinnedBlock - 5]] });
+    assert.equal(await g.plan(false), undefined);
+    assert.equal(h.marks(), before, "nothing persisted");
+    assert.ok(events.some((e) => e.event === "plan-deferred" && String(e.reason).includes("gaps remain")));
+    // At the must-commit point the same gap is committed honestly: complete false, the gap named, sev-2 page.
+    const pg = await g.plan(true);
+    assert.ok(pg);
+    const vg = verifyMarkBundleOffline(h.bundleOf(pg.root), { swapEvidenceFromBlock: N });
+    assert.deepEqual([vg.ok, vg.failures, vg.evidenceComplete], [true, [], false]);
+    assert.equal(pg.markE18, plan.markE18, "the mark does not depend on the gap");
+    assert.ok(events.some((e) => e.event === "alarm" && e.key === "keeper:swap-coverage-incomplete:wXIAOx" && e.sev === 2));
+
+    // D2: no closure swap recorded while the price moved, at the must-commit point: refused, nothing persisted.
+    const d2 = h.setup("wXIAOx", { rows: (r) => r.filter((s) => s.blockNumber <= RECESS.cutBlock) });
+    const n = h.marks();
+    assert.equal(await d2.plan(true), undefined);
+    assert.equal(h.marks(), n);
+    assert.equal(d2.c.refusals, 1);
+    assert.ok(events.some((e) => e.event === "mark-refused" && e.key === "keeper:swap-evidence-inconsistent:wXIAOx"));
+  } finally {
+    quiet.mock.restore();
+    h.done();
+  }
+});

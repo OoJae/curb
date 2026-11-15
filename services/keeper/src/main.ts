@@ -29,24 +29,24 @@ import { AbiCoder, Interface, getAddress, keccak256, toUtf8Bytes } from "ethers"
 
 import { pinLatest, multicallAt, clockAbi, balanceCall, decodeBalance, DEFAULT_RPCS } from "./sources/chain.ts";
 import type { Call, MulticallSnapshot } from "./sources/chain.ts";
-import { readPools, swapsInRange, vwap } from "./sources/pools.ts";
-import type { PoolSpec } from "./sources/pools.ts";
+import { readPools } from "./sources/pools.ts";
+import type { PoolSpec, SwapRow } from "./sources/pools.ts";
 import { readHeads, scanRange } from "./sources/logscan.ts";
 import type { ScanResult } from "./sources/logscan.ts";
-import { ClosureSwapStore, backfillJob, domainFrom, ingest } from "./swapstore.ts";
+import { ClosureSwapStore, backfillJob, domainFrom, fillForCommit, ingest } from "./swapstore.ts";
 import type { Coverage, IngestReport, Tracked } from "./swapstore.ts";
 import { blockCount, gapsWithin, normalizeRanges } from "./ranges.ts";
 import { cutReadOf } from "./swapEvidence.ts";
 import type { CutRead } from "./swapEvidence.ts";
 import { XStocksClient } from "./sources/xstocks.ts";
 import { MARK_METHODS, MARK_METHOD_VERSION, hasSignal } from "./mark.ts";
-import { buildMarkRound } from "./markRound.ts";
+import { buildMarkRound, verifyMarkBundleOffline } from "./markRound.ts";
+import { assembleSwapEvidence } from "./evidence.ts";
 import { gatherSignal, DEFAULT_RELAY_BASE } from "./sources/signalFetch.ts";
 import type { GatheredSignal } from "./sources/signalFetch.ts";
-import type { VenueEvidence } from "./markRound.ts";
 import { nextCapReturnMs } from "./reopen.ts";
 import type { PeriodLimits } from "./reopen.ts";
-import { applyRecut, checkCut, closureSchedule, foldHolidays } from "./venueTime.ts";
+import { applyRecut, checkCut, closureSchedule, foldHolidays, venueEvidenceFor } from "./venueTime.ts";
 import type { CutCheck, HolidayLedger } from "./venueTime.ts";
 import type { ExchangeSchedule, TradingObject } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
@@ -295,6 +295,8 @@ interface Closure {
   recut?: { fromCutAtMs: number; fromCutBlock: number };
   /** Every holiday list read while the closure was open (forward-only pruning, venueTime.ts foldHolidays). */
   holidayLedger?: HolidayLedger;
+  /** W4b: how many times planning this closure was refused (health only). */
+  refusals?: number;
   settleAttempts?: number;
   skipLogged?: boolean;
   settled?: { txHash: string; atMs: number };
@@ -984,10 +986,11 @@ async function main() {
   };
   startHttp(health);
 
+  let lastTickS = 0;   // the previous tick's duration (W4b: when the next tick can be expected)
   for (;;) {
     const tickStart = Date.now();
     try {
-      await tick(state, assets, venues, client, sender, health, digest);
+      await tick(state, assets, venues, client, sender, health, digest, { tickStartMs: tickStart, lastTickS });
       health.lastTickOkMs = Date.now();
       health.ticks++;
       await ping(CFG.hcUrl);
@@ -1000,6 +1003,7 @@ async function main() {
       const delivered = alarms.flush(ALARM_FLUSH_BUDGET_MS);
       await delivered;
     }
+    lastTickS = (Date.now() - tickStart) / 1000;
     const wait = CFG.tickMs - (Date.now() - tickStart);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   }
@@ -1007,9 +1011,9 @@ async function main() {
 
 async function tick(
   state: State, assets: Asset[], venues: Map<string, Venue>, client: XStocksClient,
-  sender: Sender | null, health: Health, digest: string,
+  sender: Sender | null, health: Health, digest: string, loop: { tickStartMs: number; lastTickS: number },
 ) {
-  const tickStartMs = Date.now();
+  const tickStartMs = loop.tickStartMs;
   const block = await pinLatest(CFG.rpcs);
   const pinnedAtMs = Date.now();   // W10.7: the clock-skew reading is taken against the moment of pinning
   const calls: Call[] = [
@@ -1201,7 +1205,7 @@ async function tick(
   }
 
   const sendsBefore = sendWatch.sends;
-  await commitPass(state, assets, venues, poolSnap, reads, sender, health, digest, nowMs);
+  await commitPass(state, assets, venues, poolSnap, reads, sender, health, digest, { heads, chainNowS: block.timestamp, lastTickS: loop.lastTickS, tickStartMs });
   await settlePass(state, sender, health, block.timestamp, nowMs);
   const sentThisTick = sendWatch.sends !== sendsBefore;
 
@@ -1411,178 +1415,281 @@ function onchainHealth(state: State, chainNowS: number): NonNullable<Health["onc
   };
 }
 
+/** W4b: stop waiting for data about 6.5 minutes before the reopen; leaves about 8 ticks to send. */
+const MUST_COMMIT_MARGIN_S = 240;
+/** What a tick hands commitPass and buildPlan (W4b.1). `lastTickS` is the previous tick's duration in seconds. */
+export interface TickCtx { heads: number[]; chainNowS: number; lastTickS: number; tickStartMs: number }
+
+/**
+ * W4b.1, per closure: when the next tick can be expected (a tick's length, or the last tick's duration plus slack
+ * if it ran long); `mustCommit` when no later tick could still plan and leave time to send (stop waiting for data,
+ * commit an honest row); `lastChance` when no later tick could still send above COMMIT_FLOOR_S.
+ */
+export function commitTiming(toReopenS: number, lastTickS: number, cfg: { tickMs: number; commitFloorS: number }):
+  { nextTickS: number; mustCommit: boolean; lastChance: boolean } {
+  const nextTickS = Math.max(cfg.tickMs / 1000, lastTickS + 10);
+  return {
+    nextTickS,
+    mustCommit: toReopenS - nextTickS < cfg.commitFloorS + MUST_COMMIT_MARGIN_S,
+    lastChance: toReopenS - nextTickS < cfg.commitFloorS,
+  };
+}
+
+/**
+ * W4b.1: every due closure, earliest reopen first, each with its own clock and its own try. A closure without a
+ * plan is planned (buildPlan: bounded network work, a self-checked bundle on disk); the plan is saved (W6) before
+ * sendCommit (W5) signs anything. Before the must-commit point the plan defers while data can still arrive; at it,
+ * buildPlan commits an honestly degraded row; `lastChance` is the last tick that can still land a transaction.
+ */
 async function commitPass(
   state: State, assets: Asset[], venues: Map<string, Venue>, poolSnap: MulticallSnapshot,
-  reads: Map<string, { priceE18: bigint }>, sender: Sender | null, health: Health, digest: string, nowMs: number,
+  reads: Map<string, { priceE18: bigint }>, sender: Sender | null, health: Health, digest: string, t: TickCtx,
 ) {
-  for (const w of Object.keys(state.open)) {
+  const due = (c: Closure) => (c.plan ? c.plan.settleAfterS * 1000 : c.reopenMs ?? Number.POSITIVE_INFINITY);
+  const order = Object.keys(state.open).sort((x, y) => {
+    const dx = due(state.open[x]), dy = due(state.open[y]);
+    return dx < dy ? -1 : dx > dy ? 1 : 0;
+  });
+  for (const w of order) {
     const c = state.open[w];
-    if (c.committed) continue;
-    const a = assets.find((x) => x.wrapper === w);
-    const venue = venues.get(w);
-    const read = reads.get(w);
-    if (!a || !read) continue;
+    try {
+      if (c.committed) continue;
+      const a = assets.find((x) => x.wrapper === w);
+      const venue = venues.get(w);
+      const read = reads.get(w);
+      if (!a || !read) continue;
 
-    // A closure whose start we did not see has no last print: the "mid at the cut" would really be
-    // a mid from somewhere in the middle of the closure, and the row would quietly claim a baseline
-    // it never observed. This is the normal state for the first closure after a restart, and the
-    // right answer is one fewer row rather than one unfalsifiable row.
-    if (!c.witnessedCut) {
-      if (!c.skipLogged) { c.skipLogged = true; log("closure-unwitnessed", { symbol: c.symbol, cutBlock: c.cutBlock, reason: "shut before this keeper started; no last print to mark from" }); }
-      continue;
-    }
-
-    if (c.reopenMs === null || !venue) {
-      // No schedule means no defensible settleAfter. Better no row than an unfalsifiable one.
-      if (nowMs - c.cutAtMs > 30 * 60_000) {
-        raise(1, `keeper:no-reopen:${c.symbol}`, `${c.symbol} has been shut for ${Math.round((nowMs - c.cutAtMs) / 60_000)}m with no venue schedule; no row can be committed`);
-      }
-      continue;
-    }
-    // W7: a closure whose cut the venue schedule has not confirmed (unchecked, suspect or unanchorable) is never
-    // planned. A plan that already exists (frozen before this build) is sent as frozen.
-    // (W7 -> W4b) buildPlan's step 1 takes the venue evidence from venueEvidenceFor(c, venue, nowMs, settleAfterS)
-    // (venueTime.ts), before any network call: it commits this closure's schedule (ledger included), defers when the
-    // live prediction moved, and refuses unless that schedule walked from the cut gives settleAfterS (I10, what every
-    // verifier re-derives) and says the market is shut now (I11). HEAD's buildPlan below still commits the latest list.
-    if (!c.plan && c.cutSuspect !== false) continue;
-    if (c.reopenMs - c.cutAtMs < CFG.minClosureS * 1000) {
-      if (!c.skipLogged) {
-        c.skipLogged = true;
-        log("closure-too-short", { symbol: c.symbol, seconds: Math.round((c.reopenMs - c.cutAtMs) / 1000), floor: CFG.minClosureS });
-      }
-      continue;
-    }
-    const toReopenS = Math.floor((c.reopenMs - nowMs) / 1000);
-    if (toReopenS > CFG.commitLeadS) continue;
-    if (toReopenS < CFG.commitFloorS) {
-      // We arrived too late to land a transaction that the contract would still accept.
-      raise(1, `keeper:commit-missed:${c.symbol}:${c.cutBlock}`, `missed the commit window for ${c.symbol}: ${toReopenS}s to reopen`);
-      continue;
-    }
-
-    if (!c.plan) {
-      const built = await buildPlan(c, a, venue, assets, poolSnap, read.priceE18, digest, nowMs);
-      if (!built) continue;                                // nothing was signed, nothing to persist
-      c.plan = built;
-      // W6: the frozen plan is on disk before any transaction carrying it is signed, so a restart can only
-      // reuse it (buildPlan runs only for a closure without one). If it cannot be saved, it stays in memory and
-      // nothing is sent; the attempt below saves it again before the first signature.
-      try { saveState(state); }
-      catch (e) {
-        log("state-persist-failed", { where: "plan", symbol: c.symbol, error: String(e) });
-        raise(1, "keeper:state-persist-failed", `cannot persist the plan for ${c.symbol}; nothing is sent until it is: ${String(e)}`);
+      // A closure whose start we did not see has no last print: the "mid at the cut" would really be
+      // a mid from somewhere in the middle of the closure, and the row would quietly claim a baseline
+      // it never observed. This is the normal state for the first closure after a restart, and the
+      // right answer is one fewer row rather than one unfalsifiable row.
+      if (!c.witnessedCut) {
+        if (!c.skipLogged) { c.skipLogged = true; log("closure-unwitnessed", { symbol: c.symbol, cutBlock: c.cutBlock, reason: "shut before this keeper started; no last print to mark from" }); }
         continue;
       }
+
+      if (c.reopenMs === null || !venue) {
+        // No schedule means no defensible settleAfter. Better no row than an unfalsifiable one.
+        const nowMs = Date.now();
+        if (nowMs - c.cutAtMs > 30 * 60_000) {
+          raise(1, `keeper:no-reopen:${c.symbol}`, `${c.symbol} has been shut for ${Math.round((nowMs - c.cutAtMs) / 60_000)}m with no venue schedule; no row can be committed`);
+        }
+        continue;
+      }
+      // W7: a closure whose cut the venue schedule has not confirmed (unchecked, suspect or unanchorable) is never
+      // planned. A plan that already exists (frozen before this build) is sent as frozen.
+      // The keeper/verifier reopen agreement is buildPlan's first step: venueEvidenceFor commits this closure's
+      // schedule (ledger included), defers when the live prediction moved, and refuses unless that schedule walked
+      // from the cut gives settleAfterS (I10, what every verifier re-derives) and says the market is shut now (I11).
+      if (!c.plan && c.cutSuspect !== false) continue;
+      if (c.reopenMs - c.cutAtMs < CFG.minClosureS * 1000) {
+        if (!c.skipLogged) {
+          c.skipLogged = true;
+          log("closure-too-short", { symbol: c.symbol, seconds: Math.round((c.reopenMs - c.cutAtMs) / 1000), floor: CFG.minClosureS });
+        }
+        continue;
+      }
+
+      const nowMs = Date.now();                                            // per closure (CO B1)
+      const toReopenS = Math.floor((due(c) - nowMs) / 1000);
+      if (toReopenS > CFG.commitLeadS) continue;
+      if (toReopenS < CFG.commitFloorS) {
+        // We arrived too late to land a transaction that the contract would still accept.
+        raise(1, `keeper:commit-missed:${c.symbol}:${c.cutBlock}`, `missed the commit window for ${c.symbol}: ${toReopenS}s to reopen`);
+        continue;
+      }
+      const { mustCommit, lastChance } = commitTiming(toReopenS, t.lastTickS, CFG);
+
+      if (!c.plan) {
+        const built = await buildPlan(c, a, venue, assets, poolSnap, read.priceE18, digest, { ...t, nowMs, mustCommit });
+        if (!built) continue;                                // deferred or refused: nothing signed, nothing to persist
+        c.plan = built;
+        // W6: the frozen plan is on disk before any transaction carrying it is signed, so a restart can only
+        // reuse it (buildPlan runs only for a closure without one). If it cannot be saved, it stays in memory and
+        // nothing is sent; the attempt below saves it again before the first signature.
+        try { saveState(state); }
+        catch (e) {
+          log("state-persist-failed", { where: "plan", symbol: c.symbol, error: String(e) });
+          raise(1, "keeper:state-persist-failed", `cannot persist the plan for ${c.symbol}; nothing is sent until it is: ${String(e)}`);
+          continue;
+        }
+      }
+      // W5.3: everything after the saved plan is sendCommit's: shadow, held-unarmed, or one commitAttempt.
+      await sendCommit(c, { sender, health, nowMs, lastChance, save: () => saveState(state) });
+    } catch (e) {
+      log("plan-error", { symbol: c.symbol, error: e instanceof Error ? e.message : String(e) });
+      raise(2, `keeper:plan-error:${c.symbol}`, String(e));                // the closure is retried next tick
     }
-    // W5.3: everything after the saved plan is sendCommit's: shadow, held-unarmed, or one commitAttempt.
-    // (W4b) keeps this call and computes lastChance from the previous tick's duration; until then, one tick ahead.
-    const lastChance = toReopenS - CFG.tickMs / 1000 < CFG.commitFloorS;
-    await sendCommit(c, { sender, health, nowMs, lastChance, save: () => saveState(state) });
   }
 }
 
-/** Build the round, publish its evidence, and freeze the exact calldata. Null when unmarkable. */
-async function buildPlan(
+/**
+ * W4b.2: build the round, publish its evidence, and freeze the exact calldata. Undefined when deferred, refused or
+ * unmarkable (nothing is signed). In this order, so the only network work is the closure's own remaining gaps:
+ *  1. the venue evidence and the reopen agreement (no network); 2. fillForCommit, bounded; 3. the pure assembly of
+ *  the swap evidence (W4a); 4. block-time sanity; 5. the signal; 6. the round; 7. the strict self-check of exactly
+ *  what a stranger will download; 8. evidence on disk and queued for the archive; 9. the frozen plan.
+ * Exported for the W4b end-to-end test (main.test.ts), which drives it on the real 13 Nov recess evidence.
+ */
+export async function buildPlan(
   c: Closure, a: Asset, venue: Venue, assets: Asset[], poolSnap: MulticallSnapshot,
-  midNowE18: bigint, digest: string, nowMs: number,
+  midNowE18: bigint, digest: string, t: TickCtx & { nowMs: number; mustCommit: boolean },
 ): Promise<CommitPlan | undefined> {
-    const settleAfterS = Math.floor(c.reopenMs! / 1000);
-    const method = MARK_METHODS[MARK_METHOD_VERSION];
-    const closingFrom = Math.max(0, c.cutBlock - Math.ceil(method.closingVwapWindowMs / 1000));
-    const closingSwaps = await swapsInRange(CFG.rpcs, a, closingFrom, c.cutBlock);
-    // (W4b) replaced by fillForCommit + assembleSwapEvidence. Until then: the store's rows in (cutBlock, pinned].
-    const file = store.read(c, poolSnap.block.number);
-    if (file.reset) raise(1, `keeper:swap-file-lost:${c.symbol}`, `${c.symbol}: closure file shorter than its coverage; rebuilding`);
-    const closureSwaps = file.rows.filter((r) => r.blockNumber > c.cutBlock);
+  const settleAfterS = Math.floor(c.reopenMs! / 1000);
+  const method = MARK_METHODS[MARK_METHOD_VERSION];
+  const pinnedBlock = poolSnap.block.number;
+  const nowMs = t.nowMs;
 
-    // The last print, taken from the chain where possible: the pool mid after the final swap at or
-    // before the cut block IS the last print, and it re-derives from the committed evidence. Only if
-    // nothing traded in the closing window do we fall back to an observation -- and in that case the
-    // mid genuinely has not moved, so the mid at the cut is the same number.
-    const lastPrintE18 = closingSwaps.length > 0
-      ? closingSwaps[closingSwaps.length - 1].priceE18
-      : BigInt(c.preCutMidE18 ?? c.midAtCutE18);
+  // 1. Schedule checks, no network (W7): the committed schedule, I10, I11.
+  const ve = venueEvidenceFor(c, venue, nowMs, settleAfterS);
+  if (ve.kind === "defer") {
+    if (ve.reopenMs !== null) c.reopenMs = ve.reopenMs;
+    log("plan-deferred", { symbol: c.symbol, reason: ve.reason });
+    return undefined;
+  }
+  if (ve.kind === "refuse") {
+    c.refusals = (c.refusals ?? 0) + 1;
+    log("mark-refused", { symbol: c.symbol, key: ve.alarmKey, reason: ve.message });
+    raise(1, ve.alarmKey, ve.message);
+    return undefined;
+  }
 
-    const venueEvidence: VenueEvidence = {
-      mic: venue.mic,
-      assetUrl: venue.assetUrl, assetBodyHash: venue.assetBodyHash,
-      exchangeUrl: venue.exchangeUrl, exchangeBodyHash: venue.exchangeBodyHash,
-      cutAtMs: c.cutAtMs,
-      limitsPerPeriod: venue.limits,
-      schedule: venue.sched.schedule,
-      predictedReopenMs: settleAfterS * 1000,
-    };
+  // 2. The closure's own gaps, bounded (W2.6): normally one chunk, the tail. Every wait has a deadline.
+  const tracked: Tracked = { c, pool: getAddress(a.pool) };
+  const fill = await fillForCommit(store, tracked, a, pinnedBlock, {
+    rpcs: CFG.rpcs, heads: t.heads, maxChunks: 20,
+    deadlineMs: Math.min(10_000, Math.max(2_000, CFG.tickMs - (Date.now() - t.tickStartMs) - 5_000)), recentHashes,
+    onScan: (scan, rep) => { noteScan("fill", scan); noteIngest("fill", rep, [tracked]); },
+  });
+  if (fill.reset) raise(1, `keeper:swap-file-lost:${c.symbol}`, `${c.symbol}: closure file shorter than its coverage; rebuilding`);
+  if (fill.error) log("swap-fill-error", { symbol: c.symbol, error: fill.error });
+  // The file as it is now. A file that cannot be read counts as nothing covered (all gaps), never as an empty pool.
+  let rows: SwapRow[] = [];
+  let ranges: Array<[number, number]> = [];
+  try {
+    const file = store.read(c, pinnedBlock);
+    if (file.reset) raise(1, `keeper:swap-file-lost:${c.symbol}`, `${c.symbol}: closure file shorter than its coverage at commit time; rebuilding`);
+    rows = file.rows;
+    ranges = c.coverage?.ranges ?? [];
+  } catch (e) {
+    log("swap-file-read-failed", { symbol: c.symbol, error: String(e) });
+    raise(1, `keeper:swap-store-write-failed:${c.symbol}`, `${c.symbol}: cannot read the closure file at commit time; treated as uncovered: ${String(e)}`);
+  }
 
-    // mark/2's cross-market evidence, fetched now (the commit time) with a per-request timeout. It can
-    // never block the commit: a failed or slow fetch leaves its leg absent, the row falls back to the
-    // no-signal path with a flag, and every attempt is committed in the bundle's FETCH_LOG.
-    let signal: GatheredSignal | null = null;
-    if (hasSignal(MARK_METHOD_VERSION)) {
-      try {
-        signal = await gatherSignal(
-          { symbol: c.symbol, cutAtMs: c.cutAtMs, commitAtMs: nowMs, settleAfterS },
-          method.minSignalClosureS!,
-          { enabled: CFG.signal, relayBase: CFG.signalRelayBase, binanceDirect: CFG.signalBinanceDirect, perFetchMs: CFG.signalFetchMs },
-        );
-      } catch (e) {
-        log("signal-error", { symbol: c.symbol, error: e instanceof Error ? e.message : String(e) });
-      }
+  // 3. Pure assembly (W4a): the input is derived from the swap lists; defer while gaps or inconsistencies can still
+  // be fixed; at the must-commit point degrade honestly. The one refusal left is D2's.
+  const ev = assembleSwapEvidence({
+    symbol: c.symbol, pool: getAddress(a.pool), cutBlock: c.cutBlock,
+    cutBlockHash: c.cutBlockHash ?? null, cutRead: c.cutRead ?? null, pinnedBlock, closingWindowMs: method.closingVwapWindowMs,
+    rows, ranges, midAtCutE18: BigInt(c.midAtCutE18), midNowE18,
+    preCutMidE18: c.preCutMidE18 === null ? null : BigInt(c.preCutMidE18), mustCommit: t.mustCommit,
+  });
+  if (ev.kind === "defer") {
+    log("plan-deferred", { symbol: c.symbol, reason: ev.reason, gapsLeft: fill.gapsLeft.length, fillStop: fill.stopReason });
+    return undefined;
+  }
+  if (ev.kind === "refuse") {
+    c.refusals = (c.refusals ?? 0) + 1;
+    log("mark-refused", { symbol: c.symbol, key: ev.alarmKey, reason: ev.message });
+    raise(1, ev.alarmKey, ev.message);
+    return undefined;
+  }
+  if (!ev.closingComplete) {
+    raise(1, `keeper:closing-window-incomplete:${c.symbol}`, `${c.symbol}: committing without a closing window (${ev.degraded.join(",") || "gap"}); closingVwap falls back to the last print`);
+  }
+  if (!ev.complete) {
+    raise(ev.degraded.includes("closure-inconsistent") ? 1 : 2, `keeper:swap-coverage-incomplete:${c.symbol}`,
+      `${c.symbol}: committing with gaps ${JSON.stringify(ev.gaps)}; ${ev.input.swapsDuringClosure} swaps recorded`);
+  }
+
+  // 4. Block-time sanity (CV m4): the 900-block closing window assumes one block per second. Never a refusal.
+  const cutTsS = c.cutRead?.blockTimestamp ?? Math.floor(c.cutAtMs / 1000);
+  const driftS = (poolSnap.block.timestamp - cutTsS) - (pinnedBlock - c.cutBlock);
+  if (Math.abs(driftS) > 60) {
+    raise(1, `keeper:block-time-drift:${c.symbol}`, `${c.symbol}: ${pinnedBlock - c.cutBlock} blocks took ${poolSnap.block.timestamp - cutTsS}s since the cut (drift ${driftS}s); the closing window assumes one block per second`);
+  }
+
+  // 5. mark/2's cross-market evidence, fetched now (the commit time) with a per-request timeout. It can
+  // never block the commit: a failed or slow fetch leaves its leg absent, the row falls back to the
+  // no-signal path with a flag, and every attempt is committed in the bundle's FETCH_LOG.
+  let signal: GatheredSignal | null = null;
+  if (hasSignal(MARK_METHOD_VERSION)) {
+    try {
+      signal = await gatherSignal(
+        { symbol: c.symbol, cutAtMs: c.cutAtMs, commitAtMs: nowMs, settleAfterS },
+        method.minSignalClosureS!,
+        { enabled: CFG.signal, relayBase: CFG.signalRelayBase, binanceDirect: CFG.signalBinanceDirect, perFetchMs: CFG.signalFetchMs },
+      );
+    } catch (e) {
+      log("signal-error", { symbol: c.symbol, error: e instanceof Error ? e.message : String(e) });
     }
+  }
 
-    const round = buildMarkRound({
-      chainId: CFG.chainId, clock: CFG.clock, scorecard: CFG.scorecard,
-      evaluatedAtMs: nowMs, codeDigest: digest, specs: assets, chain: poolSnap,
-      closures: [{
-        wrapper: c.wrapper, symbol: c.symbol, cutAtMs: c.cutAtMs, cutBlock: c.cutBlock, settleAfterS,
-        input: {
-          wrapper: c.wrapper, symbol: c.symbol,
-          lastPrintE18,
-          midAtCutE18: BigInt(c.midAtCutE18),
-          midNowE18,
-          closingVwapE18: vwap(closingSwaps),
-          swapsDuringClosure: closureSwaps.length,
-        },
-        closingSwaps, closureSwaps, venue: venueEvidence,
-        ...(signal ? { signal: { exchanges: signal.exchanges, attempts: signal.attempts } } : {}),
-      }],
-    });
+  // 6. The round: the mark input from the assembled evidence, the venue from venueEvidenceFor.
+  const round = buildMarkRound({
+    chainId: CFG.chainId, clock: CFG.clock, scorecard: CFG.scorecard,
+    evaluatedAtMs: nowMs, codeDigest: digest, specs: assets, chain: poolSnap,
+    closures: [{
+      wrapper: c.wrapper, symbol: c.symbol, cutAtMs: c.cutAtMs, cutBlock: c.cutBlock, settleAfterS,
+      input: {
+        wrapper: c.wrapper, symbol: c.symbol,
+        lastPrintE18: ev.input.lastPrintE18,
+        midAtCutE18: BigInt(c.midAtCutE18),
+        midNowE18,
+        closingVwapE18: ev.input.closingVwapE18,
+        swapsDuringClosure: ev.input.swapsDuringClosure,
+      },
+      closingSwaps: ev.closingSwaps, closureSwaps: ev.closureSwaps, swapEvidence: ev.swapEvidence, venue: ve.evidence,
+      ...(signal ? { signal: { exchanges: signal.exchanges, attempts: signal.attempts } } : {}),
+    }],
+  });
+  const built = round.marks[0];
+  if (!built) { log("mark-skipped", { symbol: c.symbol, reason: "not enough evidence for a mark" }); return undefined; }
 
-    const built = round.marks[0];
-    if (!built) { log("mark-skipped", { symbol: c.symbol, reason: "not enough evidence for a mark" }); return undefined; }
-    // Evidence first, always: a row whose bundle was not on disk before the signature is a number
-    // we would be asking people to take on trust.
-    persistOnce(join(CFG.dataDir, "marks", `${round.root}.json`), JSON.stringify(round.bundle));
-    publisher.enqueue(`marks/${round.root.toLowerCase()}.json`, join(CFG.dataDir, "marks", `${round.root}.json`));
-    log("mark-built", {
-      symbol: c.symbol, root: round.root, mark: built.mark.markE18, band: built.mark.bandBps,
-      drift: built.mark.driftBps, swaps: closureSwaps.length, flags: built.mark.flags,
-      shutForS: Math.round((nowMs - c.cutAtMs) / 1000),
-      method: MARK_METHOD_VERSION,
-      ...(built.mark.signal ? {
-        signal: {
-          applied: built.mark.signal.applied, appliedBps: built.mark.signal.appliedBps, rBps: built.mark.signal.rBps,
-          perpBps: built.mark.signal.perpBps, adrBps: built.mark.signal.adrBps, missing: built.mark.signal.missing,
-          fetched: signal?.exchanges.map((x) => x.key) ?? [],
-          failed: signal?.attempts.filter((x) => !x.ok).map((x) => `${x.key} ${x.via ? new URL(x.via).host : ""} ${x.error}`) ?? [],
-        },
-      } : {}),
-    });
+  // 7. The strict self-check, on exactly the bytes a stranger will download: never sign what the verifier rejects.
+  const check = verifyMarkBundleOffline(JSON.parse(JSON.stringify(round.bundle)), { era: "swap-evidence" });
+  if (!check.ok) {
+    log("mark-self-check-failed", { symbol: c.symbol, root: round.root, failures: check.failures });
+    raise(1, `keeper:mark-self-check-failed:${c.symbol}`, check.failures.slice(0, 5).join("; "));
+    return undefined;
+  }
 
-    return {
-      root: round.root,
-      id: closureId(c.wrapper, settleAfterS, round.root),
-      settleAfterS,
-      markE18: built.mark.markE18.toString(),
-      bandBps: built.mark.bandBps,
-      data: scorecardAbi.encodeFunctionData("commit", [{
-        wrapper: c.wrapper, committedAt: 0, committedBlock: 0, settleAfter: settleAfterS,
-        mark: built.mark.markE18, bandBps: built.mark.bandBps,
-        inputRoot: round.root, methodDigest: methodDigest(),
-        lastPrint: built.mark.lastPrintE18, closingVwap: built.mark.closingVwapE18, staleOracle: 0n,
-      }]),
-      attempts: 0,
-    };
+  // 8. Evidence first, always: a row whose bundle was not on disk before the signature is a number
+  // we would be asking people to take on trust.
+  persistOnce(join(CFG.dataDir, "marks", `${round.root}.json`), JSON.stringify(round.bundle));
+  publisher.enqueue(`marks/${round.root.toLowerCase()}.json`, join(CFG.dataDir, "marks", `${round.root}.json`));
+  log("mark-built", {
+    symbol: c.symbol, root: round.root, mark: built.mark.markE18, band: built.mark.bandBps,
+    drift: built.mark.driftBps, closingSwaps: ev.closingSwaps.length, swaps: ev.input.swapsDuringClosure, flags: built.mark.flags,
+    complete: ev.complete, closingComplete: ev.closingComplete, gaps: ev.gaps, omitted: ev.swapEvidence.closureOmitted,
+    degraded: ev.degraded, mustCommit: t.mustCommit,
+    shutForS: Math.round((nowMs - c.cutAtMs) / 1000),
+    method: MARK_METHOD_VERSION,
+    ...(built.mark.signal ? {
+      signal: {
+        applied: built.mark.signal.applied, appliedBps: built.mark.signal.appliedBps, rBps: built.mark.signal.rBps,
+        perpBps: built.mark.signal.perpBps, adrBps: built.mark.signal.adrBps, missing: built.mark.signal.missing,
+        fetched: signal?.exchanges.map((x) => x.key) ?? [],
+        failed: signal?.attempts.filter((x) => !x.ok).map((x) => `${x.key} ${x.via ? new URL(x.via).host : ""} ${x.error}`) ?? [],
+      },
+    } : {}),
+  });
+
+  // 9. The frozen plan (unchanged shape).
+  return {
+    root: round.root,
+    id: closureId(c.wrapper, settleAfterS, round.root),
+    settleAfterS,
+    markE18: built.mark.markE18.toString(),
+    bandBps: built.mark.bandBps,
+    data: scorecardAbi.encodeFunctionData("commit", [{
+      wrapper: c.wrapper, committedAt: 0, committedBlock: 0, settleAfter: settleAfterS,
+      mark: built.mark.markE18, bandBps: built.mark.bandBps,
+      inputRoot: round.root, methodDigest: methodDigest(),
+      lastPrint: built.mark.lastPrintE18, closingVwap: built.mark.closingVwapE18, staleOracle: 0n,
+    }]),
+    attempts: 0,
+  };
 }
 
 /**

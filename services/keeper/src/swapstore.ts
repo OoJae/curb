@@ -445,11 +445,12 @@ export function ingest(store: ClosureSwapStore, tracked: Tracked[], scan: ScanRe
 
 /**
  * The commit-time fill (W2.6): the closure's own gaps in [domainFrom, pinnedBlock], the tail (the gap ending at the
- * pinned block) first, then the others lowest first, bounded by chunks and by a real deadline.
+ * pinned block) first, then the others lowest first, bounded by chunks and by a real deadline. `onScan` sees every
+ * scan and its ingest report, so the caller raises the same alarms as for the per-tick scan (it must not throw).
  */
 export async function fillForCommit(store: ClosureSwapStore, t: Tracked, spec: PoolSpec, pinnedBlock: number,
   o: { rpcs: string[]; heads: number[]; maxChunks: number; deadlineMs: number; recentHashes: Map<string, string>;
-       now?: () => number; fetchImpl?: typeof fetch }):
+       now?: () => number; fetchImpl?: typeof fetch; onScan?: (scan: ScanResult, report: IngestReport) => void }):
   Promise<{ reset: boolean; chunks: number; gapsLeft: Array<[number, number]>; stopReason: ScanResult["stopReason"]; error?: string }> {
   const now = o.now ?? Date.now;
   const t0 = now();
@@ -476,6 +477,7 @@ export async function fillForCommit(store: ClosureSwapStore, t: Tracked, spec: P
       });
       chunks += r.stats.chunks;
       const rep = ingest(store, [t], r, o.recentHashes);
+      try { o.onScan?.(r, rep); } catch { /* the caller's bookkeeping never stops the fill */ }
       if (rep.resets.length > 0) reset = true;
       if (r.stopReason !== null) stopReason = r.stopReason;
       if (r.stopReason === "chunk-budget" || r.stopReason === "time-budget") break;

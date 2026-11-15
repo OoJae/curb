@@ -322,6 +322,22 @@ test("fillForCommit scans the tail first, then the lowest gap", async () => {
   } finally { h.done(); }
 });
 
+test("fillForCommit hands every scan and its ingest report to onScan", async () => {
+  const h = harness();
+  try {
+    const c = closure(XIAO, 10_000);
+    const d = domainFrom(c), p = 10_400;
+    c.coverage = { ranges: [[d, d + 99], [d + 200, p - 5]], rows: 0 };
+    const seen: Array<[number, number, number]> = [];
+    await fillForCommit(h.store, { c, pool: XIAO.pool }, XIAO, p, {
+      rpcs: RPCS, heads: [p, p], maxChunks: 20, deadlineMs: 10_000, recentHashes: new Map(), fetchImpl: emptyNode([]),
+      onScan: (scan, rep) => { seen.push([scan.from, scan.servedTo, rep.claimed]); throw new Error("ignored"); },
+    });
+    assert.deepEqual(seen, [[p - 4, p, 1], [d + 100, d + 199, 1]]);
+    assert.deepEqual(c.coverage!.ranges, [[d, p]], "a throwing hook does not stop the fill");
+  } finally { h.done(); }
+});
+
 test("fillForCommit asks nothing when the closure is covered to the pinned block", async () => {
   const h = harness();
   try {
