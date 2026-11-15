@@ -14,7 +14,7 @@ import { getAddress, keccak256, toUtf8Bytes } from "ethers";
 import { SWAP_TOPIC0, poolAbi, priceFromSqrt, vwap } from "./sources/pools.ts";
 import type { PoolSpec, SwapRow } from "./sources/pools.ts";
 import type { MulticallSnapshot } from "./sources/chain.ts";
-import { expectedCapAt, holidayKey } from "./venueTime.ts";
+import { cutIsScheduled, holidayKey } from "./venueTime.ts";
 import { nextCapReturnMs } from "./reopen.ts";
 import type { PeriodLimits } from "./reopen.ts";
 import type { ExchangeSchedule } from "./regime.ts";
@@ -36,6 +36,26 @@ export const SWAP_EVIDENCE_FROM_BLOCK: number = Number.MAX_SAFE_INTEGER;
  * build (a rollback). Only ever appended to, the same day as the rollback.
  */
 export const PRE_FIX_READ_RANGES: ReadonlyArray<readonly [number, number]> = [];
+
+/**
+ * How far the observed cut instant (`cutAtMs`, the keeper's clock right after its reads) may lie from the block time of
+ * the pool read it commits as the cut read: floor(cutAtMs / 1000) - cutRead.blockTimestamp must be in [MIN, MAX] s
+ * (strict S22). Honest rows sit at 0-2 s (the 13 Nov recess: 1 s; the 233 archived rows: 0-2 s by block count); the
+ * keeper's reads before it stamps the cut are bounded by about 42 s (8 s head reads, two multicalls at up to 16 s
+ * each), and the minus side absorbs a keeper clock a few seconds behind the chain. A cut read outside the bound is
+ * not committed (evidence.ts drops it), so the bound never costs the keeper its own row. Without it, cutAtMs, which
+ * fixes mark/2's cross-market cut minute, would be bound to nothing on chain.
+ */
+export const CUT_READ_LAG_MIN_S = -5;
+export const CUT_READ_LAG_MAX_S = 60;
+
+/** floor(cutAtMs / 1000) - blockTimestamp: seconds from the cut read's block to the observed cut. */
+export const cutReadLagS = (cutAtMs: number, blockTimestamp: number): number => Math.floor(cutAtMs / 1000) - blockTimestamp;
+/** Does a cut read belong to a cut observed at `cutAtMs` (S22)? */
+export const cutReadLagOk = (cutAtMs: number, blockTimestamp: number): boolean => {
+  const d = cutReadLagS(cutAtMs, blockTimestamp);
+  return Number.isFinite(d) && d >= CUT_READ_LAG_MIN_S && d <= CUT_READ_LAG_MAX_S;
+};
 
 /** D3: a closure list longer than the cap commits its first HEAD and last TAIL rows, plus the full count and digest. */
 export const CLOSURE_COMMIT_CAP = 10_000;
@@ -384,6 +404,12 @@ function strictChecks(i: SwapEvidenceCheckInput, out: SwapEvidenceCheck, fail: (
         if (p === null) fail("cut read: its slot0 does not decode");
         else if (midAt === null || p !== midAt) fail(`cut read prices the pool at ${p}, not the committed midAtCut ${show(mi.midAtCutE18)}`);
       }
+      // S22: the observed cut instant belongs to the cut read's block. cutAtMs fixes mark/2's cross-market cut minute;
+      // without this it is bound to nothing on chain, and a row could move its cut inside the closed period.
+      if (!isInt(sw.cutAtMs) || !cutReadLagOk(sw.cutAtMs, cr.blockTimestamp)) {
+        fail(`cut time ${iso(sw.cutAtMs)} is ${isInt(sw.cutAtMs) ? cutReadLagS(sw.cutAtMs, cr.blockTimestamp) : "?"} s after the cut read's block time `
+          + `${iso(cr.blockTimestamp * 1000)}; it must be within ${CUT_READ_LAG_MIN_S}..${CUT_READ_LAG_MAX_S} s`);
+      }
     }
   }
   const wantCounts = { closingLogs: Array.isArray(sw.closingSwaps) ? sw.closingSwaps.length : null, closureLogs: n };
@@ -468,10 +494,11 @@ function strictChecks(i: SwapEvidenceCheckInput, out: SwapEvidenceCheck, fail: (
     fail("no usable venue leaf: settleAfter cannot be re-derived from a committed schedule");
   } else {
     const S = { mic: v.mic, schedule: v.schedule } as unknown as ExchangeSchedule;
-    let cap: number | null = null;
-    try { cap = isInt(v.cutAtMs) ? expectedCapAt(v.limitsPerPeriod as PeriodLimits, S, v.cutAtMs) : null; } catch { cap = null; }
-    if (cap === null) fail(`the committed schedule cannot be evaluated at the cut ${show(v.cutAtMs)}`);
-    else if (cap !== 0) fail(`the committed schedule says the market was open at the cut ${iso(v.cutAtMs)} (expected cap ${cap})`);
+    // S18, with the same clock slack the keeper's cut check uses (venueTime.ts cutIsScheduled).
+    let scheduled: boolean | null = null;
+    try { scheduled = isInt(v.cutAtMs) ? cutIsScheduled(v.limitsPerPeriod as PeriodLimits, S, v.cutAtMs) : null; } catch { scheduled = null; }
+    if (scheduled === null) fail(`the committed schedule cannot be evaluated at the cut ${show(v.cutAtMs)}`);
+    else if (!scheduled) fail(`the committed schedule says the market was open at the cut ${iso(v.cutAtMs)}`);
     if (!isInt(v.cutAtMs) || v.cutAtMs !== sw.cutAtMs) fail(`the venue's cut time ${show(v.cutAtMs)} is not the swaps leaf's cut time ${show(sw.cutAtMs)}`);
     if (v.predictedReopenMs !== i.settleAfterS * 1000) fail(`the venue's predicted reopen ${show(v.predictedReopenMs)} is not settleAfter x 1000 (${i.settleAfterS * 1000})`);
     if (sw.settleAfterS !== i.settleAfterS) fail(`the swaps leaf's settleAfterS ${show(sw.settleAfterS)} is not the claim's ${i.settleAfterS}`);
@@ -496,7 +523,8 @@ function strictChecks(i: SwapEvidenceCheckInput, out: SwapEvidenceCheck, fail: (
   }
   if (cr === null) note("the cut mid is not bound to a committed pool read (closure opened before this keeper build)");
   if (pinned !== null && blk && isInt(blk.timestamp)) {
-    const t0 = isObj(cr) && isInt(cr.blockTimestamp) ? cr.blockTimestamp : isInt(sw.cutAtMs) ? Math.floor(sw.cutAtMs / 1000) : null;
+    // From the observed cut instant always (never from cutRead.blockTimestamp, which S22 only bounds to it).
+    const t0 = isInt(sw.cutAtMs) ? Math.floor(sw.cutAtMs / 1000) : null;
     if (t0 !== null) {
       const d = (blk.timestamp - t0) - (pinned - cutBlock);
       if (Math.abs(d) > 60) {

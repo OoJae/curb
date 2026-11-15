@@ -309,3 +309,35 @@ test("applyRecut resets the cut-dependent fields and keeps the rest", () => {
   assert.equal(c.holidayLedger, ledger);
   assert.equal(c.reopenMs, 1_794_546_000_000);
 });
+
+// --- review fixes (16 Nov) ----------------------------------------------------------------------------------
+
+import { CUT_CLOCK_SLACK_MS, cutIsScheduled } from "./venueTime.ts";
+
+test("checkCut: a real cut stamped up to 5 s before the zero-cap instant is confirmed, not re-anchored (F2)", () => {
+  const hk = bundleOf(HK_RECESS).venue;
+  const us = bundleOf(US_9NOV).venue;
+  for (const [v, zero] of [[hk, "2026-11-13T03:55:00Z"], [us, "2026-11-26T00:55:00Z"], [us, "2026-11-27T17:55:00Z"]] as const) {
+    for (const early of [1_000, CUT_CLOCK_SLACK_MS]) {
+      const cut = T(zero) - early;
+      assert.deepEqual(checkCut({ cutAtMs: cut }, v.limitsPerPeriod, S(v), cut, TICK), { kind: "ok" }, `${zero} - ${early} ms`);
+    }
+    const tooEarly = T(zero) - CUT_CLOCK_SLACK_MS - 1_000;
+    assert.equal(checkCut({ cutAtMs: tooEarly }, v.limitsPerPeriod, S(v), tooEarly, TICK).kind, "suspect", `${zero} - 6 s`);
+  }
+  // The slack only widens: a cut the schedule already calls closed stays confirmed (here 3 s before a reopen).
+  const beforeReopen = T("2026-11-13T04:59:57Z");
+  assert.equal(cutIsScheduled(hk.limitsPerPeriod, S(hk), beforeReopen), true);
+});
+
+test("checkCut: a suspect cut is confirmed when the schedule later covers it (F4)", () => {
+  const hk = bundleOf(HK_RECESS).venue;
+  const cut = T("2026-11-13T02:00:00Z");
+  const first = checkCut({ cutAtMs: cut }, hk.limitsPerPeriod, S(hk), cut, TICK);
+  assert.deepEqual(first, { kind: "suspect", schedOpenSeenMs: cut });
+  // The issuer then lists an ad-hoc closure covering the cut (say, a typhoon signal from 09:59 HKT).
+  const adhoc = { startsAt: "2026-11-13T01:59:00.000Z", endsAt: "2026-11-13T08:00:00.000Z", kind: "Closed" };
+  const later = S(hk, [...hk.schedule.holidays, adhoc]);
+  const r = checkCut({ cutAtMs: cut, cutSuspect: true, schedOpenSeenMs: cut }, hk.limitsPerPeriod, later, cut + TICK, TICK);
+  assert.deepEqual(r, { kind: "ok" }, "the cut stands; it is not re-anchored at the moment the list changed");
+});

@@ -358,3 +358,22 @@ test("memory (W3): a 15,000-row round assembles, builds and self-checks within b
   assert.ok(json.length < 1_400_000, `bundle JSON ${json.length} bytes`);
   assert.ok(delta < 150 * 1024 * 1024, `heap delta ${Math.round(delta / 1048576)} MB`);
 });
+
+test("a cut read whose block time does not fit the cut instant is dropped, so the keeper never fails its own S22 (F1)", () => {
+  const cutAtMs = 1_794_542_157_246;                              // the 13 Nov recess cut as the keeper stamped it
+  const read = (lagS: number) => ({
+    blockNumber: 75773120, blockHash: "0x" + "ab".repeat(32), blockTimestamp: Math.floor(cutAtMs / 1000) - lagS,
+    slot0: slot0Of(loadBundle(RECESS_ROOT_OF.wMEITx), "wMEITx"),
+  });
+  for (const lag of [-5, 1, 60]) {
+    const ev = commit(assembleSwapEvidence(input("wMEITx", { cutAtMs, cutRead: read(lag), cutBlockHash: "0x" + "ab".repeat(32) })));
+    assert.deepEqual(ev.swapEvidence.cutRead, read(lag), `lag ${lag} s is kept`);
+    assert.deepEqual(ev.degraded, []);
+  }
+  for (const lag of [-6, 61, 120]) {
+    const ev = commit(assembleSwapEvidence(input("wMEITx", { cutAtMs, cutRead: read(lag), cutBlockHash: "0x" + "ab".repeat(32) })));
+    assert.equal(ev.swapEvidence.cutRead, null, `lag ${lag} s is not this cut's read`);
+    assert.deepEqual(ev.degraded, ["cut-read-dropped"]);
+    selfCheck("wMEITx", ev);   // an honest, unbound row, which the strict verifier accepts with a note
+  }
+});

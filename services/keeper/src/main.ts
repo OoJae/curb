@@ -809,6 +809,19 @@ export function onCutCheck(c: Closure, r: CutCheck, at: CutAnchor): void {
   }
 }
 
+/** The previous tick's observation instant (its nowMs), for the cut check's tick length. In memory only. */
+const cutWatch = { lastNowMs: null as number | null };
+
+/**
+ * W7.4: the tick length the cut check allows between two sightings: the interval this keeper actually observed since
+ * its previous tick, never less than the configured tick. With the configured tick alone, one slow tick (RPC
+ * deadlines, a commit-time fill, an alarm flush) straddling the schedule's cut made a merged-blip closure
+ * unanchorable, a lost row.
+ */
+export function cutCheckTickMs(nowMs: number, lastNowMs: number | null, cfgTickMs: number): number {
+  return lastNowMs === null ? cfgTickMs : Math.max(cfgTickMs, nowMs - lastNowMs);
+}
+
 /**
  * W7.5: an uncommitted closure that capacity has returned to. A cut the schedule never confirmed is a host A blip
  * (sev-2); a confirmed, witnessed closure at least minClosureS long that ended without a row lost one (sev-1: a
@@ -1130,6 +1143,10 @@ async function tick(
     }
   }
 
+  // W7.4: the interval since the previous tick's observation, for this tick's cut checks.
+  const cutTickMs = cutCheckTickMs(nowMs, cutWatch.lastNowMs, CFG.tickMs);
+  cutWatch.lastNowMs = nowMs;
+
   // 8. The per-asset loop: opens, closes and abandons closures. No swap handling: the scan's rows go to the
   // closure files in step 9, whatever this loop decides.
   for (const a of assets) {
@@ -1199,7 +1216,7 @@ async function tick(
       // W7.4: was this a scheduled cut? The opening tick is the only one that sees the schedule at the cut itself.
       // No venue: cutSuspect stays unset, which blocks the backfill and planning until a venue is read.
       if (venue && sched) {
-        try { onCutCheck(fresh, checkCut(fresh, venue.limits, sched, nowMs, CFG.tickMs), anchor); }
+        try { onCutCheck(fresh, checkCut(fresh, venue.limits, sched, nowMs, cutTickMs), anchor); }
         catch (e) { log("cut-check-error", { symbol: a.symbol, error: String(e) }); }
       }
       state.open[w] = fresh;
@@ -1216,7 +1233,7 @@ async function tick(
     // W7.4: the cut check and recut of an open closure, every tick until it has a plan. A recut moves the cut to
     // this tick (new cutBlock, hash, read, mid; empty coverage) and removes the old file first.
     if (venue && sched && !open.plan && !open.committed) {
-      try { onCutCheck(open, checkCut(open, venue.limits, sched, nowMs, CFG.tickMs), anchor); }
+      try { onCutCheck(open, checkCut(open, venue.limits, sched, nowMs, cutTickMs), anchor); }
       catch (e) { log("cut-check-error", { symbol: a.symbol, error: String(e) }); }
     }
     // The predicted reopen is refreshed until a plan exists, then frozen: the plan's settleAfter is what counts.
@@ -1620,7 +1637,7 @@ export async function buildPlan(
   // 3. Pure assembly (W4a): the input is derived from the swap lists; defer while gaps or inconsistencies can still
   // be fixed; at the must-commit point degrade honestly. The one refusal left is D2's.
   const ev = assembleSwapEvidence({
-    symbol: c.symbol, pool: getAddress(a.pool), cutBlock: c.cutBlock,
+    symbol: c.symbol, pool: getAddress(a.pool), cutBlock: c.cutBlock, cutAtMs: c.cutAtMs,
     cutBlockHash: c.cutBlockHash ?? null, cutRead: c.cutRead ?? null, pinnedBlock, closingWindowMs: method.closingVwapWindowMs,
     rows, ranges, midAtCutE18: BigInt(c.midAtCutE18), midNowE18,
     preCutMidE18: c.preCutMidE18 === null ? null : BigInt(c.preCutMidE18), mustCommit: t.mustCommit,

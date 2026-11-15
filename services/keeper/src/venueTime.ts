@@ -29,6 +29,13 @@ import type { CutRead } from "./swapEvidence.ts";
 export const ISSUER_EARLY_CUT_MS = 300_000;
 /** D11: an entry dropped more than this long before it begins was withdrawn, not pruned. */
 export const RETRACTION_MARGIN_MS = 24 * 3_600_000;
+/**
+ * Clock tolerance at the issuer's cut. A cut is observed on the keeper's clock, the zero-cap instant is the issuer's:
+ * a keeper clock a second or two behind (or an issuer a second ahead) stamps a real :55:00 cut at :54:59. Shared by
+ * checkCut (the keeper) and strict S18 (every verifier): changing one side alone would make the keeper's own
+ * self-check refuse the row its cut check confirmed.
+ */
+export const CUT_CLOCK_SLACK_MS = 5_000;
 
 export interface HolidayEntry { startsAt: string; endsAt: string; kind: string; [k: string]: unknown }
 export interface LedgerEntry { startsAt: string; endsAt: string; kind: string; firstSeenMs: number; lastSeenMs: number; raw: HolidayEntry }
@@ -150,8 +157,16 @@ export function venueEvidenceFor(
   };
 }
 
+/**
+ * Is `cutAtMs` a scheduled cut? The schedule says capacity is zero there (expectedCapAt == 0), or will be within
+ * CUT_CLOCK_SLACK_MS. The one test both checkCut and strict S18 apply.
+ */
+export function cutIsScheduled(limits: PeriodLimits | undefined, sched: ExchangeSchedule, cutAtMs: number): boolean {
+  return expectedCapAt(limits, sched, cutAtMs) === 0 || expectedCapAt(limits, sched, cutAtMs + CUT_CLOCK_SLACK_MS) === 0;
+}
+
 export type CutCheck =
-  | { kind: "ok" }                                         // the cut is a scheduled cut (expectedCapAt(cutAtMs) == 0)
+  | { kind: "ok" }                                         // the cut is a scheduled cut (cutIsScheduled)
   | { kind: "suspect"; schedOpenSeenMs: number | null }    // chain shut, schedule open: wait for the schedule's own cut
   | { kind: "recut" }                                      // the schedule just shut: re-anchor the closure at this tick
   | { kind: "unanchorable"; reason: string };              // cannot be re-anchored honestly: never commit it
@@ -165,7 +180,11 @@ const UNANCHORABLE = "the schedule shut without this keeper seeing it open since
  * A cut the schedule says was open is suspect. While the schedule still says open, it stays suspect (and the
  * last tick that saw it open is remembered). When the schedule shuts within two ticks of the last such
  * sighting, the schedule's own cut fell between two ticks this keeper saw: re-anchor there. Otherwise the true
- * cut is unknown and the closure is never committed.
+ * cut is unknown and the closure is never committed. A suspect cut that the CURRENT schedule calls scheduled (the
+ * issuer listed an ad-hoc closure after the cut, or the ledger gained an entry) is confirmed as it stands.
+ *
+ * `tickMs` is the interval the caller actually observes between ticks (main.ts passes the measured one, at least
+ * the configured tick), so one slow tick straddling the schedule's cut still re-anchors instead of losing the row.
  */
 export function checkCut(
   c: { cutAtMs: number; cutSuspect?: boolean | "unanchorable"; schedOpenSeenMs?: number | null },
@@ -174,8 +193,8 @@ export function checkCut(
   if (c.cutSuspect === false) return { kind: "ok" };
   if (c.cutSuspect === "unanchorable") return { kind: "unanchorable", reason: UNANCHORABLE };
   let seen: number | null;
+  if (cutIsScheduled(limits, sched, c.cutAtMs)) return { kind: "ok" };     // first check, or the schedule changed
   if (c.cutSuspect === undefined) {
-    if (expectedCapAt(limits, sched, c.cutAtMs) === 0) return { kind: "ok" };
     seen = nowMs === c.cutAtMs ? c.cutAtMs : null;   // only the opening tick itself saw the schedule open at the cut
   } else {
     seen = c.schedOpenSeenMs ?? null;
