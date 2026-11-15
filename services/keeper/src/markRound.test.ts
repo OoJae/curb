@@ -409,7 +409,7 @@ test("mark/1 bundles still build and verify exactly as before", () => {
 
 import { getAddress } from "ethers";
 import {
-  RECESS as NOV13, ROOTS, inputsFromBundle, leafValue, loadBundle, recessRows, slot0Of, specOf, strictRecessInputs,
+  RECESS as NOV13, ROOTS, inputsFromBundle, leafValue, loadBundle, slot0Of, strictRecessInputs,
 } from "./fixtures/markFixtures.test.ts";
 import type { RecessSymbol } from "./fixtures/markFixtures.test.ts";
 import { swapListDigest } from "./swapEvidence.ts";
@@ -678,5 +678,4 @@ test("several claims in one bundle: each note names its symbol", () => {
   const v = verifyMarkBundleOffline(clone(buildMarkRound(i).bundle));
   assert.equal(v.ok, true, v.failures.join(" | "));
   assert.ok(v.notes.some((n) => n.startsWith("TCENTx: pre-fix row")) && v.notes.some((n) => n.startsWith("XIAOx: pre-fix row")), v.notes.join(" | "));
-  void specOf; void recessRows;
 });
