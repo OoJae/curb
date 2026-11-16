@@ -512,6 +512,45 @@ was witnessed `reproduced: true`. At about 25 MB a day, 5,000 MB lasts to around
 env files and all three container logs were saved to `/root/curb-predeploy-20261114T170451Z` first. Host A's
 September deployment `016bc550` can be restored with `deploymentRollback` until about 17 Nov 17:22Z.
 
+## Keeper redeployed: it decodes swaps — 16 Nov 2026
+
+From 21 Sept until this deploy the keeper fetched the pools' Swap logs and decoded none of them, so every row
+it committed counted zero swaps and its closing VWAP was the last print (DECISIONS D-15). The fixed keeper
+decodes them, keeps each closure's swaps and scan coverage in a file per closure, checks each cut against the
+venue schedule, and commits that evidence in the bundle (`curb.scorecard.swaps/2`). Only the keeper changed;
+host A, host B and the W0 observer were not restarted.
+
+| | |
+|---|---|
+| release commit | `f65ff53` |
+| deployed | 05:37:45Z (boot), `SERVICES=keeper KEEPER_MODE=live SCORECARD=0x3b40…Ef1f bash script/hostb/deploy.sh`, in a quiet window: no closure open, nothing pending, the HK lunch rows settled at 05:05Z |
+| code digest | `sha256:d9b02a669c736ef3184fbe1419d828560bba52d5c891f1f63770a342b3ec44d7` (boot line; it is in every new bundle) |
+| base image | `node:26-slim@sha256:14bf3eac…4239`, Node 26.8.2, unchanged |
+| `SWAP_EVIDENCE_FROM_BLOCK` | **76,038,603**, the head read at 05:40Z with the new keeper running and the old one gone; set by the verifier-only follow-up commit `09dbb07`. Rows read below it are pre-fix; rows read at or above it are held to the swap-evidence checks |
+| HEAD digest after `09dbb07` | `sha256:dfaf8cc5…86ec`. The deployed keeper keeps `d9b02a66…44d7`: it never reads that constant |
+
+**Checked after the deploy:** the key was loaded, not created (`0xd3D9…1AF6`, `"created":false`); archive and
+paging on; the Builder Code suffix on; no `fatal`, `state-unreadable`, orphaned closure file or `tick-error`.
+`/healthz`: live, armed, five assets, the swap scan 5 blocks behind the head with 125 of 125 logs decoded, no
+holes, nothing unmatched; clock skew 1 s. No Curb write exists from block 76,038,603 to the check at 05:41Z.
+Every one of the 241 rows committed before it was re-verified from its archived bundle with `N` set: all
+reproduce as pre-fix rows, and the holiday reopen fallback (E6) applies to exactly the six holiday rows of
+D-16 and to no other row.
+
+**Rehearsed first.** The same tree ran in shadow mode (no key, so it could send nothing) on a Mac against the
+live chain from 16 Nov 00:20Z, on a copy of the keeper's state. It built the rows of that night's real commits
+(US 00:50Z, HK 01:20Z, the HK lunch recess 04:50Z) with their swaps, all `complete`. Every one passed the strict
+swap-evidence checks, and the published `curb-verify@0.1.0` reproduced them. Its
+`tick-error`s (multicall timeouts) came from the Mac's network: from the Mac the RPCs took 0.5 to 7.5 s at the
+median, against 0.06 to 0.2 s from the VPS.
+
+**Rollback.** The old image is tagged `curb-keeper:prev-e64d2a5a86c7`. The old container's log was saved to
+`/var/lib/curb/logs/curb-keeper-20261116T053742Z.log.gz` (and copied off the box) and its state to
+`/var/lib/curb/keeper/keeper-state.predeploy-20261116T053743Z.json` before the new one started.
+
+**Next on the new build:** the first closure is the HK afternoon cut at 07:55Z today; the first rows are the HK
+overnight rows on Tue 17 Nov 01:20Z, then the lunch recess at 04:50Z, the first with pool drift in the mark.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
