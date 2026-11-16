@@ -162,7 +162,7 @@ export interface ScorecardRow {
   /** Baseline: last verified print before the closure. */
   lastPrint: number;
   lastPrintE18: string;
-  /** Baseline: wrapper-pool VWAP at the moment of closure. */
+  /** Baseline: the committed closingVwap (the last print in every row before block ⟨N⟩: D-15). */
   closingVwap: number;
   closingVwapE18: string;
   /** Baseline: stale banded oracle; null when the row carried none (committed as 0). */

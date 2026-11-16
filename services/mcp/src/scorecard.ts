@@ -2,8 +2,10 @@
  * curb_scorecard: Curb's graded record, read from Scorecard v2 at one pinned block.
  *
  * `skill()` is the contract's own running tally, incremented inside settle(): settled rows, and STRICT wins
- * against the last print and against the pre-close price (the contract's `closingVwap`: the 15-minute closing
- * VWAP, or the last pool price when nothing traded, as README.md says). A tie is not a win. The recent rows
+ * against the last print and against the contract's `closingVwap` baseline. A tie is not a win. In every row
+ * committed before the keeper's swap-decoding fix (docs/DECISIONS.md D-15) `closingVwap` is the last print, so
+ * the two counts are one comparison for those rows; later rows commit the pool's 15-minute closing VWAP, or the
+ * last print when nothing traded in that window. The recent rows
  * come from the public getters (closureCount, closureIds, commitments, settlements), newest first, the same reads
  * services/asp/src/index/scorecard.ts makes. Every read in one answer is pinned to the same block hash, so
  * the tally and the rows describe one chain state.
@@ -175,9 +177,12 @@ export async function findCommitTxs(chain: ChainReader, rows: ScorecardRowView[]
 
 function summaryOf(block: number, count: number, skill: { settled: number; beatLastPrint: number; beatClosingVwap: number }, shown: number): string {
   const notWins = skill.settled - skill.beatLastPrint;
+  const vwap = skill.beatClosingVwap === skill.beatLastPrint
+    ? "The closingVwap baseline is the last print in every row committed before the keeper's swap-decoding fix (DECISIONS D-15), so it gives the same count. "
+    : `Against the closingVwap baseline: ${skill.beatClosingVwap} (it is the last print in every row committed before the keeper's swap-decoding fix, DECISIONS D-15). `;
   return (
     `Scorecard v2 at block ${block}: ${count} marks committed, ${skill.settled} settled. Curb's mark beat the last print in ` +
-    `${skill.beatLastPrint} and the pre-close price (closingVwap) in ${skill.beatClosingVwap} (strict wins; ${notWins} of the settled rows did not beat the last print). ` +
+    `${skill.beatLastPrint} (strict wins; ${notWins} of the settled rows did not). ${vwap}` +
     `${shown ? `Newest ${shown} rows below.` : "No rows yet."}`
   );
 }

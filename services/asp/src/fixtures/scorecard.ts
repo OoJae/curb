@@ -2,9 +2,9 @@
  * Test fixtures for the Scorecard routes: rows, snapshots and a RegimeChanged view, built in memory.
  *
  * The defaults are the first live row read from Scorecard v2 on 24 Sep 2026 (wTCENTx, the 22 Sep Hong
- * Kong lunch recess): mark, last print and closing VWAP are equal because the pool did not trade while
- * the primary market was shut, so the row ties both baselines. Lives under src/fixtures, which the Docker
- * image excludes.
+ * Kong lunch recess): mark, last print and closing VWAP are equal because the keeper recorded no swaps
+ * (it decoded no Swap logs until deploy 2, docs/DECISIONS.md D-15; the wTCENTx pool printed 5 in that
+ * recess), so the row ties both baselines. Lives under src/fixtures, which the Docker image excludes.
  */
 import { closureStartOf } from "../index/closures.ts";
 import type { ClosureIndexStatus, RegimeTransition } from "../index/closures.ts";

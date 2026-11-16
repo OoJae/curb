@@ -199,10 +199,13 @@ function mount(): void {
       $('[data-record="settled"]').textContent = fmtInt(r.settled);
       const wins = r.beatLastPrint + r.beatClosingVwap;
       const of = r.closureCount != null ? ` of ${fmtInt(r.closureCount)} committed before a reopen` : '';
+      // Before the keeper's swap fix the closing-VWAP baseline is the last print (D-15): one comparison, shown once.
       $('[data-record="line"]').textContent = `${r.settled === 1 ? 'mark' : 'marks'} graded by the chain${of}. ${
         wins === 0
           ? 'No wins.'
-          : `Beat the last print ${fmtInt(r.beatLastPrint)}×; beat the closing VWAP ${fmtInt(r.beatClosingVwap)}×.`
+          : r.beatClosingVwap === r.beatLastPrint
+            ? `Beat the last print ${fmtInt(r.beatLastPrint)}×.`
+            : `Beat the last print ${fmtInt(r.beatLastPrint)}×; beat the closing VWAP ${fmtInt(r.beatClosingVwap)}×.`
       }`;
       $('[data-record="asof"]').innerHTML =
         r.block != null

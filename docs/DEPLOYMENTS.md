@@ -239,7 +239,11 @@ and the code. They found one blocker in the service and two claims the data did 
 - **"Closing VWAP" was the last pool price in all 15 settled rows**: nothing traded in the 15 minutes
   before any cut, so the keeper committed the last print as the baseline, and the chain cannot tell the
   two apart. The listing and the route's own description now say "the pre-close price (the 15-minute
-  closing VWAP, or the last pool price when nothing traded)".
+  closing VWAP, or the last pool price when nothing traded)". **Correction (⟨DATE⟩, D-15):** the reason
+  given is wrong. The pools printed 1, 2, 50, 27 and 118 swaps in the 15 minutes before the five cuts behind
+  those rows (7 of the 15 row windows held at least one). The keeper committed the last print because it
+  decoded no Swap logs, not because the window was empty, and so the baseline is the last print in every row
+  before block ⟨N⟩, not only these 15.
 - **"A mark before every reopen" overstated coverage**: wSHEINx has no price source and closures shorter
   than 30 minutes are skipped. The agent description now says "the closures it has graded".
 
@@ -626,7 +630,9 @@ Deployed by `script/hostb/deploy.sh`, which now ships three services.
 pinned Multicall3; reads every pool's `slot0`; scans Swap logs for all five pools in one paged
 `eth_getLogs`; opens a closure when capacity hits zero; accumulates that closure's swaps to disk;
 and, ten minutes before capacity is due back, builds the mark bundle, fsyncs it, and calls `commit`.
-After the reopen plus `SETTLE_DELAY` it calls `settle(id)`.
+After the reopen plus `SETTLE_DELAY` it calls `settle(id)`. **Correction (⟨DATE⟩, D-15):** until ⟨DATE⟩ the
+scan fetched the logs and then failed to decode every one, so no swap was accumulated for any closure, from
+the first tick on 21 Sept to the deploy at block ⟨N⟩.
 
 **Four rules it will not break, each of which costs rows:**
 
@@ -638,7 +644,11 @@ After the reopen plus `SETTLE_DELAY` it calls `settle(id)`.
 3. **Closures under `MIN_CLOSURE_S` are not marked.** The issuer ends every period 300 s early, so a
    US name shows a five-minute capacity gap at each session boundary. Real, but empty: the mark would
    equal the last print by construction and `skill()` counts strict wins, so each would be a
-   guaranteed tie padding the record.
+   guaranteed tie padding the record. **Correction (⟨DATE⟩, D-15):** "by construction" is wrong. A
+   mark with no cross-market term is the last print moved by half the pool's drift, and these pools
+   trade through the gap. The rule stands for a different reason: the commit is due 120 to 600 s
+   before the reopen, so a mark for a five-minute gap would be committed within a tick of the cut,
+   with almost no closure behind it, four times each weekday per US name.
 4. **The commit is frozen and retried byte for byte.** Rebuilding after a lost receipt would change
    `inputRoot`, hence the closure id, and a commit that had actually mined would become a second row
    for the same closure — double-counted forever. A retry either lands the same row or is refused

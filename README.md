@@ -217,12 +217,17 @@ Integration guide: [`docs/MARKETCLOCK.md`](docs/MARKETCLOCK.md).
 **Scorecard v2** (`src/Scorecard.sol`) is where Curb's marks get graded. When a primary market shuts, the keeper
 (`services/keeper`) commits a mark for the reopen. It does this ten minutes before capacity returns, under a
 versioned method, with the evidence bundle fsynced first. Rows before block 71,486,953 use
-`curb.scorecard.mark/1` (the pool's last price); later rows use `curb.scorecard.mark/2`, which moves the last
-price by what trades while Hong Kong is shut, and commits the exact signal bytes it used ([D-13](docs/DECISIONS.md)). After the reopen, anyone can
+`curb.scorecard.mark/1`: the pool's last price before the cut, moved by half of what the pool did between the cut
+and the commit. Later rows use `curb.scorecard.mark/2`, which moves the last price by what trades while Hong Kong is
+shut instead, and commits the exact signal bytes it used ([D-13](docs/DECISIONS.md)). In the lunch recess and for the
+US names mark/2 has no signal and falls back to mark/1's rule. Until block ⟨N⟩ the keeper decoded none of the pools'
+swaps, so that move was recorded as zero in every row ([D-15](docs/DECISIONS.md)). After the reopen, anyone can
 call `settle(id)`. It takes no price: the contract reads the wrapper's pinned pool itself, through a
 manipulation guard (spot must sit within 50 ticks, about 0.5%, of the pool's own 120-second average; see Honest
-limits). It grades the mark against two baselines: the last print, and the pre-close price (the 15-minute closing
-VWAP, or the last pool price when nothing traded). `skill()` counts strict wins only, so a tie is not a win.
+limits). It grades the mark against two baselines committed with it: the last print, and the pre-close price (the
+15-minute closing VWAP, or the last print when nothing traded in those 15 minutes). In every row committed before
+block ⟨N⟩ the second baseline is the last print, because the keeper computed no VWAP ([D-15](docs/DECISIONS.md)), so
+`skill()`'s two win counts are one comparison for those rows. `skill()` counts strict wins only, so a tie is not a win.
 
 **curb-asp** (`services/asp`) sells that data over x402 at `api.curb.markets`:
 closure calendar $0.01, accuracy record $0.05, discount by duration $0.10. Payment is USD₮0 on X Layer,
@@ -320,16 +325,27 @@ Curb never holds or moves the raw rebasing token. If you compare a wrapper price
 
 ## Honest limits
 
-- **The record has no wins yet.** Read it live with `skill()`. The 15 rows before block 71,486,953 used
-  `curb.scorecard.mark/1`, whose only input is the pool: the mark *is* the last print, so every one tied by
-  construction. The reopens were not quiet: they moved 0 to 105 bp. The fix is `curb.scorecard.mark/2`, which adds
-  a signal that trades while Hong Kong is shut ([D-13](docs/DECISIONS.md)). Its first three rows (25 Sep 01:30Z
-  reopen) **all lost**: the signal called Tencent, Xiaomi and Meituan up and HKEX opened all three down. Its next
-  three rows (the 25 Sep lunch recess) tied, because the method gives the one-hour recess no weight. As of 25 Sep
-  19:14Z `skill()` reads (21, 0, 0): 21 settled, no wins. Old rows keep the method that produced them, and no row
-  is ever re-marked. Two more things the record shows: the pools **do** trade while primary capacity is off (15, 63 and
-  141 swaps in the 22–24 Sep lunch recesses, most of them on wXIAOx), and five minutes after a reopen, when the
-  Scorecard reads it, a pool can lag the real market (wTCENTx's pool −13 bp against 0700.HK −114 bp on 25 Sep).
+- **Every row before block ⟨N⟩ was marked by a keeper that saw no swaps.** A decoding defect dropped every pool
+  `Swap` log from the keeper's first tick on 21 Sep until ⟨DATE⟩ ([D-15](docs/DECISIONS.md)). In those ⟨ROWS_PRE⟩
+  rows the pool's own move was never applied (the `no-drift` flag is an artefact), the "closing VWAP" baseline is
+  the last print, the last print is the pool price the keeper last read before the cut, and the swap lists in the
+  evidence bundles are empty. The pools did trade: 15, 63 and 141 swaps in the 22–24 Sep lunch recesses alone. The
+  rows, marks and grades stand as committed, and no row is ever re-marked. The verifier in this repository says so
+  on each of those rows (on npm, from `curb-verify` 0.2.0).
+- **The record so far.** Read it live with `skill()`. As of 14 Nov 2026 (block 75,902,478) it read (232, 43, 43):
+  232 settled, and against the last print 43 strict wins, 134 ties and 55 losses. Its second count repeats the first,
+  because before block ⟨N⟩ the closing-VWAP baseline is the last print. Every win and every loss is an overnight,
+  weekend or holiday Hong Kong row where `curb.scorecard.mark/2` applied its cross-market signal
+  ([D-13](docs/DECISIONS.md)); its first three (25 Sep 01:30Z reopen) all lost, when the signal called Tencent,
+  Xiaomi and Meituan up and HKEX opened all three down. Of the 134 ties, 131 are the 15 `mark/1` rows, the
+  lunch-recess rows and the US weekend rows, where the mark is the last print moved by the pool's drift and the
+  drift was recorded as zero. Replayed with the missed swaps counted, the same 232 rows read 97 wins, 64 ties and
+  71 losses, with a mean error of 58.08 bp against 61.49 bp as committed. That is not evidence of forecasting: the
+  Scorecard grades the pool five minutes after the reopen, a thin pool moves little in the fifteen minutes from the
+  commit to that read, and over the whole record the replayed mark is still slightly worse than the last print
+  (57.79 bp). One committed row (wTCENTx, reopen 28 Oct 01:30Z) was never graded: the keeper's settle transaction
+  reverted and was not retried before the six-hour window closed ([D-17](docs/DECISIONS.md)). Five minutes after a reopen, when the Scorecard
+  reads it, a pool can lag the real market (wTCENTx's pool −13 bp against 0700.HK −114 bp on 25 Sep).
 - **Every demo counterparty is a team wallet, and says so.** The first paid call (24 Sep, $0.01) was the team's
   Agentic Wallet paying the team's revenue wallet. It proves the payment rail, not demand. The W3/W4 demos run
   only between team wallets (curb-desk, the Agentic Wallet, the deployer). Every address and its funding path is
@@ -339,6 +355,8 @@ Curb never holds or moves the raw rebasing token. If you compare a wrapper price
   the intended design, and the deployed source can't be edited. Any one of the three enabled attestor keys (host
   A, host B, a cold spare) can write a round alone. Host B's signed witness is an attributable second check, not
   a quorum.
+- **Scorecard's NatSpec calls its second baseline a VWAP.** The field `closingVwap` is whatever the keeper commits.
+  In every row before block ⟨N⟩ it is the last print ([D-15](docs/DECISIONS.md)). The deployed source can't be edited.
 - **A settler can nudge the graded price.** `settle` and `recordPrint` read the pool's spot price, refused only
   when it is more than 50 ticks (about 0.5%) from the pool's 120-second average, and a swap in the same block does
   not enter that average. Settlement is permissionless, so a caller who swaps, settles and swaps back in one
@@ -347,7 +365,10 @@ Curb never holds or moves the raw rebasing token. If you compare a wrapper price
 - **Coverage has gaps, deliberately.** wSHEINx has no price source (cardinality-1 pool). Closures shorter than
   30 minutes are not marked. A closure whose start the keeper did not witness is not marked.
 - **Published errata.** The first seven MarketClock rounds (14 Sep) overstated capacity 100x. Regimes were
-  correct throughout ([D-7](docs/DECISIONS.md)).
+  correct throughout ([D-7](docs/DECISIONS.md)). Every Scorecard row before block ⟨N⟩ was marked without the
+  pools' swaps ([D-15](docs/DECISIONS.md)). Six rows of the 2 Oct and 20 Oct holiday closures commit a holiday list
+  that no longer held the holiday, so `curb-verify` 0.1.0 prints `NOT REPRODUCED` for them; their marks and reopen
+  times are right ([D-16](docs/DECISIONS.md)). One row of 28 Oct was never graded ([D-17](docs/DECISIONS.md)).
 - **Receipts are unsigned.** Round bundles, mark bundles and host B's witness statements are public and
   write-once in `archive.curb.markets`. The paid API's receipts are not: they are only as trustworthy as the API
   host's disk.

@@ -94,8 +94,9 @@ export const TOOLS: readonly ToolSpec[] = [
     title: "Curb's graded record",
     description:
       "Curb's accuracy record from its Scorecard v2 contract on X Layer: skill() (settled rows, and strict wins of Curb's " +
-      "reopen mark against the last print and against the pre-close price, the contract's closingVwap: the 15-minute closing " +
-      "VWAP, or the last pool price when nothing traded; a tie is not a win) and the most recent rows, newest " +
+      "reopen mark against the last print and against the contract's closingVwap baseline; a tie is not a win; in every " +
+      "row committed before the keeper's swap-decoding fix, DECISIONS D-15, closingVwap is the last print, so the two " +
+      "counts are one comparison) and the most recent rows, newest " +
       "first, each with its mark, both baselines, the reopen price the contract read from the pool itself, and the errors in " +
       "basis points, plus the commit transaction to check with curb-verify. Every value is read at one block.",
     inputSchema: { limit: z.number().int().min(1).max(MAX_ROWS).optional().describe(`Rows to return, newest first. 1-${MAX_ROWS}, default ${DEFAULT_ROWS}.`) },

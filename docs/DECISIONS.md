@@ -484,6 +484,13 @@ the same instant or catches us.
 closure, weekends and holidays, plus the US names' own closures. Holidays need no special case: they
 fall out of `sessionAt()`, so a Friday close predicts Monday and 30 Sep predicts 2 Oct.
 
+> **Note, ⟨DATE_D16⟩ (D-16).** "Holidays need no special case" was true of the prediction and not of the evidence.
+> The keeper predicted 2 Oct from 30 Sep, and 20 Oct from 16 Oct, correctly. But each bundle committed the holiday list
+> as it stood ten minutes before the reopen, after the issuer had dropped the holiday the closure spanned, so a
+> verifier walking that schedule from the cut "gets a different instant" for six rows that are not wrong, and
+> `curb-verify` 0.1.0 prints `NOT REPRODUCED` for them. From block ⟨N⟩ the committed schedule keeps every holiday seen
+> during the closure.
+
 **A closure whose start was not witnessed is not marked.** After a restart the keeper has no observed
 last print, and "the mid at the cut" would really be a mid from the middle of the closure. The row
 would quietly claim a baseline it never saw. One fewer row is the correct answer.
@@ -558,6 +565,20 @@ every existing row keeping the method that produced it. No row is ever re-marked
 > marks therefore did not detect trades that did happen; it is to be investigated after the finale (the
 > keeper is not changed while the first mark/2 rows are being recorded). The reopen range is 0 to 105 bp,
 > not 30 to 105.
+
+> **Erratum, ⟨DATE⟩ (the open item above, closed in D-15).** The `no-drift` flag was not detecting anything. The
+> keeper failed to decode every pool `Swap` log, so it counted zero swaps in every closure and applied no drift.
+> Four statements in this entry are wrong, not one. (1) 22 Sept: "Not one swap occurred in any of the three pools
+> during the 55-minute recess, nor in the 15 minutes before the cut". The pools printed 15 swaps in that recess
+> (wTCENTx 5, wXIAOx 4, wMEITx 6) and one on wXIAOx in the 15 minutes before the cut; "it is in the committed
+> evidence" was true only because the evidence was the defect. (2) 24 Sept: "none of it is in the pool beforehand".
+> In 14 of the 15 closures the pool's price had moved before the reopen, and in the first row the pool already stood
+> at its reopen print, to the wei, when the mark was committed. (3) 24 Sept: "`mark/1` cannot beat the last print on
+> these assets, by construction". (4) The erratum of 25 Sept: "`mark/1` *is* the last print, so a mark/1 row can only
+> tie". `mark/1` is the last print moved by half the pool's drift. The fifteen marks equalled the last print because
+> the drift was recorded as zero. The ties stand as graded. The 25 Sept swap counts (15, 63, 141) were recounted and
+> are right; "wTCENTx had 1" is right for 23 and 24 Sept and wrong for 22 Sept, when it had 5, and on 22 Sept most of
+> the swaps were not on wXIAOx (4 of 15).
 
 The public record says so already: `https://api.curb.markets/v1/accuracy-record` previews
 `{"settled": 15, "beatLastPrint": 0, "beatClosingVwap": 0}`. That is the honest number.
@@ -649,6 +670,12 @@ as such.
 mark/1 is the last print by construction (the pools do trade while shut; see the D-11 erratum), yet the reopens moved 0–105 bp.
 Beating the last print needs information from outside the pool.
 
+> **Erratum, ⟨DATE⟩ (D-15).** "mark/1 is the last print by construction" is wrong, and so is "The mark stays the last
+> print" for the lunch recess below. mark/1 moves the last print by half the pool's drift, and a recess row under mark/2
+> is mark/1's mark. In every row before block ⟨N⟩ the keeper recorded a drift of zero because it decoded no swaps, so
+> the premise above ("needs information from outside the pool") was never tested. The β fit and the walk-forward use no
+> pool data and are unaffected.
+
 **Which signals exist.** Surveyed and tested 24 Sept, 12:07–12:30Z:
 
 - **Binance USDⓈ-M perpetuals trade 24/7 on the Hong Kong names:** `HK0700USDT` (Tencent, HKD/share),
@@ -676,6 +703,10 @@ Beating the last print needs information from outside the pool.
   Over 23 recesses, the perp-adjusted mark *lost* on all three names (Tencent 26 vs 18 bp, Xiaomi 29 vs 22,
   Meituan 32 vs 19), and halving the weight was still worse. The perp's move is still committed as
   evidence.
+
+  > **Erratum, ⟨DATE⟩ (D-15).** Weight 0 on the signal leaves mark/1's rule, which moves the last print by half the
+  > pool's drift. A recess row stayed at the last print only because the keeper recorded the drift as zero. From block
+  > ⟨N⟩ recess rows move with the pool.
 - **wNVDAx / wAAPLx:** no proxy (`no-proxy`); mark/1 behaviour.
 - **Nothing available:** `no-signal`, and the mark equals mark/1's.
 - **β** was fitted on 118 overnight and weekend closures (22 Jul – 22 Sep, ending *before* the D-11 rows),
@@ -757,6 +788,12 @@ rows prove nothing either way, and the walk-forward lost 32 of its 87 closures. 
 **Nothing in the keeper changes.** mark/2, its β and its band stay as D-13 set them while the first
 out-of-sample mark/2 rows accrue. Any change will get a new method id, and no row is ever re-marked.
 
+> **Note, ⟨DATE⟩ (D-15).** The keeper changed on ⟨DATE⟩ to fix swap decoding. The method id is unchanged: mark/2,
+> its β and its band are as D-13 set them, `computeMark` is the same function, and every earlier row re-derives under
+> it. What changed is that its inputs are now true, so from block ⟨N⟩ the drift term acts in lunch-recess and US
+> rows. "The 25 bp band on the first 15 rows held 8 of 15" above is right; each of those bands was the 25 bp floor,
+> because the drift was recorded as 0.
+
 **Limits.** 118 closures in two months. The damping and the two-leg average were chosen on the full sample.
 The target is the official open, not the pool print Scorecard settles at. The recess weight of 0 is D-13's
 and is not re-tested here.
@@ -764,3 +801,326 @@ and is not re-tested here.
 `tools/leaderboard/build.ts` writes `web/public/data/leaderboard.json` (`curb.leaderboard/1`), which holds
 both records and the sha256 of every input. It refuses to write unless its recount of the rows equals
 `skill()` at the same block.
+
+---
+
+## D-15 — Erratum: the keeper decoded no swaps, so every row before block ⟨N⟩ carries no drift, no closing VWAP and no swap evidence (⟨DATE⟩)
+
+**Status: CORRECTED on ⟨DATE⟩ at ⟨DEPLOY_TIME⟩ (keeper code digest `⟨DIGEST⟩`, release commit `⟨RELEASE_COMMIT⟩`);
+the fixed keeper's evidence starts at block ⟨N⟩. The ⟨ROWS_PRE⟩ rows committed before it stay on chain unchanged and
+are documented here.**
+
+**What was wrong.** `services/keeper/src/sources/pools.ts` decoded every pool `Swap` log with
+`poolAbi.decodeEventLog("Swap", l.data, [])`. With ethers 6.17.0 an empty topics array fails the event's topic check,
+so the call threw `fragment/topic mismatch` on every log, and the `catch` beside it ("a malformed log is evidence of
+nothing; skip it") dropped all of them and reported nothing. Both call sites, `swapsInRange` and `scanSwaps`, carried
+the line from the initial commit (`cc03fa7`, 21 Sept). The keeper never saw a swap on any pool, from its first tick.
+No test fed a log through either function.
+
+**What that did to a row.** Three inputs of a mark come from swaps, and so does one leaf of its evidence.
+
+| | what the method says | what every row before block ⟨N⟩ got |
+|---|---|---|
+| swaps during the closure | if the pool traded, move the last print by half its drift from the cut to the commit | a count of 0, so the flag `no-drift` and a drift of 0, whatever the pool did |
+| last print | the pool price after the last swap at or before the cut | the pool price the keeper last read before the cut (it reads every 30 s) |
+| closing VWAP | the volume-weighted price of the 15 minutes before the cut, or the last print if nothing traded in them | always the last print, with the flag `no-closing-vwap` |
+| evidence | the swaps behind all three, in the bundle's `swaps:<wrapper>` leaf | two empty lists |
+
+**How far it reached.** Checked on 14 Nov 2026 against all 233 rows then on chain, their 233 archived bundles, and
+Scorecard storage at block 75,902,478. The rows committed after that and before block ⟨N⟩ came from the same decoding
+code and are affected in the same way.
+
+- **Every row.** 233 of 233 (15 under `mark/1`, 218 under `mark/2`; commit blocks 71,283,582 to 75,776,412; keeper
+  code digests `sha256:1d38ade9…` and `sha256:b3b4220c…`) carry `no-drift`, `no-closing-vwap`,
+  `swapsDuringClosure: 0` and empty swap lists. On chain `closingVwap` equals `lastPrint` in all 233, so `skill()`'s
+  two win counts have been one comparison from the first row: (232, 43, 43). Rows committed from 16 Nov until the
+  deploy carry `sha256:53bf436f…`, the build of the 14 Nov redeploy, which has the same decoding line.
+- **The pools were trading.** Read from the chain, not from the keeper (wTCENTx / wXIAOx / wMEITx):
+
+  | closure | rows | keeper cut block | swaps in the 15 min before the cut | swaps from the cut to the commit | the bundles say |
+  |---|---|---|---|---|---|
+  | 22 Sept lunch | 0-2 | 71,280,271 | 0 / 1 / 0 | 5 / 3 / 6 | 0 and 0 |
+  | 22 Sept overnight | 3-5 | 71,294,677 | 0 / 1 / 1 | not scanned | 0 and 0 |
+  | 23 Sept lunch | 6-8 | 71,366,676 | 0 / 50 / 0 | 1 / 32 / 1 | 0 and 0 |
+  | 23 Sept overnight | 9-11 | 71,381,082 | 2 / 25 / 0 | not scanned | 0 and 0 |
+  | 24 Sept lunch | 12-14 | 71,453,081 | 0 / 118 / 0 | 1 / 103 / 0 | 0 and 0 |
+  | 24 Sept overnight | 15-17 | 71,467,483 | 5 / 4 / 1 | 101 / 257 / 49 | 0 and 0 |
+  | 25 Sept lunch | 18-20 | 71,539,489 | 1 / 2 / 0 | 1 / 29 / 1 | 0 and 0 |
+  | 13 Nov lunch | 230-232 | 75,773,120 | 2 / 9 / 0 | 1 / 14 / 0 | 0 and 0 |
+
+  The cut-to-commit counts come from two scans that bound a closure slightly differently, so either can differ by a
+  swap or two from what the keeper would have counted. On 13 Nov the wNVDAx pool alone printed 1,418 swaps between 03:40Z
+  and 07:57Z. Over all 233 rows, 146 had at least one swap in the 15 minutes before the cut.
+- **The bundles show it themselves.** In 215 of the 233, the committed pool price at the commit differs from the
+  committed price at the cut, in a bundle that records no swap between them. A V3 pool's price moves only on a swap.
+- **Marks that should have followed the pool and did not.** 131 settled rows carry no cross-market term: the 15
+  `mark/1` rows, the 102 lunch-recess rows under `mark/2` (`recess-no-edge`) and the 14 US weekend rows (`no-proxy`).
+  Their rule is `mark = lastPrint × (1 + 0.5 × drift)`. With the drift recorded as 0, every one equalled the last
+  print and tied. Each committed the 25-bp band floor for the same reason.
+- **Marks that did not depend on it.** 102 rows applied `mark/2`'s cross-market signal (78 overnight, one of them
+  never settled, and 24 over a weekend or holiday). The signal replaces the drift, so their move is what the method
+  says. All 43 wins and all 55 losses on the record are in this group. Their flag should read `drift-superseded`
+  where the pool moved (99 of the 102), and reads `no-drift`.
+- **The last print.** In 27 rows the committed last print differs from the pool price at the keeper's cut block,
+  because a swap landed between its last reading and the cut: by a median of 1.4 bp, by 5 bp or more in 3 rows, and
+  by 53.7 bp in one (wXIAOx, 29 Sept lunch). In the other 206 the two are the same number.
+
+**What the record would have read.** A replay of all 233 rows with the swaps the keeper missed, each row under its
+own method exactly as written, the same reopen prints, and the corrected last print and closing VWAP as baselines
+(run 14 Nov from the chain and the archive; every committed row reproduces exactly before anything is changed):
+
+| | settled | wins / ties / losses against the last print | mean error, mark | mean error, last print | band held |
+|---|---|---|---|---|---|
+| as committed | 232 | 43 / 134 / 55 | 61.49 bp | 57.88 bp | 128 |
+| with the swaps counted | 232 | 97 / 64 / 71 | 58.08 bp | 57.79 bp | 150 |
+
+70 rows change outcome: 54 ties become wins and 16 become losses (40 and 10 of the 111 lunch-recess rows, 11 and 3 of
+the 14 US weekend rows, 3 and 3 of the six `mark/1` overnight rows). None of the 43 wins or 55 losses changes. Against a
+real closing VWAP the second tally would read 110 wins, 52 ties and 70 losses. On the whole record the corrected mark
+is still slightly worse than the corrected last print (58.08 against 57.79 bp), because the 101 settled signal rows
+average 109.3 bp against the last print's 100.8 bp.
+
+Most of the gain is not forecasting. The Scorecard grades the pool's own price five minutes after the reopen, and the
+pool moves little between the commit and that read: in 36 of the 111 recess rows the price graded at the reopen was,
+to the wei, the pool price at the commit fifteen minutes earlier. A mark that follows the drift mostly carries a thin
+pool's current price forward. The replay is in-sample, over seven and a half weeks, on three Hong Kong names that
+share every closure day, and it says nothing about the Hong Kong official open. The rows keep the grades they have.
+
+**What stands.** Every row, mark, band, baseline and grade is on chain as it was committed, and `skill()` counts them
+as it always did. Each bundle still rebuilds to its committed root, and each mark still follows from its committed
+inputs: the inputs were wrong, the arithmetic was not. (Six rows of two holiday closures fail a different check, which
+this defect did not cause; it has its own entry.) MarketClock, the reopen times, the cross-market signal bytes and the
+contract's own reopen prices do not pass through this code.
+
+**What this record said that was wrong.**
+
+- D-11, 22 Sept: "Not one swap occurred in any of the three pools during the 55-minute recess, nor in the 15 minutes
+  before the cut." There were 15 in the recess and one in the 15 minutes before it. "The cause is plain and it is in
+  the committed evidence": the evidence was the defect.
+- D-11, 24 Sept: "`mark/1` cannot beat the last print on these assets, by construction: its only input is the
+  wrapper's own pool, and that pool carries no information while the market is shut." `mark/1` moves with the pool,
+  and the pool moved.
+- The erratum of 25 Sept found the trades (15, 63 and 141, recounted here and right) and then gave a second wrong
+  reason: "`mark/1` *is* the last print, so a mark/1 row can only tie the last-print baseline, whatever the pool does."
+  It left the flag "to be investigated after the finale". This entry is that investigation.
+- D-13: "mark/1 is the last print by construction", and for the lunch recess "The mark stays the last print". A recess
+  row under `mark/2` is `mark/1`'s mark, and that moves with the pool.
+- Outside this file: `docs/DEPLOYMENTS.md` ("nothing traded in the 15 minutes before any cut"), the README's Honest
+  limits, the method notes on /scorecard, the notes in the paid API's answers, `docs/research/HK_CLOSURE.md`,
+  `docs/SUBMISSION.md` and finding 3 of the Aave post each repeat one of these reasons. Each carries, or is getting, a
+  correction or an erratum that points here.
+
+**What it means for D-11's reasoning.** D-11 fixed in advance that if marks kept tying, the method would gain a
+cross-market term. The contingency was met by the defect, not by the pools. `mark/2` was adopted on the premise that
+the pool held nothing `mark/1` could use, and that premise was never tested, because the drift term never ran. On the
+101 settled rows where `mark/2` applied its signal, `mark/1`'s rule with the swaps counted would have scored a mean
+error of 82.3 bp, against 109.3 bp for `mark/2` and 100.8 bp for the last print. The same caveats apply in full: that
+is in-sample, it grades against the pool five minutes after the reopen rather than the Hong Kong open that β was
+fitted to, and most of the drift's edge is the persistence described above. It does not show that the drift forecasts
+the reopen. `mark/2`'s own evidence does not depend on the keeper: D-13's fit and D-14's walk-forward read Yahoo bars
+and Binance klines only, and `tools/research/hk-closures/fit.mjs --check` still passes. Whatever the comparison shows,
+the rows keep the method that produced them.
+
+**How it was found.** On 14 Nov 2026, in a read-only investigation of the open item in the 25 Sept erratum. The
+keeper's log since its boot of 24 Sept 20:34Z held 218 marks, every one with `swaps=0`, `drift=0` and both flags. The
+chain held 1,418 swaps on one pool in four hours. Run over blocks 75,772,400 to 75,772,499, the keeper's own
+`scanSwaps` returned no rows where the node returned 19 logs, and the decode call threw on each of them.
+
+**Why it was not caught sooner.** The `catch` was written to survive one malformed log and said nothing when it
+swallowed all of them. Its output, `no-drift` and `no-closing-vwap`, read as an honest finding about a quiet pool, and
+D-11 took it as one. The fact-check of 25 Sept proved the pools traded, and the flag was parked until after the
+finale. The verifier re-runs the method on the committed inputs and never compares them with the committed swap
+lists, so 233 empty lists verified. The cost was every row from 22 Sept to ⟨DATE⟩ (⟨ROWS_PRE⟩ rows) with incomplete
+evidence, 131 of the first 233 marked without the pool's move, a second baseline that was a copy of the first, and a
+wrong reason for the ties repeated in the README, on the site, in the API, in the submission and in the Aave post. It
+is now disclosed.
+
+**How it is fixed without rewriting history.** Release commit `⟨RELEASE_COMMIT⟩`, deployed ⟨DATE⟩ at ⟨DEPLOY_TIME⟩
+with code digest `⟨DIGEST⟩`; the old keeper was stopped before the new one started, and block ⟨N⟩ is the chain head
+read right after the deploy, before the new keeper had built any mark.
+
+- **Decoding.** Each log is decoded with its own topics. A log no endpoint can decode is never dropped in silence: its
+  block becomes a gap in the closure's scan coverage, and the keeper pages. `services/keeper/src/sources/pools.test.ts`
+  decodes 18 real mainnet logs and fails on the old line.
+- **The method is unchanged.** `curb.scorecard.mark/2` as D-13 published it: β, band and drift weight as written,
+  `computeMark` the same function, so every earlier row still re-derives under it and the method id stays. What
+  changed is that its inputs are now true. That changes what new rows do: a lunch-recess row and a US weekend row now
+  move the last print by half the pool's drift from the cut to the commit, and can win or lose; their band is 25 bp
+  plus half that move. An overnight or weekend Hong Kong row with the signal applied is marked as before, from a last
+  print that is now the price after the last swap at or before the cut. Both baselines are now what the contract's
+  NatSpec calls them: the last print before the closure, and the pool's VWAP at the closure (over the 15 minutes before
+  the cut, or the last print when nothing traded in them).
+- **The evidence says what was scanned.** The `swaps:<wrapper>` leaf now commits, beside the two lists, the pool and
+  the event topic, the exact block ranges scanned (`closingRange`, the 900 blocks up to the cut; `closureRange`, from
+  the block after the cut to the block of the commit's chain read), any `gaps`, the swap counts, a digest of the full
+  closure list, and the pool's own read at the cut block (`cutRead`). A closure list longer than 10,000 swaps keeps the
+  first and last 5,000 and commits the count and digest of all of them (`closureOmitted`). Old keys are unchanged, so
+  the published verifier still reads these bundles.
+- **What a degraded row means.** The keeper keeps filling gaps until about six and a half minutes before the reopen,
+  then commits what it has, honestly, and pages:
+  - `complete: false`: some blocks of the closure were not scanned in time; `gaps` lists them, and
+    `swapsDuringClosure` counts the swaps recorded outside them. It is committed only when at least one swap was
+    recorded or the pool price did not move, so the mark, band and baselines are those that complete evidence would
+    give (the drift comes from the pool's prices at the cut and at the commit); only the count can be short.
+  - `closingComplete: false`: the 15 minutes before the cut were not fully scanned, or their last swap did not match
+    the pool price read at the cut. The closing list is committed empty, `closingVwap` falls back to the last print
+    (flag `no-closing-vwap`), and the last print is the pool price at the cut block, bound by `cutRead` when it is present.
+  - `cutRead: null`: the pool read at the cut is not committed, because the closure was opened by an earlier keeper
+    build (a closure already open at a deploy). The cut price is then the keeper's own reading, as before.
+  - One case is refused instead of degraded: no swap recorded and a pool price that moved. A V3 pool's price moves
+    only on a swap, so that row would knowingly leave out a move; the keeper commits nothing for that closure and
+    pages. It is exactly the shape of every row before block ⟨N⟩.
+- **A cut the schedule does not confirm is not committed as it stands.** Host A sometimes writes a zero cap for a
+  minute or so when one issuer fetch fails. If such a blip opens a closure, or runs into a real cut, the keeper now
+  checks the cut against the venue schedule. If the schedule itself shuts within two keeper ticks of when the keeper
+  last saw it open, the closure is re-anchored at the schedule's own cut (a recut: new cut time, cut block, cut price
+  and swap file, logged as `closure-recut`); otherwise it is never committed, and the keeper pages. Whether a committed cut is a
+  scheduled cut can be checked from the bundle: the committed schedule must say the market was shut at the committed
+  cut time.
+- The same release reads the receipt status of every transaction it sends, and keeps every holiday seen during a
+  closure in the schedule it commits. Each of those has its own entry.
+
+First row read by the fixed keeper: ⟨FIRST_ROW⟩.
+
+**The rule for rows committed before block ⟨N⟩.** No row is re-marked and no bundle is rewritten: the archive is
+write-once and the roots are on chain. The verifier in this repository decides a row's era from the block of the chain
+read its bundle commits, bound to the commit block. For a row read before block ⟨N⟩ it still prints `REPRODUCED` when
+the mark follows from its committed inputs, and adds notes that never change the exit code: that the build which wrote
+it decoded no Swap logs, so its empty lists, `no-drift`, `no-closing-vwap` and `closingVwap = lastPrint` record what
+that keeper saw, not what the pool did; where the bundle's own pool prices moved while it lists no swaps, by how much;
+and where its last print is the keeper's last reading before the cut rather than the price at the cut block, by how
+much. For a row read from block ⟨N⟩ the swap evidence is checked strictly: the last print, the closing VWAP and the
+swap count must follow from the committed lists, the lists must agree with the committed pool prices, and anything
+else is `NOT REPRODUCED`. `curb-verify` prints the notes as `EVIDENCE` lines. The npm package gets all of this in
+0.2.0; until then `npx -y curb-verify` (0.1.0) prints none of it: it re-derives new rows' marks from inputs that are
+now true, and treats old rows as it always did.
+
+/scorecard, the paid API and the MCP tool say the same against those rows (each is deployed separately from the
+keeper). From block ⟨N⟩ an empty swap list in a complete bundle means the pool did not trade.
+
+**Reproduce.** The swap counts above: `eth_getLogs` for the Swap topic
+`0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67` on the pools in `Scorecard.priceSources`, in
+100-block steps (the public RPC refuses wider ranges). The bundles: `https://archive.curb.markets/marks/<inputRoot>.json`,
+whose `swaps:<wrapper>` leaves are empty and whose `markinput` leaves carry `midAtCutE18` and `midNowE18`. The decode:
+`services/keeper/src/sources/pools.test.ts`.
+
+---
+
+## D-16 — Six holiday rows that the published verifier cannot re-derive (⟨DATE_D16⟩)
+
+**Status: FIXED for rows read from block ⟨N⟩ (deploy 2, ⟨DATE⟩). The six rows stay on chain unchanged. Their marks,
+reopen times and grades are right; their evidence does not show the holiday that justifies the reopen time.**
+
+**What happened.** The keeper predicts a row's reopen by walking the venue schedule forward from the present, every
+tick, and commits the venue schedule as it last read it, ten minutes before the reopen. The issuer's holiday list
+looks forward only: it drops a holiday once it has passed. The XHKG entry for 1 Oct (`2026-09-30T16:00Z` to
+`2026-10-01T16:00Z`) was last seen in a bundle on 30 Sep at 04:50Z and was gone by the 2 Oct 01:20Z commits, whose
+schedule lists 19 Oct and 24–25 Dec. A verifier walks the committed schedule from the committed cut. For the 30 Sep
+cut that walk reopens on Thu 1 Oct at 01:30Z, a day before the committed reopen of Fri 2 Oct at 01:30Z, and the check
+fails. The 16 Oct closure failed the same way over the 19 Oct holiday. Read from the 20 Oct bundle, the issuer already
+lists 24–25 Dec and 31 Dec, so without a fix the same would happen there.
+
+| row | asset | cut (UTC) | reopen committed | commit block | input root | graded against the last print (Curb / last print, bp) |
+|---|---|---|---|---|---|---|
+| 41 | wTCENTx | 30 Sep 07:55:31 | 2 Oct 01:30 | 72,134,989 | `0xfa506041…` | win (25 / 26) |
+| 42 | wXIAOx | 30 Sep 07:55:31 | 2 Oct 01:30 | 72,134,994 | `0x3dafc1b6…` | loss (125 / 113) |
+| 43 | wMEITx | 30 Sep 07:55:31 | 2 Oct 01:30 | 72,134,999 | `0xd81c7e07…` | loss (61 / 52) |
+| 113 | wTCENTx | 16 Oct 07:55:37 | 20 Oct 01:30 | 73,690,190 | `0xf1da8c47…` | win (16 / 92) |
+| 114 | wXIAOx | 16 Oct 07:55:37 | 20 Oct 01:30 | 73,690,194 | `0x4db753ad…` | loss (154 / 55) |
+| 115 | wMEITx | 16 Oct 07:55:37 | 20 Oct 01:30 | 73,690,199 | `0x67daecc7…` | win (130 / 214) |
+
+What `curb-verify` (0.1.0, and this repository before deploy 2) prints for each of them, here for row 41:
+
+```
+  FAIL    reopen mismatch for wTCENTx: schedule gives 1790818200, row settles after 1790904600
+  NOT REPRODUCED
+```
+
+The marks re-derive; only the reopen check fails. This was not caused by the swap defect of D-15, and nothing about it
+changes the grades: the rows settled after the reopens they predicted, and the contract read the reopen price itself.
+
+**What this record said that was wrong.** D-10: "Holidays need no special case … 30 Sep predicts 2 Oct" (true of the
+prediction, not of the evidence), and "A verifier re-runs the same pure function and either gets the same instant or
+catches us": for these six rows it gets a different instant without anything being wrong. D-10 carries a note.
+
+**The fix (deploy 2).** Each open closure keeps a holiday ledger: the union of every holiday list the keeper read
+during the closure. An entry the issuer drops after its start, or less than 24 hours before it, is kept, because that
+is the forward-only pruning above. An entry withdrawn more than 24 hours before its start is dropped, because that is
+a correction (the issuer withdrew two mistaken XHKG entries 7 to 10 days ahead on 18 Sept, D-4). The schedule a row is
+predicted with and committed with is the latest read plus the kept entries, and the venue leaf says which entries were
+kept and since when the ledger ran (`holidaysKept`, `latestReadAtMs`, `holidayLedgerSinceMs`). Before signing, the
+keeper walks the committed schedule from the cut and refuses to commit unless it gives the committed reopen. With the
+pruned entry added back, the cut-walk of the 2 Oct and 20 Oct bundles gives `2026-10-02T01:30:00Z` and
+`2026-10-20T01:30:00Z`, their committed reopens.
+
+It had to be running before the Thanksgiving closure (cut Thu 26 Nov 00:55Z, reopen Fri 27 Nov 01:00Z): walked from
+that cut, the US schedule gives 27 Nov with the entry and 26 Nov without it, so a row committed after the issuer
+pruned it would have failed like these six. The 27 Nov early close (rows of Mon 30 Nov) is the second case.
+
+One risk is accepted with the 24-hour margin: an entry the issuer withdraws on the day itself (a typhoon closure
+cancelled hours ahead, say) is kept, the predicted reopen is a day late, capacity returns first, and that closure gets
+no row. The keeper pages it as `closure-missed`.
+
+**What the verifier says now about the six.** For rows read before block ⟨N⟩ only, when the walk from the cut misses
+the committed reopen, the verifier in this repository walks the same committed schedule from the commit instant,
+which is how the keeper computed the reopen. It accepts the row if, and only if, the walk from the cut lands before
+the commit and the walk from the commit gives the committed reopen, and it prints `REPRODUCED` with a note that never
+changes the exit code (one line; here for the 2 Oct rows):
+
+```
+  EVIDENCE reopen re-derived from the commit instant: walked from the cut, the committed schedule gives 2026-10-01T01:30:00.000Z, before the commit at <evaluatedAt>; walked from the commit instant it gives the committed settleAfter 2026-10-02T01:30:00.000Z, which is how the keeper computed it. The bundle does not show whether a holiday dropped from the issuer's list or the closure was not continuous.
+```
+
+The note is worded to say only what the bytes show. The rule cannot prove the market stayed shut from the cut to the
+commit: a keeper that was down across a reopen would write exactly such a row, and the rule would accept it. That is
+why the cause for these six is stated here, from the issuer's lists, and not by the tool. Over the 233 bundles archived
+by 14 Nov the rule fires on exactly these six roots. Before the repository is pushed and before npm 0.2.0, the set of
+rows that get this note must be exactly these six; the run over every row before block ⟨N⟩ gave: ⟨E6_GATE⟩. Rows read
+from block ⟨N⟩ never get the fallback. `npx -y curb-verify` (0.1.0) keeps printing `NOT REPRODUCED` for the six until
+0.2.0 is published.
+
+---
+
+## D-17 — One row was never graded: a reverted settle was counted as settled (28 Oct 2026, disclosed ⟨DATE_D16⟩)
+
+**Status: FIXED from deploy 2 (⟨DATE⟩): the keeper reads the status of every transaction it sends. Row 151 can never
+be graded. It stays on chain, committed and unsettled, and `skill()` counts 232 settled of the 233 rows committed by
+14 Nov.**
+
+**What happened.** Row 151: wTCENTx, the 27→28 Oct overnight closure, committed 28 Oct at 01:20:09Z (block 74,381,373,
+tx `0x5b77fe39…28ff`, id `0xfc88b5db…2ecf`), reopen 01:30:00Z. On chain its mark is `49941465598571907502` and its
+last print `49218252594941832220` (USD per share × 10¹⁸: 49.94146… and 49.21825…; `curb-verify` prints the mark
+truncated to four decimals, 49.9414), band 118 bp. The keeper's settle,
+[`0x287805da…9af5`](https://www.oklink.com/xlayer/tx/0x287805daf1ad38c0cfc6a89d53f75857475c53dd825b86db7e7c065f55ca9af5),
+was mined in block 74,382,270 at 01:35:06Z with status 0: reverted, 118,167 gas, no logs. Replayed at the block before
+it, `settle(id)` reverts `PriceDeviates(-237294, -237347)`: the pool's spot sat 53 ticks from its 120-second average,
+and the guard allows 50. The keeper had simulated the call a block or two earlier, when it would have succeeded; a
+swap at 01:35:02Z moved the spot before its transaction landed. The other two rows of that closure settled in blocks
+74,382,272 and 74,382,274.
+
+`settlePass` did not read the receipt's status. It logged the row as settled, dropped it from the rows it owed, and
+never retried. A settle at any moment from 01:35:11Z to about 07:25Z would have succeeded. The six-hour window closed
+at 07:35:00Z (`settleAfter` + 300 s + 6 h), and `settle` now reverts `TooLate`. The keeper's `/healthz` counted 218
+settles since its 24 Sept boot; the chain holds 217. The commit path had the same omission; no commit has reverted
+(every commitment the keeper recorded exists on chain).
+
+Not a hidden win: had the settle read the pool at the spot of that moment (tick −237294, price 49.5422), the mark's
+error would have been about 81 bp and the last print's about 65 bp. That is an estimate; a settle at any later moment
+would have read a different price.
+
+**What the public surfaces said.** The MCP tool labels the row `expired-unsettled`, which is right. /scorecard counts
+it as waiting ("1 more mark is committed and waiting for the reopen", and the row as pending), which is wrong, and the
+paid discount curve reports it in `pendingSettlement`. The README's Honest limits names the row.
+
+**The fix (deploy 2).** Every transaction goes through one send path that reads the receipt: a reverted settle stays
+owed and is retried on later ticks inside its window, and pages if it is still owed an hour after it became settleable;
+a window that closes moves the row to an `expired` list and pages; a reverted commit pages; a replaced transaction that
+mines instead of the keeper's own is never taken for it. Each tick the keeper also checks its books against Scorecard
+and pages when they disagree. The guard trips on about 3% of settles (6 of 218 since 24 Sept, 5 of them caught in
+simulation), because the keeper settles on the first tick after the reopen plus 300 s, when the pool is busiest; a
+retry inside the window removes the loss.
+
+**What the verifier says.** `curb-verify tx` on the commit transaction of such a row prints, as its `settled`
+field, `not settled; settle window closed <deadline> (TooLate: this row can no longer be graded)`; for row 151 the
+deadline is `2026-10-28T07:35:00Z` (in this repository from the `curb-verify` 0.2.0 change, on npm once 0.2.0 is
+published). No row is re-committed or re-marked; row 151 keeps its mark and has no grade.

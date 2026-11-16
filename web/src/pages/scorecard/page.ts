@@ -94,7 +94,7 @@ function headline(skill: SkillTally, pending: number): { line: string; note: str
   const vwapSame =
     skill.beatClosingVwap === wins && skill.tiesClosingVwap === ties && skill.lossesClosingVwap === losses;
   const vs = vwapSame
-    ? 'Against the last print; the closing VWAP gives the same count.'
+    ? 'Against the last print. The closing-VWAP baseline holds the last print in every row committed before block ⟨N⟩ (D-15), so it gives the same count.'
     : `Against the last print. Against the closing VWAP: ${plural(skill.beatClosingVwap, 'win', 'wins')}, ${plural(skill.tiesClosingVwap, 'tie', 'ties')}, ${plural(skill.lossesClosingVwap, 'loss', 'losses')}.`;
   return { line, note: `${vs}${waiting}` };
 }
@@ -197,7 +197,7 @@ function renderTally(v: ScorecardView): void {
     const moved = Math.max(0, ...graded.map((r) => r.lastPrintErrorBps ?? 0));
     const tally = [w ? plural(w, 'win', 'wins') : '', t ? plural(t, 'tie', 'ties') : '', l ? plural(l, 'loss', 'losses') : ''].filter(Boolean).join(', ');
     m1Live.textContent = graded.length
-      ? `On the record: ${plural(graded.length, 'settled mark/1 row', 'settled mark/1 rows')}, ${tally || 'none decided'}. In ${fmtInt(flat)} of them the mark was exactly the last print, while the reopen landed as far as ${fmtInt(moved)} bp from it.`
+      ? `On the record: ${plural(graded.length, 'settled mark/1 row', 'settled mark/1 rows')}, ${tally || 'none decided'}. In ${fmtInt(flat)} of them the mark was exactly the last print, while the reopen landed as far as ${fmtInt(moved)} bp from it. The pools traded in those closures; the keeper recorded no swaps (D-15).`
       : '';
   }
   const m1El = $('[data-sc-m1-count]');
@@ -455,7 +455,7 @@ function renderBand(tallies: MethodTally[]): void {
   }
   if (board) {
     const wf = board.band.backtest.walkForward;
-    line += `${line ? ' ' : ''}Measured p68 ≈ ${Math.round(wf.p68ErrorBp)} bp: in the walk-forward backtest, 68% of mark/2's errors were within ${Math.round(wf.p68ErrorBp)} bp, and its band (median ${fmtInt(wf.medianBandBps)} bp) held ${fmtInt(wf.covered)} of ${fmtInt(wf.n)} closures. mark/2's band is 25 bp plus half the signal's move, so it is not sized to a measured error.`;
+    line += `${line ? ' ' : ''}Measured p68 ≈ ${Math.round(wf.p68ErrorBp)} bp: in the walk-forward backtest, 68% of mark/2's errors were within ${Math.round(wf.p68ErrorBp)} bp, and its band (median ${fmtInt(wf.medianBandBps)} bp) held ${fmtInt(wf.covered)} of ${fmtInt(wf.n)} closures. mark/2's band is 25 bp plus half the move it applied: the signal's where the signal applies, otherwise the pool's drift, which was recorded as zero in every row before block ⟨N⟩ (D-15), so those rows committed the 25 bp floor. It is not sized to a measured error.`;
   }
   el.textContent = line || ' ';
 }

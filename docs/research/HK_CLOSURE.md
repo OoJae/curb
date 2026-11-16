@@ -19,6 +19,8 @@ on chain.
 
 In the 15 closures D-11 graded, every `curb.scorecard.mark/1` mark equalled the last print, so every row tied
 it. The wrapper pools did trade during those closures (D-11's erratum of 25 Sep), but no mark/1 mark moved.
+(⟨DATE⟩: no mark moved because the keeper recorded a drift of zero in every row; it decoded no swaps. See
+[D-15](../DECISIONS.md).)
 Other markets trade while HKEX is shut: a Binance perpetual on the same share around the clock, and the US ADR
 during US hours. How much of the Hong Kong reopen gap do they predict, measured before the reopen?
 
@@ -230,7 +232,10 @@ holds the snapshot the site was built with.
 - **The lunch recess is not tested here, and it has weight 0 in mark/2.** D-13 set the recess weight to
   zero after 23 recesses in which the perp-adjusted mark lost to the last print on all three names. That
   analysis used minute data this folder does not hold, so `fit.mjs` does not reproduce it. On chain, every
-  recess row under mark/2 is mark/1's mark by construction, and it can only tie.
+  recess row under mark/2 is mark/1's mark by construction, and it can only tie. (⟨DATE⟩: "it can only tie" is
+  wrong. mark/1's mark moves with the pool. Every recess row before block ⟨N⟩ tied because the keeper recorded the
+  drift as zero; from that block recess rows move by half the pool's drift and can win or lose. See
+  [D-15](../DECISIONS.md). The study in this file uses no pool data and is unaffected.)
 - **Timing is idealised.** The backtest uses the scheduled 07:55Z cut and a 01:20Z commit. The keeper uses the
   cut it observed and commits 600 s before the reopen it derived (D-10, D-11). The ADR leg here uses daily bars.
   The keeper reads hourly bars over five days (`yahooChartUrl`). Both give the same session close when Yahoo

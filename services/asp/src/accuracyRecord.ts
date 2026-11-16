@@ -23,6 +23,7 @@ import { grade, recount } from "./index/scorecard.ts";
 import type { ScorecardRow, ScorecardSnapshot } from "./index/scorecard.ts";
 import { methodDigestOf } from "./sources/scorecard.ts";
 import { median } from "./stats.ts";
+import { SWAP_EVIDENCE_FROM_BLOCK, isPreFix, preFixRows, swapEvidenceSet } from "./swapEvidence.ts";
 
 export const RECORD_SCHEMA = "curb.asp.record/1";
 export const RECORD_PREVIEW_SCHEMA = "curb.asp.record.preview/1";
@@ -115,6 +116,8 @@ export interface RecordInput {
   limit: number;
   nowMs: number;
   warnings?: string[];
+  /** Tests only: overrides swapEvidence.ts's SWAP_EVIDENCE_FROM_BLOCK. */
+  swapEvidenceFromBlock?: number;
 }
 
 export function recordRow(r: ScorecardRow, symbol: string | null): RecordRow {
@@ -204,19 +207,37 @@ export function buildRecord(i: RecordInput): RecordAnswer {
   const tiesScope = settledScope.filter((r) => grade(r.settlement!).tie).length;
   const underMark1 = scope.some((r) => KNOWN_METHODS.get(r.methodDigest.toLowerCase()) === "curb.scorecard.mark/1");
   const underMark2 = scope.some((r) => KNOWN_METHODS.get(r.methodDigest.toLowerCase()) === "curb.scorecard.mark/2");
+  const fixFrom = i.swapEvidenceFromBlock ?? SWAP_EVIDENCE_FROM_BLOCK;
+  const preFix = scope.filter((r) => isPreFix(r.committedBlock, fixFrom)).length;
   const note =
     "Wins are strict, exactly as Scorecard.settle() counts them: a settled row beats a baseline only when curbErrorBps is strictly " +
     "less than that baseline's error, and skill() is the contract's own running count of those wins. A tie is not a win. " +
     `${tiesScope} of the ${settledScope.length} settled rows${i.filter ? ` for ${i.filter.symbol}` : ""} tie the last print exactly.` +
     (underMark1
-      ? " Under curb.scorecard.mark/1 a closure in which the pool does not trade leaves the mark equal to the last print, so such a row can only tie it."
+      ? " Under curb.scorecard.mark/1 the mark is the last print moved by half of what the pool did between the cut and the commit."
       : "") +
     (underMark2
       ? " curb.scorecard.mark/2 moves the last print by 0.79 x the mean return of a Binance perpetual on the same share and the US ADR" +
-        " over an overnight or weekend closure. In the 65-minute lunch recess, and whenever neither signal could be fetched, it applies" +
-        " no move: the mark is exactly mark/1's, and the row can only tie. That is deliberate. Measured over 23 recesses, the perpetual's" +
+        " over an overnight or weekend Hong Kong closure. In the 65-minute lunch recess, for the US names, and whenever neither signal" +
+        " could be fetched, its mark is mark/1's. The recess gets no signal by design: measured over 23 recesses, the perpetual's" +
         " recess move made the mark worse on all three names. Each row keeps the method that produced it, and none is re-marked."
+      : "") +
+    (preFix
+      ? (swapEvidenceSet(fixFrom)
+          ? ` Rows committed before block ${fixFrom} (${preFix} of the ${scope.length} in scope) were built by a keeper that`
+          : " Rows committed before the keeper's swap-decoding fix were built by a keeper that") +
+        " decoded no pool Swap logs (DECISIONS D-15). It counted no swaps, so the pool's move was never applied: in those rows every" +
+        " mark without an applied cross-market signal equals the last print and ties it, and closingVwapE18 equals lastPrintE18, so" +
+        " beatClosingVwap repeats beatLastPrint. They keep the inputs they were committed with, and none is re-marked."
       : "");
+  if (preFix) {
+    warnings.push(
+      (swapEvidenceSet(fixFrom)
+        ? `${preFix} of ${scope.length} rows in scope were committed before block ${fixFrom}: `
+        : "Rows committed before the keeper's swap-decoding fix (the block is in DECISIONS D-15): ") +
+      "their swap evidence is empty and closingVwapE18 equals lastPrintE18 whatever the pool did, because the keeper decoded no Swap logs (DECISIONS D-15)",
+    );
+  }
 
   return {
     schema: RECORD_SCHEMA,
@@ -236,7 +257,8 @@ export function buildRecord(i: RecordInput): RecordAnswer {
     note,
     evidenceNote:
       "evidenceUrl is each row's input bundle in Curb's write-once archive, named by the inputRoot committed on chain. " +
-      "Every object was checked against the chain before upload, and anyone can re-derive the row from its bytes. " +
+      "Every object was checked against the chain before upload, and anyone can re-derive each row's mark from its bytes. " +
+      `The swap lists in the bundles of ${preFixRows(fixFrom)} are empty whatever the pool did (DECISIONS D-15). ` +
       "A row committed in the last few minutes may take a moment to appear.",
     definitions: {
       errorBps: "|estimate - reopenPrint| * 10000 / reopenPrint, floored, computed on chain by Scorecard.settle() (curbErrorBps for the mark, then the last print and the closing VWAP)",
