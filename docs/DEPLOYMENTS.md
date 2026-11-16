@@ -565,6 +565,12 @@ overnight rows on Tue 17 Nov 01:20Z, then the lunch recess at 04:50Z, the first 
 - The site, 06:05Z, `vercel --prod` from `web/` (deployment `curb-g2g4p7w4z`; replaces `curb-difwshvke` of
   30 Sep): the Scorecard page's D-15 notes, the recess line, the closing-VWAP headline and band sentence, and
   the home page's settle step. Verified on `curb.markets` and in the served bundle.
+- The OKX AI marketplace listing (agent #13869), 06:31Z, `onchainos agent update` from the owner account
+  (transaction `0x78e2fab9…9175`, block 76,041,663): the descriptions of Closure Discount by Duration (its
+  pre-close price is the committed closing-VWAP baseline, the last pool price before block 76,038,603) and
+  Reopen Price Accuracy Record (before that block its second baseline repeats the first). Both endpoints passed
+  OKX's callability check first, at their listed prices; names, prices and endpoints are unchanged. The text is
+  in `script/asp/services.json`.
 
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
