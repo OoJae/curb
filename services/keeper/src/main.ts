@@ -1235,6 +1235,8 @@ async function tick(
         symbol: a.symbol, cutBlock: block.number, midAtCut: read.priceE18,
         reopen: reopenMs === null ? null : new Date(reopenMs).toISOString(),
         witnessedCut: witnessed, cutSuspect: fresh.cutSuspect ?? null,
+        // Runbook 12.4 checks these two on the first new closure.
+        cutBlockHash: fresh.cutBlockHash ?? null, cutRead: fresh.cutRead != null,
       });
       continue;
     }
