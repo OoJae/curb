@@ -555,6 +555,17 @@ median, against 0.06 to 0.2 s from the VPS.
 **Next on the new build:** the first closure is the HK afternoon cut at 07:55Z today; the first rows are the HK
 overnight rows on Tue 17 Nov 01:20Z, then the lunch recess at 04:50Z, the first with pool drift in the mark.
 
+**The public text, the same morning,** before any post-fix row exists (both from `8b4743b`):
+
+- `curb-asp`, 06:03Z, `railway up services/asp --path-as-root --service curb-asp --ci` (deployment `86b62aad`;
+  replaces `02f64cd2` of 25 Sep). Its copy of the block is set, so the accuracy-record note and the two paid
+  routes' descriptions name the rows before block 76038603 (D-15) instead of saying a recess row "can only tie".
+  The Dockerfile is now pinned to `node:26-slim@sha256:ec7758ee…aae1`, the base Railway resolved for `02f64cd2`,
+  so the rebuild did not move Node. `/healthz` ok after the restart; the three routes still answer `402`.
+- The site, 06:05Z, `vercel --prod` from `web/` (deployment `curb-g2g4p7w4z`; replaces `curb-difwshvke` of
+  30 Sep): the Scorecard page's D-15 notes, the recess line, the closing-VWAP headline and band sentence, and
+  the home page's settle step. Verified on `curb.markets` and in the served bundle.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
