@@ -11,14 +11,19 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
-import { Wallet } from "ethers";
-import { loadConfig, attributionHealth } from "./main.ts";
+import { Wallet, Transaction, Interface } from "ethers";
+import {
+  loadConfig, attributionHealth, clockSkewStep, archiveStep, CLOCK_SKEW_MAX_S, ARCHIVE_BACKLOG_MS, backfillBusy,
+  sendCommit, settleRows, outboxMinedIn, abandonDecision, ABANDON_HOLD_MAX_MS,
+} from "./main.ts";
 import { Sender } from "./tx/sender.ts";
+import type { RpcFn } from "./tx/sender.ts";
+import { scorecardErrors } from "./outcome.ts";
 
 const MAIN = fileURLToPath(new URL("./main.ts", import.meta.url));
 const BUILDER_SUFFIX = "0x6464377535306e636b74356537323966100080218021802180218021802180218021";
@@ -151,4 +156,1247 @@ test("/healthz attribution is what the live Sender appends: off without a key, w
   const src = readFileSync(MAIN, "utf8");
   assert.match(src, /attribution: attributionHealth\(sender\)/);
   assert.doesNotMatch(src, /on: CFG\.dataSuffix !== ""/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W6 (plan persistence) and W10 (alarms, health, operations). Source-text tests read main.ts as
+// written; `fnBody` cuts one top-level function out of it.
+// ---------------------------------------------------------------------------------------------
+
+const SRC = () => readFileSync(MAIN, "utf8");
+/** The text of a top-level function, from its declaration to the first `}` at column 0 after it. */
+function fnBody(src: string, decl: string): string {
+  const i = src.indexOf(decl);
+  assert.ok(i >= 0, `${decl} not found in main.ts`);
+  const end = src.indexOf("\n}\n", i);
+  assert.ok(end > i, `${decl} has no end`);
+  return src.slice(i, end + 2);
+}
+const after = (text: string, needle: string, from: number) => text.indexOf(needle, from);
+
+test("W6: main.ts writes the state file only through saveState(", () => {
+  const src = SRC();
+  assert.equal(src.split("persistReplace(statePath()").length - 1, 1, "exactly one write of keeper-state.json");
+  const save = fnBody(src, "function saveState(state: State): void");
+  assert.match(save, /state\.v = 2;\n\s*persistReplace\(statePath\(\), JSON\.stringify\(state\)\);/);
+  assert.doesNotMatch(src, /writeFileSync\(statePath\(\)/);
+  // The old build loads `{ ...empty, ...JSON.parse(text) }`, so `v` and every later optional field survive a rollback.
+  assert.match(fnBody(src, "function loadState(): State"), /\{ \.\.\.empty, \.\.\.JSON\.parse\(/);
+});
+
+test("W6: the end-of-tick write calls saveState(state) after the settle pass, and a failed write is paged before the tick fails", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const settle = tick.indexOf("await settlePass(");
+  const save = after(tick, "saveState(state)", settle);
+  assert.ok(settle > 0 && save > settle, "saveState(state) after settlePass(");
+  const flush = after(tick, "alarms.flush(", save);
+  const rethrow = after(tick, "if (persistError) throw persistError;", flush);
+  assert.ok(tick.indexOf("await delivered;", flush) < rethrow);
+  assert.ok(flush > save && rethrow > flush, "the persist alarm is flushed, then the tick fails as HEAD's did");
+  // (W2 adds the backfill write after the flush, also through saveState(state).)
+});
+
+test("W6: commitPass persists the plan and the attempt number before anything is signed", () => {
+  const cp = fnBody(SRC(), "async function commitPass(");
+  const built = cp.indexOf("c.plan = built;");
+  const planSave = after(cp, "saveState(state)", built);
+  const firstSend = Math.min(...["sender.prepare(", "sendCommit(", "commitAttempt("].map((n) => cp.indexOf(n)).filter((i) => i >= 0));
+  assert.ok(built > 0 && planSave > built && firstSend > planSave, "plan -> saveState -> first signature");
+  // A plan that cannot be saved is kept in memory and nothing is sent this tick.
+  assert.match(cp.slice(planSave), /^saveState\(state\); \}\n\s*catch \(e\) \{\n[^]*?raise\(1, "keeper:state-persist-failed"[^\n]*\n\s*continue;/);
+  // Until W5 moves the send into commitAttempt (whose order outcome.test.ts pins), the attempt is saved inline.
+  if (cp.includes("sender.prepare(")) {
+    const inc = cp.indexOf("plan.attempts++;");
+    const attemptSave = after(cp, "saveState(state)", inc);
+    assert.ok(inc > planSave && attemptSave > inc && cp.indexOf("sender.prepare(") > attemptSave, "attempts++ -> saveState -> prepare");
+    assert.match(cp.slice(attemptSave), /^saveState\(state\); \}\n\s*catch \(e\) \{\n\s*plan\.attempts--;[^]*?continue;/);
+  }
+  // buildPlan runs only for a closure without a plan: a restart can only reuse the saved one.
+  assert.match(cp, /if \(!c\.plan\) \{\n\s*const built = await buildPlan\(/);
+});
+
+test("W10: the boot line names paging", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-alarms-boot-"));
+  const file = join(dir, "not-a-directory");
+  writeFileSync(file, "");
+  const env = {
+    ...process.env, MODE: "shadow", SCORECARD: "", DATA_DIR: file, RPCS: "http://127.0.0.1:9", DATA_SUFFIX: "",
+    KEEPER_KEY_PASSWORD: "", ATTESTOR_KEY_PASSWORD: "", HC_URL: "", HC_ALARM_URL: "",
+  };
+  try {
+    const off = await bootUntil(env, /"event":"fatal"/);
+    const i = off.indexOf('"event":"alarms","paging":false,"heartbeat":false');
+    assert.ok(i >= 0, off);
+    assert.ok(i < off.indexOf('"event":"fatal"'));
+    assert.ok(off.indexOf('"event":"attribution"') < i, "right after the attribution line");
+    const url = "https://hc-ping.example/secret-uuid";
+    const on = await bootUntil({ ...env, HC_URL: url, HC_ALARM_URL: url }, /"event":"fatal"/);
+    assert.match(on, /"event":"alarms","paging":true,"heartbeat":true/);
+    assert.doesNotMatch(on, /secret-uuid/, "never the URLs");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("W10: LOW_BALANCE_WEI is a collected error, never a throw at import", () => {
+  withEnv({ LOW_BALANCE_WEI: undefined }, () => {
+    const { cfg, errors } = loadConfig();
+    assert.equal(cfg.lowBalanceWei, 3_000_000_000_000_000n);
+    assert.deepEqual(errors, []);
+  });
+  withEnv({ LOW_BALANCE_WEI: " 123 " }, () => assert.equal(loadConfig().cfg.lowBalanceWei, 123n));
+  for (const bad of ["abc", "", "-1", "1e18", "0x10", "1.5"]) {
+    withEnv({ LOW_BALANCE_WEI: bad }, () => {
+      let r: ReturnType<typeof loadConfig> | undefined;
+      assert.doesNotThrow(() => { r = loadConfig(); });
+      assert.ok(r!.errors.some((e) => e.startsWith("LOW_BALANCE_WEI must be a decimal integer")), `${bad}: ${r!.errors.join("; ")}`);
+    });
+  }
+});
+
+test("W10: no await on raise anywhere in main.ts; alarms are flushed after the settle pass and in the loop's catch", () => {
+  const src = SRC();
+  assert.doesNotMatch(src, /await raise\(/);
+  assert.doesNotMatch(src, /await alarms\.raise\(/);
+  // The review gate is literally `grep -n "await raise\|await alarms" main.ts` empty.
+  assert.doesNotMatch(src, /await raise|await alarms/);
+  assert.doesNotMatch(src, /async function raise\(/);
+  assert.match(src, /function raise\(sev: 1 \| 2, key: string, message: string\): void \{ alarms\.raise\(sev, key, message\); \}/);
+  assert.match(src, /const alarms = createAlarms\(\{ url: CFG\.alarmUrl, hostId: CFG\.hostId, log \}\);/);
+  const tick = fnBody(src, "async function tick(");
+  assert.ok(tick.indexOf("alarms.flush(") > tick.indexOf("await settlePass("), "alarms.flush( after settlePass(");
+  assert.ok(tick.indexOf("alarms.flush(") > tick.indexOf("await commitPass("));
+  const main = fnBody(src, "async function main()");
+  const katch = main.indexOf('log("tick-error"');
+  assert.ok(katch > 0 && main.indexOf("alarms.flush(", katch) > main.indexOf('"keeper:ticks-failing"', katch));
+  assert.match(main.slice(katch), /const delivered = alarms\.flush\(ALARM_FLUSH_BUDGET_MS\);\n\s*await delivered;/);
+  assert.match(tick, /const delivered = alarms\.flush\(ALARM_FLUSH_BUDGET_MS\);\n\s*await delivered;/);
+  // The HEAD implementation (inline POSTs, its own cooldown map) is gone.
+  assert.doesNotMatch(src, /alarmSentAt|alarmCheckDown/);
+});
+
+test("W10: clock skew pages on the third consecutive tick beyond 30 s", () => {
+  const ts = 1_794_542_157;
+  const at = (skewS: number) => (ts + skewS) * 1000;
+  let streak = 0;
+  for (const [skewS, alarm] of [[31, false], [-45, false], [40, true], [41, true], [30, false], [31, false]] as const) {
+    const r = clockSkewStep(streak, at(skewS), ts);
+    assert.equal(r.skewS, skewS);
+    assert.equal(r.alarm, alarm, `skew ${skewS}`);
+    streak = r.streak;
+  }
+  assert.equal(CLOCK_SKEW_MAX_S, 30);
+  assert.equal(clockSkewStep(0, at(0.4), ts).skewS, 0);
+  // The reading is taken when the block was pinned, not at step 13 after a long commit.
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.match(tick, /const block = await pinLatest\(CFG\.rpcs\);\n\s*const pinnedAtMs = Date\.now\(\);/);
+  assert.match(tick, /observeTick\(health, block, pinnedAtMs, Date\.now\(\)\);/);
+});
+
+test("W10: a parked archive item pages; items waiting 60 minutes are a sev-2 backlog", () => {
+  const t0 = 1_000_000;
+  let since: number | null = null;
+  let r = archiveStep(since, { queued: 0, parked: 0 }, t0);
+  assert.deepEqual(r, { backlogSinceMs: null, parked: false, backlog: false });
+  r = archiveStep(r.backlogSinceMs, { queued: 2, parked: 0 }, t0);
+  assert.deepEqual(r, { backlogSinceMs: t0, parked: false, backlog: false });
+  r = archiveStep(r.backlogSinceMs, { queued: 1, parked: 0 }, t0 + ARCHIVE_BACKLOG_MS - 1);
+  assert.equal(r.backlog, false);
+  r = archiveStep(r.backlogSinceMs, { queued: 1, parked: 0 }, t0 + ARCHIVE_BACKLOG_MS);
+  assert.deepEqual(r, { backlogSinceMs: t0, parked: false, backlog: true });
+  since = archiveStep(r.backlogSinceMs, { queued: 0, parked: 0 }, t0 + ARCHIVE_BACKLOG_MS + 1).backlogSinceMs;
+  assert.equal(since, null, "an empty queue resets the age");
+  // Parked items page on their own (sev-1) and do not count as a backlog.
+  assert.deepEqual(archiveStep(null, { queued: 1, parked: 1 }, t0), { backlogSinceMs: null, parked: true, backlog: false });
+  // /healthz keeps publish.ts's literal wiring and adds the backlog age and the alarm queue.
+  const body = fnBody(SRC(), "function healthBody(");
+  assert.match(body, /archive: publisher\.health\(\)/);
+  assert.match(body, /backlogSinceMs = watch\.archiveBacklogSinceMs/);
+  assert.match(body, /alarms: alarmsHealth/);
+  assert.match(SRC(), /res\.end\(JSON\.stringify\(healthBody\(health, ok\)\)\);/);
+});
+
+test("W10: the minClosureS comment says what such a row would be, not that the pool does not trade", () => {
+  const cfg = fnBody(SRC(), "export function loadConfig()");
+  assert.doesNotMatch(cfg, /the mark equals the last print by construction/);
+  assert.doesNotMatch(cfg, /the pool\s*\*?\s*barely trades/);
+  assert.match(cfg, /committed seconds after the cut, with almost no closure behind it/);
+});
+
+test("W10: deploy.sh saves the keeper's log before docker rm -f, backs up its state after, and sets BACKFILL_CHUNKS_PER_TICK", () => {
+  const path = fileURLToPath(new URL("../../../script/hostb/deploy.sh", import.meta.url));
+  const sh = readFileSync(path, "utf8");
+  const keeperEnv = sh.match(/cat > \/etc\/curb\/keeper\.env <<CONF\n([^]*?)\nCONF\n/);
+  assert.ok(keeperEnv, "the keeper.env heredoc");
+  const line = keeperEnv[1].match(/^BACKFILL_CHUNKS_PER_TICK=(\d+)$/m);
+  assert.ok(line, "at column 0");
+  assert.equal(line[1], "20");
+  assert.ok(Number(line[1]) >= 0 && Number(line[1]) <= 60);
+  // Only inside the REMOTE heredoc: the header comment names the same files.
+  const remote = sh.match(/<<'REMOTE'\n([^]*?)\nREMOTE\n/);
+  assert.ok(remote, "the REMOTE heredoc");
+  const r = remote[1];
+  const order = ["docker logs curb-keeper", "docker rm -f curb-keeper", "keeper-state.predeploy-", "docker run -d --name curb-keeper"].map((n) => [n, r.indexOf(n)] as const);
+  for (const [n, i] of order) assert.ok(i >= 0, `${n} in the REMOTE heredoc`);
+  for (let k = 1; k < order.length; k++) assert.ok(order[k - 1][1] < order[k][1], `${order[k - 1][0]} before ${order[k][0]}`);
+  // The log save cannot stop the deploy, and the keeper is restarted even if the state copy fails.
+  assert.match(r, /docker logs curb-keeper 2>&1 \| gzip -c > "\/var\/lib\/curb\/logs\/curb-keeper-[^\n]*\|\| /);
+  const n = spawnSync("bash", ["-n", path], { encoding: "utf8" });
+  assert.equal(n.status, 0, n.stderr);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W2 (the per-tick swap scan, the closure store, the backfill).
+// ---------------------------------------------------------------------------------------------
+
+test("W2: the per-tick scan cannot abort a commit or a settle", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const scan = tick.indexOf("scanRange(");
+  assert.ok(scan > 0, "tick calls scanRange(");
+  const tryAt = tick.lastIndexOf("try {", scan);
+  assert.ok(tryAt > 0 && tick.slice(tryAt, scan).split("}").length === 1, "scanRange( sits inside a try {");
+  assert.ok(tick.indexOf("commitPass(", scan) > scan && tick.indexOf("settlePass(", scan) > scan, "commitPass( and settlePass( after it");
+  assert.doesNotMatch(src, /await scanSwaps\(/);
+  assert.doesNotMatch(src, /appendSwaps\(/);
+  assert.doesNotMatch(src, /readSwapFile\(/);
+  // Heads in parallel with the pinned endpoint's head as a floor; a 60-block overlap; a 5-block trail; the budget.
+  assert.match(tick, /const rawHeads = await readHeads\(CFG\.rpcs\);/);
+  assert.match(tick, /heads\[bi\] = Math\.max\(heads\[bi\], block\.number\)/);
+  assert.match(tick, /const scanTo = block\.number - 5;/);
+  assert.match(tick, /state\.lastScannedBlock \+ 1 - 60/);
+  assert.match(tick, /\{ maxChunks: 10, deadlineMs: 10_000, heads, endpointOrder: "first" \}/);
+  assert.match(tick, /if \(scan\.servedTo > state\.lastScannedBlock\) state\.lastScannedBlock = scan\.servedTo;/, "the cursor never moves backwards");
+});
+
+test("W2: rows reach the closure files after the per-asset loop and before the commit pass", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const loop = tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;");
+  const ing = tick.indexOf("ingest(store, tracked, scan, recentHashes)");
+  assert.ok(loop > 0 && ing > loop && tick.indexOf("await commitPass(") > ing);
+  // The per-asset loop handles no swaps any more, and freezes the predicted reopen once a plan exists.
+  const body = tick.slice(loop, ing);
+  assert.doesNotMatch(body, /swapsByPool|swapCount \+=/);
+  assert.match(body, /if \(reopenMs !== null && !open\.committed && !open\.plan\) open\.reopenMs = reopenMs;/);
+  assert.match(body, /health\.assetsLastEvaluatedMs\[a\.symbol\] = nowMs;/);
+  // Only witnessed, unplanned, uncommitted closures are filled.
+  assert.match(fnBody(SRC(), "function trackedClosures("), /if \(!c\.witnessedCut \|\| c\.plan \|\| c\.committed\) continue;/);
+});
+
+test("W2: closure open and abandon handle the file through the store", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const open = tick.slice(tick.indexOf("const fresh: Closure = {"), tick.indexOf('log("closure-open"'));
+  assert.match(open, /cutBlockHash: block\.hash,/);
+  assert.match(open, /cutRead: cutReadOf\(poolSnap, a\.pool\),/);
+  assert.match(open, /coverage: \{ ranges: \[\], rows: 0 \},/);
+  assert.match(open, /store\.remove\(fresh\)/);
+  const abandon = tick.slice(tick.indexOf('log("closure-abandoned"'), tick.indexOf("delete state.open[w];", tick.indexOf('log("closure-abandoned"')));
+  assert.match(abandon, /store\.remove\(open\)/);
+  assert.doesNotMatch(src, /rmSync\(/, "no bare file removal left in main.ts");
+  assert.doesNotMatch(src, /swapsPath/);
+});
+
+test("W2: BACKFILL_CHUNKS_PER_TICK", () => {
+  withEnv({ BACKFILL_CHUNKS_PER_TICK: undefined }, () => {
+    const { cfg, errors } = loadConfig();
+    assert.equal(cfg.backfillChunksPerTick, 20);
+    assert.deepEqual(errors, []);
+  });
+  withEnv({ BACKFILL_CHUNKS_PER_TICK: "0" }, () => assert.equal(loadConfig().cfg.backfillChunksPerTick, 0));
+  withEnv({ BACKFILL_CHUNKS_PER_TICK: "60" }, () => assert.equal(loadConfig().cfg.backfillChunksPerTick, 60));
+  for (const bad of ["61", "-1", "1.5", "abc", ""]) {
+    withEnv({ BACKFILL_CHUNKS_PER_TICK: bad }, () => {
+      let r: ReturnType<typeof loadConfig> | undefined;
+      assert.doesNotThrow(() => { r = loadConfig(); });
+      assert.ok(r!.errors.some((e) => e.startsWith("BACKFILL_CHUNKS_PER_TICK must be in [0,60]")), `${bad}: ${r!.errors.join("; ")}`);
+    });
+  }
+});
+
+test("W2: no backfill on the first tick; it runs after the flush and saves through saveState", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const call = tick.indexOf("await backfillStep(");
+  assert.ok(call > 0);
+  const guard = tick.lastIndexOf("if (health.ticks >= 1 && CFG.backfillChunksPerTick > 0) {", call);
+  assert.ok(guard > 0 && call < tick.indexOf("\n  }", guard), "the backfill call is inside the block guarded by health.ticks >= 1");
+  // The W6 half: after the end-of-tick write, the flush and the rethrow.
+  const rethrow = tick.indexOf("if (persistError) throw persistError;");
+  assert.ok(rethrow > tick.indexOf("alarms.flush(") && call > rethrow);
+  const step = fnBody(src, "async function backfillStep(");
+  assert.match(step, /if \(rep\.claimed > 0\) \{\n\s*try \{ saveState\(state\); \}/);
+  assert.doesNotMatch(step, /persistReplace\(/);
+  assert.match(step, /if \(busy\) return;/);
+  assert.match(step, /Math\.min\(12_000, CFG\.tickMs - \(Date\.now\(\) - tickStartMs\) - 3_000\)/);
+  assert.match(step, /if \(deadlineMs < 2_000\) return;/);
+  assert.match(step, /bf\.level = Math\.min\(8, Math\.max\(1, 2 \* bf\.level\)\);/);
+  assert.doesNotMatch(step, /await raise|await alarms/);
+});
+
+test("W2: a tick is busy inside a commit window, a settle window, or after a send", () => {
+  const cfg = { minClosureS: 1_800, commitLeadS: 600, settleDelayS: 300 };
+  const now = 1_794_542_157_000, nowS = now / 1000;
+  const shut = (reopenInS: number, over: Record<string, unknown> = {}) =>
+    ({ witnessedCut: true, reopenMs: now + reopenInS * 1000, cutAtMs: now - 3_600_000, ...over });
+  const busy = (open: unknown[], pending: unknown[] = [], sent = false) =>
+    backfillBusy({ open: open as never, pending: pending as never }, now, nowS, sent, cfg);
+  assert.equal(busy([]), false);
+  assert.equal(busy([shut(720)]), true, "inside COMMIT_LEAD_S + 120");
+  assert.equal(busy([shut(721)]), false);
+  assert.equal(busy([shut(-60)]), true, "up to a minute past the reopen");
+  assert.equal(busy([shut(-61)]), false);
+  assert.equal(busy([shut(300, { committed: {} })]), false, "already committed");
+  assert.equal(busy([shut(300, { witnessedCut: false })]), false, "never committable");
+  assert.equal(busy([shut(300, { cutAtMs: now - 600_000 })]), false, "shorter than MIN_CLOSURE_S");
+  assert.equal(busy([shut(300, { reopenMs: null })]), false);
+  const row = (settleAfterS: number, over: Record<string, unknown> = {}) => ({ committed: { settleAfterS }, ...over });
+  assert.equal(busy([], [row(nowS - 300 + 60)]), true, "from a minute before the settle opens");
+  assert.equal(busy([], [row(nowS - 300 - 600)]), true, "to ten minutes after");
+  assert.equal(busy([], [row(nowS - 300 + 61)]), false);
+  assert.equal(busy([], [row(nowS - 300 - 601)]), false);
+  assert.equal(busy([], [row(nowS - 300, { settled: { txHash: "0x" } })]), false);
+  assert.equal(busy([], [], true), true, "a transaction was sent this tick");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W5 (transaction outcomes, settles, reconciliation) wired into main.ts.
+// ---------------------------------------------------------------------------------------------
+
+const SCORECARD_ADDR = "0x3b4076c364AbDaE93e6419CeAdEEe8CB283BEf1f";
+const ROW151_ID = "0xfc88b5dbe6d0ab024e18027980626b2c97165f387c85159bbd111bf5c6122ecf";
+const ROW151_SETTLE_AFTER = 1_793_151_000;                  // 28 Oct 2026 01:30:00Z; readyAt 01:35:00Z
+const settleIface = new Interface(["function settle(bytes32 id)"]);
+
+/** The keeper's real Sender over a mock chain; `receipt()` and `revert()` decide what the chain says. */
+function chainHarness(o: { receipt: () => { status: string; blockNumber: string; gasUsed: string } | null; revert?: () => string | null }) {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-w5-"));
+  const clock = { t: 1_000_000 };
+  const sent: string[] = [];
+  const rpc: RpcFn = async (_url, method, params) => {
+    switch (method) {
+      case "eth_call": { const d = o.revert?.() ?? null; if (d) throw Object.assign(new Error("execution reverted"), { data: d }); return "0x"; }
+      case "eth_estimateGas": return "0x" + (118_167).toString(16);
+      case "eth_getBlockByNumber": return { baseFeePerGas: "0x1312d00" };
+      case "eth_getTransactionCount": return "0x7";
+      case "eth_sendRawTransaction": sent.push(Transaction.from(params[0] as string).hash!); return sent.at(-1);
+      case "eth_getTransactionReceipt": return o.receipt();
+      case "eth_getTransactionByHash": return { hash: params[0] };
+      default: throw new Error(`unexpected ${method}`);
+    }
+  };
+  const sender = new Sender({
+    wallet: new Wallet("0x" + "4c".repeat(32)), rpcs: ["https://a"], chainId: 196, dbPath: join(dir, "outbox.sqlite"),
+    rpc, now: () => clock.t, sleep: async (ms) => { clock.t += ms; }, errorInterface: scorecardErrors,
+  });
+  return { sender, sent, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+function pendingRow151() {
+  return {
+    wrapper: "0x41333Df9E7639188BBfca5522dC4844398Af9f9E", symbol: "wTCENTx", cutAtMs: 0, cutBlock: 74_370_000,
+    midAtCutE18: "1", preCutMidE18: "1", witnessedCut: true, reopenMs: ROW151_SETTLE_AFTER * 1000, swapCount: 0,
+    committed: { id: ROW151_ID, root: "0x" + "51".repeat(32), settleAfterS: ROW151_SETTLE_AFTER, markE18: "1", bandBps: 1, onChain: true, txHash: "0xc0", atMs: 0 },
+  };
+}
+
+function settleDeps(sender: unknown, chainNowS: number, over: Record<string, unknown> = {}) {
+  const alarms: Array<[number, string, string]> = [];
+  const events: string[] = [];
+  const health = { settledTotal: 0 } as { settledTotal: number; lastSettle?: Record<string, unknown> };
+  let saves = 0;
+  const removed: Array<{ wrapper: string; cutBlock: number }> = [];
+  const d = {
+    mode: "live", scorecard: SCORECARD_ADDR, settleDelayS: 300, sender, health, balanceWei: 10n ** 16n, chainNowS,
+    nowMs: chainNowS * 1000, save: () => { saves++; }, raise: (s: 1 | 2, k: string, m: string) => { alarms.push([s, k, m]); },
+    log: (e: string) => { events.push(e); }, removeFile: (c: { wrapper: string; cutBlock: number }) => { removed.push(c); }, ...over,
+  };
+  return { d: d as never, alarms, events, health, removed, saves: () => saves };
+}
+
+test("W5: a settle mined with status 0 (row 151, PriceDeviates on chain) is NOT settled; the next tick settles it", async () => {
+  let status = "0x0";
+  const h = chainHarness({ receipt: () => ({ status, blockNumber: "0x46efbbe", gasUsed: "0x1cd97" }) });
+  const row = pendingRow151();
+  const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [row], recent: [], expired: [] } as never as {
+    pending: unknown[]; recent: Array<{ id: string; tx: string; block?: number }>; expired: unknown[];
+  };
+  const t1 = settleDeps(h.sender, 1_793_151_306);            // 01:35:06Z, the minute row 151's settle reverted
+  await settleRows(state as never, t1.d);
+  assert.equal(h.sent.length, 1, "the settle was sent");
+  assert.equal(state.pending.length, 1, "status 0 keeps the row owed");
+  assert.equal(state.recent.length, 0);
+  assert.equal(t1.health.settledTotal, 0, "never counted as settled");
+  assert.deepEqual(t1.events, ["settle-reverted"]);
+  assert.deepEqual(t1.alarms.map((a) => a.slice(0, 2)), [[2, `keeper:settle-reverted:${ROW151_ID}`]]);
+  assert.equal(t1.saves(), 1, "the attempt counter is saved before the send");
+  status = "0x1";
+  const t2 = settleDeps(h.sender, 1_793_151_336);            // the next tick
+  await settleRows(state as never, t2.d);
+  assert.equal(h.sent.length, 2);
+  assert.equal(state.pending.length, 0);
+  assert.deepEqual(state.recent.map((r) => [r.id, r.tx, r.block]), [[ROW151_ID, h.sent[1], 74_382_270]]);
+  assert.equal(t2.health.settledTotal, 1);
+  assert.deepEqual(t2.events, ["settled"]);
+  h.cleanup();
+});
+
+test("W5: a refused settle simulation sends nothing and keeps the row; AlreadySettled settles it without a send", async () => {
+  let revert: string | null = scorecardErrors.encodeErrorResult("PriceDeviates", [-237294, -237347]);
+  const h = chainHarness({ receipt: () => ({ status: "0x1", blockNumber: "0x1", gasUsed: "0x1" }), revert: () => revert });
+  const row = pendingRow151();
+  const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [row], recent: [], expired: [] } as never as { pending: unknown[]; recent: unknown[] };
+  const t1 = settleDeps(h.sender, 1_793_151_306);
+  await settleRows(state as never, t1.d);
+  assert.equal(h.sent.length, 0);
+  assert.equal(state.pending.length, 1);
+  assert.deepEqual(t1.events, ["settle-retry"]);
+  revert = scorecardErrors.encodeErrorResult("AlreadySettled", [ROW151_ID]);
+  const t2 = settleDeps(h.sender, 1_793_151_336);
+  await settleRows(state as never, t2.d);
+  assert.equal(h.sent.length, 0);
+  assert.deepEqual([state.pending.length, state.recent.length, t2.health.settledTotal], [0, 1, 0]);
+  assert.deepEqual(t2.events, ["settled-by-other"]);
+  h.cleanup();
+});
+
+test("W5: settles keep to Scorecard's window and need gas, not isKeeper", async () => {
+  const h = chainHarness({ receipt: () => ({ status: "0x1", blockNumber: "0x1", gasUsed: "0x1" }) });
+  const mk = () => ({ lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [pendingRow151()], recent: [], expired: [] } as never as { pending: unknown[]; expired: Array<{ id: string; reason: string }> });
+  const readyAt = ROW151_SETTLE_AFTER + 300, deadline = readyAt + 21_600;
+  // One second early: kept, nothing sent.
+  let s = mk();
+  await settleRows(s as never, settleDeps(h.sender, readyAt - 1).d);
+  assert.deepEqual([h.sent.length, s.pending.length], [0, 1]);
+  // Underfunded or unknown balance, or shadow mode: kept, nothing sent; an hour after readyAt it pages.
+  for (const over of [{ balanceWei: 10n ** 14n - 1n }, { balanceWei: null }, { mode: "shadow" }, { sender: null }]) {
+    s = mk();
+    const t = settleDeps(over.sender === null ? null : h.sender, readyAt + 3_601, over);
+    await settleRows(s as never, t.d);
+    assert.deepEqual([h.sent.length, s.pending.length], [0, 1], JSON.stringify(over, (_, v) => (typeof v === "bigint" ? String(v) : v)));
+    assert.deepEqual(t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:settle-late:${ROW151_ID}`]]);
+  }
+  // Past deadline - 60: expired, sev-1, never sent.
+  s = mk();
+  const t = settleDeps(h.sender, deadline - 59);
+  await settleRows(s as never, t.d);
+  assert.deepEqual([h.sent.length, s.pending.length], [0, 0]);
+  assert.deepEqual(s.expired.map((e) => [e.id, e.reason]), [[ROW151_ID, "window-closed"]]);
+  assert.deepEqual(t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:settle-expired:${ROW151_ID}`]]);
+  // Inside the window with gas: sent (the health object carries no isKeeper at all).
+  s = mk();
+  await settleRows(s as never, settleDeps(h.sender, deadline - 60).d);
+  assert.deepEqual([h.sent.length, s.pending.length], [1, 0]);
+  h.cleanup();
+});
+
+test("W5: a commit mined with status 0 is not recorded; status 1 is, with its block", async () => {
+  let status = "0x0";
+  const h = chainHarness({ receipt: () => ({ status, blockNumber: "0x48434c0", gasUsed: "0x5000" }) });
+  const closure = (): Record<string, unknown> => ({
+    wrapper: "0x41333Df9E7639188BBfca5522dC4844398Af9f9E", symbol: "wTCENTx", cutAtMs: 0, cutBlock: 75_773_120,
+    midAtCutE18: "1", preCutMidE18: "1", witnessedCut: true, reopenMs: 1, swapCount: 0,
+    plan: { root: "0x" + "11".repeat(32), id: "0x" + "22".repeat(32), settleAfterS: 1, markE18: "1", bandBps: 1, data: "0x8ed83271" + "ab".repeat(32), attempts: 0 },
+  });
+  const health = { armed: true, isKeeper: true, committedTotal: 0 } as Record<string, unknown>;
+  let saves = 0;
+  const d = { sender: h.sender, health: health as never, nowMs: 1, lastChance: false, save: () => { saves++; } };
+  const c = closure();
+  await sendCommit(c as never, d, { mode: "live", scorecard: SCORECARD_ADDR });
+  assert.equal(c.committed, undefined, "a reverted commit records nothing");
+  assert.equal((c.plan as { attempts: number }).attempts, 1);
+  assert.equal(saves, 1, "the attempt was saved before the send; nothing after (no books changed)");
+  assert.equal(health.committedTotal, 0);
+  status = "0x1";
+  await sendCommit(c as never, d, { mode: "live", scorecard: SCORECARD_ADDR });
+  const rec = c.committed as unknown as { onChain: boolean; block: number };
+  assert.deepEqual([rec.onChain, rec.block], [true, 75_773_120]);
+  assert.equal(health.committedTotal, 1);
+  assert.equal(h.sent.length, 2);
+  // Committed closures are never sent again.
+  await sendCommit(c as never, d, { mode: "live", scorecard: SCORECARD_ADDR });
+  assert.equal(h.sent.length, 2);
+  h.cleanup();
+});
+
+test("W5: the shadow branch requires CFG.mode !== \"live\"; live but unarmed holds the commit and records nothing", async () => {
+  const mk = (): Record<string, unknown> => ({
+    wrapper: "0x41333Df9E7639188BBfca5522dC4844398Af9f9E", symbol: "wTCENTx", cutAtMs: 0, cutBlock: 1, midAtCutE18: "1",
+    preCutMidE18: "1", witnessedCut: true, reopenMs: 1, swapCount: 0,
+    plan: { root: "0x" + "11".repeat(32), id: "0x" + "22".repeat(32), settleAfterS: 1, markE18: "1", bandBps: 1, data: "0x", attempts: 0 },
+  });
+  const d = (armed: boolean, sender: unknown) => ({ sender: sender as never, health: { armed, isKeeper: armed, committedTotal: 0 } as never, nowMs: 5, lastChance: false, save: () => {} });
+  const live = { mode: "live", scorecard: SCORECARD_ADDR };
+  for (const [armed, sender] of [[false, {}], [true, null]] as const) {
+    const c = mk();
+    await sendCommit(c as never, d(armed, sender), live);
+    assert.equal(c.committed, undefined, "SFS B1: never a permanent shadow mark in live mode");
+    assert.equal((c.plan as { attempts: number }).attempts, 0, "nothing attempted");
+  }
+  const c = mk();
+  await sendCommit(c as never, d(false, null), { mode: "shadow", scorecard: SCORECARD_ADDR });
+  assert.deepEqual([(c.committed as { onChain: boolean }).onChain, (c.committed as { atMs: number }).atMs], [false, 5]);
+  const body = fnBody(SRC(), "export async function sendCommit(");
+  assert.ok(body.indexOf('if (cfg.mode !== "live") {') < body.indexOf('log("shadow-mark"'));
+  assert.match(body, /raise\(1, `keeper:commit-held-unarmed:\$\{c\.symbol\}`/);
+  assert.equal(SRC().split('log("shadow-mark"').length - 1, 1, "the shadow branch exists only in sendCommit");
+});
+
+test("W5: no .broadcastAndWait( in main.ts; every send goes through sendOnce", () => {
+  const src = SRC();
+  assert.doesNotMatch(src, /\.broadcastAndWait\(/);
+  assert.doesNotMatch(src, /\.prepare\(CFG\.scorecard/);
+  assert.equal(src.split("sendOnce(").length - 1, 1, "one call, in sendTx");
+  assert.match(fnBody(src, "function sendTx("), /sendWatch\.sends\+\+;\n\s*return sendOnce\(sender, to, data, meta\);/);
+  // The backfill's busy rule reads the passes' own send count.
+  const tick = fnBody(src, "async function tick(");
+  assert.match(tick, /const sendsBefore = sendWatch\.sends;\n\s*await commitPass\([^\n]*\n\s*await settlePass\([^\n]*\n\s*const sentThisTick = sendWatch\.sends !== sendsBefore;/);
+});
+
+test("W5: the balance is found by balanceCall(health.address).label and chain.results[chain.results.length - 1] is gone", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.doesNotMatch(SRC(), /chain\.results\[chain\.results\.length - 1\]/);
+  assert.match(tick, /chain\.results\.find\(\(r\) => r\.label === balanceCall\(health\.address\)\.label\)/);
+  // An unreadable balance keeps the last one that decoded instead of reading as 0.
+  assert.match(tick, /if \(bal !== null\) \{ onchainWatch\.lastBalanceWei = bal;/);
+  assert.match(tick, /health\.armed = CFG\.mode === "live" && health\.isKeeper && knownBal !== null && knownBal >= CFG\.lowBalanceWei;/);
+  assert.match(tick, /closureCountCall\(CFG\.scorecard\),/);
+});
+
+test("W5: the Sender is built with rpc: maxNonceRpc(", () => {
+  assert.match(fnBody(SRC(), "async function main()"), /rpc: maxNonceRpc\(async \(url, method, params\) => \{[^]*?\}, CFG\.rpcs\),/);
+});
+
+test("W5: sendCommit is the only caller of commitAttempt(", () => {
+  const src = SRC();
+  assert.equal(src.split("commitAttempt(").length - 1, 1);
+  assert.ok(fnBody(src, "export async function sendCommit(").includes("commitAttempt("));
+  const cp = fnBody(src, "async function commitPass(");
+  assert.match(cp, /await sendCommit\(c, \{ sender, health, nowMs, lastChance, save: \(\) => saveState\(state\) \}\);/);
+});
+
+test("W5: settlePass decides with canSettle( and does not read health.isKeeper", () => {
+  const src = SRC();
+  const pass = fnBody(src, "async function settlePass(") + fnBody(src, "export async function settleRows(");
+  assert.match(pass, /canSettle\(d\.mode, d\.sender !== null, d\.balanceWei\)/);
+  assert.match(pass, /balanceWei: onchainWatch\.lastBalanceWei, chainNowS/);
+  assert.doesNotMatch(pass, /isKeeper|\.armed/);
+  // Chain time, not the VPS clock.
+  assert.match(fnBody(src, "async function tick("), /await settlePass\(state, sender, health, block\.timestamp, nowMs\);/);
+});
+
+test("W5: reconcile runs before commitPass( and settlePass( inside its own try", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const rec = tick.indexOf("await reconcileStep(state, block, nowMs, health);");
+  assert.ok(rec > 0 && rec < tick.indexOf("await commitPass(") && rec < tick.indexOf("await settlePass("));
+  const step = fnBody(src, "async function reconcileStep(");
+  const tryAt = step.indexOf("try {");
+  assert.ok(tryAt > 0 && tryAt < step.indexOf("readChainBook("));
+  assert.match(step, /readChainBook\(block, calls, CFG\.rpcs, RECONCILE_DEADLINE_MS\)/);
+  assert.match(step, /\} catch \(e\) \{\n\s*onchainWatch\.skipped\+\+;\n\s*log\("reconcile-skipped"/);
+  assert.match(step, /revive: closureFromRecent,/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W7 (holiday evidence and the cut check). Source text for the wiring; the per-closure steps main.ts
+// exports run on the real venue schedules committed in the archived bundles (fixtures/marks).
+// ---------------------------------------------------------------------------------------------
+
+import { closureVenueSchedule, openLedger, foldVenueRead, onCutCheck, abandonAlarms } from "./main.ts";
+import type { CutAnchor } from "./main.ts";
+import { checkCut, expectedCapAt, holidayKey, venueEvidenceFor } from "./venueTime.ts";
+import { nextCapReturnMs } from "./reopen.ts";
+import type { ExchangeSchedule } from "./regime.ts";
+import { buildMarkRound, verifyMarkBundleOffline } from "./markRound.ts";
+import type { VenueEvidence } from "./markRound.ts";
+import { LeafKind, subjectOf } from "./tree.ts";
+import { ROOTS, inputsFromBundle, leafValue, loadBundle } from "./fixtures/markFixtures.test.ts";
+
+/** The venue a keeper holds (main.ts `Venue`), rebuilt from an archived bundle's committed venue leaf. */
+function venueFrom(root: string, atMs: number, holidays?: ExchangeSchedule["schedule"]["holidays"]) {
+  const b = loadBundle(root);
+  const v = leafValue(b, LeafKind.HTTP_EXCHANGE, subjectOf(`venue:${leafValue(b, LeafKind.CLAIM).wrapper.toLowerCase()}`)) as VenueEvidence;
+  return {
+    mic: v.mic, assetUrl: v.assetUrl, assetBodyHash: v.assetBodyHash, exchangeUrl: v.exchangeUrl, exchangeBodyHash: v.exchangeBodyHash,
+    limits: v.limitsPerPeriod,
+    sched: { mic: v.mic, timezone: v.schedule.timezone, isOpen: false, currentSession: null, nextChangeAt: null, schedule: { ...v.schedule, holidays: holidays ?? v.schedule.holidays } } as ExchangeSchedule,
+    atMs,
+  };
+}
+const HK = (atMs = 0) => venueFrom(ROOTS.recessXIAO, atMs);
+const US = (atMs = 0, holidays?: ExchangeSchedule["schedule"]["holidays"]) => venueFrom(ROOTS.us9Nov, atMs, holidays);
+const T = (s: string) => Date.parse(s);
+const TICK = 30_000;
+
+/** A closure as the per-asset loop opens one (W2 fields, W7 ledger), cut at `cutAtMs`. */
+function opened(symbol: string, cutAtMs: number, venue: ReturnType<typeof US>, block = 75_000_000) {
+  return {
+    wrapper: "0x" + "12".repeat(20), symbol, cutAtMs, cutBlock: block, midAtCutE18: "1000", preCutMidE18: "999" as string | null,
+    witnessedCut: true, reopenMs: null as number | null, swapCount: 0,
+    cutBlockHash: "0x" + "aa".repeat(32), cutRead: null, coverage: { ranges: [[block - 900, block + 10]] as Array<[number, number]>, rows: 3 },
+    holidayLedger: openLedger(venue),
+  } as Parameters<typeof onCutCheck>[0];
+}
+const anchorAt = (nowMs: number, block: number): CutAnchor =>
+  ({ nowMs, block: { number: block, hash: "0x" + "bb".repeat(32) }, midE18: 2000n, poolSnap: { block: { number: block, hash: "0x" + "bb".repeat(32), timestamp: Math.floor(nowMs / 1000), rpc: "" }, results: [] }, pool: "0x" + "34".repeat(20) });
+
+/**
+ * Drive the loop's W7 step tick by tick (every 30 s, one block per second), exactly as tick() does for a closure
+ * without a plan: checkCut on the closure's schedule, then onCutCheck. Stops at the first recut or unanchorable.
+ */
+function runTicks(c: Parameters<typeof onCutCheck>[0], venue: ReturnType<typeof US>, untilMs: number) {
+  const kinds: Array<[string, string]> = [];
+  for (let now = c.cutAtMs, blk = c.cutBlock; now <= untilMs; now += TICK, blk += 30) {
+    const r = checkCut(c, venue.limits, closureVenueSchedule(venue, c.holidayLedger), now, TICK);
+    onCutCheck(c, r, anchorAt(now, blk));
+    kinds.push([new Date(now).toISOString(), r.kind]);
+    if (r.kind === "recut" || r.kind === "unanchorable") break;
+  }
+  return kinds;
+}
+
+test("W7: the reopen prediction uses the closure's schedule", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const loop = tick.slice(tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;"), tick.indexOf("ingest(store, tracked, scan, recentHashes)"));
+  assert.match(loop, /const sched = venue \? closureVenueSchedule\(venue, open\?\.holidayLedger\) : null;/);
+  assert.match(loop, /const reopenMs = venue && sched \? nextCapReturnMs\(venue\.limits, sched, nowMs\) : null;/);
+  assert.match(fnBody(SRC(), "export function closureVenueSchedule("), /closureSchedule\(venue\.sched\.schedule, ledger\)/);
+  // With nothing kept it is the latest read; with a kept entry, the entry is in it.
+  const us = US();
+  assert.deepEqual(closureVenueSchedule(us, openLedger(us)).schedule, us.sched.schedule);
+  const pruned = US(0, us.sched.schedule.holidays.slice(1));
+  const s = closureVenueSchedule(pruned, openLedger(us));
+  assert.ok(s.schedule.holidays.some((h) => holidayKey(h) === holidayKey(us.sched.schedule.holidays[0])));
+});
+
+test("W7: the ledger is folded on every fresh venue read, and frozen by a plan", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.match(tick, /venues\.set\(a\.wrapper, v\);\n\s*\/\/[^\n]*\n\s*foldVenueRead\(state\.open, a\.wrapper, v\);/);
+  assert.match(tick, /if \(open && venue && !open\.plan && !open\.committed && !open\.holidayLedger\) open\.holidayLedger = openLedger\(venue\);/, "W7.3: an old-build closure gets a ledger");
+  assert.match(tick, /holidayLedger: openLedger\(venue\),/, "a new closure starts one");
+  const us = US(1);
+  const open: Record<string, { plan?: unknown; committed?: unknown; holidayLedger?: ReturnType<typeof openLedger> }> = {
+    a: {}, b: { plan: {} }, c: { committed: {} },
+  };
+  for (const k of ["a", "b", "c", "missing"]) foldVenueRead(open, k, us);
+  assert.equal(open.a.holidayLedger!.entries.length, us.sched.schedule.holidays.length);
+  assert.equal(open.b.holidayLedger, undefined, "a planned closure's schedule is frozen");
+  assert.equal(open.c.holidayLedger, undefined);
+  // An issuer body with junk in its holiday list never throws here.
+  const junk = { ...us, sched: { ...us.sched, schedule: { ...us.sched.schedule, holidays: [null, { startsAt: 1 }, "x"] as never } } };
+  assert.doesNotThrow(() => foldVenueRead(open, "a", junk));
+  assert.equal(openLedger(undefined), undefined);
+});
+
+test("W7: the cut is checked on open and every tick, and a recut removes the old file first", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const loop = tick.slice(tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;"), tick.indexOf("ingest(store, tracked, scan, recentHashes)"));
+  assert.equal(loop.split("checkCut(").length - 1, 2, "checkCut( on the opening tick and on every later tick");
+  const openAt = loop.indexOf("checkCut(fresh,");
+  assert.ok(openAt > loop.indexOf("const fresh: Closure = {") && openAt < loop.indexOf("state.open[w] = fresh;"), "checked before the closure is stored");
+  const later = loop.indexOf("checkCut(open,");
+  assert.ok(later > 0 && loop.lastIndexOf("if (venue && sched && !open.plan && !open.committed) {", later) > openAt, "every tick until a plan exists");
+  assert.ok(later < loop.indexOf("open.reopenMs = reopenMs;"), "before the prediction is stored");
+  const step = fnBody(SRC(), "export function onCutCheck(");
+  const recut = step.slice(step.indexOf('case "recut"'), step.indexOf('case "unanchorable"'));
+  assert.ok(recut.indexOf("store.remove(c)") >= 0 && recut.indexOf("store.remove(c)") < recut.indexOf("applyRecut("), "the old file (old cutBlock) goes first");
+  assert.match(recut, /cutRead: cutReadOf\(at\.poolSnap, at\.pool\)/);
+  assert.doesNotMatch(step, /await /);
+});
+
+test("W7: a suspect closure is never planned", () => {
+  const cp = fnBody(SRC(), "async function commitPass(");
+  const gate = cp.indexOf("if (!c.plan && c.cutSuspect !== false) continue;");
+  assert.ok(gate > 0 && gate < cp.indexOf("buildPlan("), "the gate precedes buildPlan(");
+  assert.ok(gate > cp.indexOf("if (c.reopenMs === null || !venue) {") && gate < cp.indexOf("CFG.minClosureS * 1000"), "after the venue gate, before minClosureS");
+  assert.match(fnBody(SRC(), "function backfillEligible("), /\.filter\(\(t\) => t\.c\.cutSuspect === false\)/, "nor backfilled");
+  assert.match(fnBody(SRC(), "function closuresHealth("), /cutSuspect: c\.cutSuspect \?\? null,/, "and /healthz says why");
+});
+
+test("W7: closure-missed only for confirmed, witnessed, long closures; a blip the schedule never confirmed is a phantom", () => {
+  const tick = fnBody(SRC(), "async function tick(");
+  const abandon = tick.slice(tick.indexOf('log("closure-abandoned"'), tick.indexOf("delete state.open[w];", tick.indexOf('log("closure-abandoned"')));
+  assert.match(abandon, /cutSuspect: open\.cutSuspect \?\? null, lastedS:/);
+  assert.match(abandon, /abandonAlarms\(open, nowMs, CFG\.minClosureS\);/);
+  const body = fnBody(SRC(), "export function abandonAlarms(");
+  for (const s of ["keeper:closure-missed", "keeper:phantom-closure", "witnessedCut", "minClosureS"]) assert.ok(body.includes(s), s);
+  const now = T("2026-11-16T01:30:30Z");
+  const c = (over: Record<string, unknown>) => ({ symbol: "wX", cutBlock: 1, cutAtMs: now - 3_600_000, cutSuspect: false, witnessedCut: true, ...over }) as Parameters<typeof abandonAlarms>[0];
+  assert.equal(abandonAlarms(c({}), now, 1_800), "missed");
+  assert.equal(abandonAlarms(c({ cutAtMs: now - 600_000 }), now, 1_800), null, "short: a closure-too-short row was never due");
+  assert.equal(abandonAlarms(c({ witnessedCut: false }), now, 1_800), null, "unwitnessed: no row was possible");
+  for (const s of [true, "unanchorable", undefined]) assert.equal(abandonAlarms(c({ cutSuspect: s }), now, 1_800), "phantom", String(s));
+});
+
+test("W7: a scheduled cut is confirmed on its opening tick", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T07:56:04Z"), hk);
+  assert.deepEqual(runTicks(c, hk, c.cutAtMs), [["2026-11-13T07:56:04.000Z", "ok"]]);
+  assert.equal(c.cutSuspect, false);
+  assert.equal(c.cutBlock, 75_000_000, "nothing re-anchored");
+});
+
+test("W7: an HK blip merging into the 11:55 lunch cut is re-anchored at the schedule's cut, and its row re-derives", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T03:52:00Z"), hk);
+  const run = runTicks(c, hk, T("2026-11-13T04:10:00Z"));
+  assert.deepEqual(run.at(-1), ["2026-11-13T03:55:00.000Z", "recut"]);
+  assert.ok(run.slice(0, -1).every(([, k]) => k === "suspect"));
+  assert.equal(c.cutAtMs, T("2026-11-13T03:55:00Z"));
+  assert.equal(c.cutBlock, 75_000_000 + 180);
+  assert.equal(c.cutBlockHash, "0x" + "bb".repeat(32));
+  assert.equal(c.midAtCutE18, "2000");
+  assert.equal(c.preCutMidE18, null);
+  assert.deepEqual(c.coverage, { ranges: [], rows: 0 });
+  assert.equal(c.cutSuspect, false);
+  assert.deepEqual(c.recut, { fromCutAtMs: T("2026-11-13T03:52:00Z"), fromCutBlock: 75_000_000 });
+  assert.equal(c.witnessedCut, true);
+  // At the commit instant the closure's schedule gives 05:00Z from now and from the new cut, and says shut at the cut.
+  const now = T("2026-11-13T04:50:00Z");
+  const settleAfterS = Math.floor(nextCapReturnMs(hk.limits, closureVenueSchedule(hk, c.holidayLedger), now)! / 1000);
+  assert.equal(settleAfterS * 1000, T("2026-11-13T05:00:00Z"));
+  const ev = venueEvidenceFor(c, hk, now, settleAfterS);
+  assert.equal(ev.kind, "ok");
+  if (ev.kind === "ok") assert.equal(expectedCapAt(ev.evidence.limitsPerPeriod, { mic: ev.evidence.mic, schedule: ev.evidence.schedule } as ExchangeSchedule, ev.evidence.cutAtMs), 0, "S18 holds on the re-anchored cut");
+});
+
+test("W7: an HK phantom persisting into the recess is re-anchored at 03:55Z", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T02:00:00Z"), hk);
+  const run = runTicks(c, hk, T("2026-11-13T04:10:00Z"));
+  assert.deepEqual(run.at(-1), ["2026-11-13T03:55:00.000Z", "recut"]);
+  assert.ok(run.slice(0, -1).every(([, k]) => k === "suspect"));
+  assert.equal(c.cutAtMs, T("2026-11-13T03:55:00Z"));
+  assert.equal(c.recut!.fromCutAtMs, T("2026-11-13T02:00:00Z"));
+});
+
+test("W7: a US phantom persisting to the close is re-anchored at the first tick from 20:55Z, then too short to mark", () => {
+  const us = US();
+  const c = opened("wNVDAx", T("2026-11-13T15:30:44Z"), us);
+  const run = runTicks(c, us, T("2026-11-13T21:30:00Z"));
+  assert.deepEqual(run.at(-1), ["2026-11-13T20:55:14.000Z", "recut"]);
+  assert.ok(run.slice(0, -1).every(([, k]) => k === "suspect"));
+  const reopen = nextCapReturnMs(us.limits, closureVenueSchedule(us, c.holidayLedger), c.cutAtMs)!;
+  assert.equal(reopen, T("2026-11-13T21:00:00Z"));
+  assert.ok(reopen - c.cutAtMs < 1_800_000, "commitPass drops it as closure-too-short, the right answer");
+});
+
+test("W7: a suspect closure inherited after its schedule shut is unanchorable, once", () => {
+  const us = US();
+  const c = opened("wNVDAx", T("2026-11-13T15:30:44Z"), us);
+  const at = T("2026-11-13T20:56:00Z");
+  onCutCheck(c, checkCut(c, us.limits, closureVenueSchedule(us, c.holidayLedger), at, TICK), anchorAt(at, 75_100_000));
+  assert.equal(c.cutSuspect, "unanchorable");
+  assert.equal(c.cutBlock, 75_000_000, "never re-anchored");
+  onCutCheck(c, checkCut(c, us.limits, closureVenueSchedule(us, c.holidayLedger), at + TICK, TICK), anchorAt(at + TICK, 75_100_030));
+  assert.equal(c.cutSuspect, "unanchorable");
+});
+
+test("W7: Thanksgiving-shaped: a holiday listed at the cut and pruned before the commit still gives the settleAfter a verifier re-derives", () => {
+  const listed = US(T("2026-11-26T00:50:00Z"));
+  const entry = listed.sched.schedule.holidays.find((h) => h.startsAt === "2026-11-26T01:00:00.000Z")!;
+  assert.ok(entry, "the fixture lists Thanksgiving");
+  const prunedList = listed.sched.schedule.holidays.filter((h) => holidayKey(h) !== holidayKey(entry));
+  // Cut at 00:55:30Z: the opening tick starts the ledger from the list as read, and the cut is a scheduled one.
+  const cut = T("2026-11-26T00:55:30Z");
+  const c = opened("wNVDAx", cut, listed);
+  onCutCheck(c, checkCut(c, listed.limits, closureVenueSchedule(listed, c.holidayLedger), cut, TICK), anchorAt(cut, 75_000_000));
+  assert.equal(c.cutSuspect, false);
+  // 12:00Z: the issuer has pruned the entry (it started 11 h ago); a fresh read is folded in step 6, and kept.
+  const state = { open: { [c.wrapper]: c } };
+  foldVenueRead(state.open, c.wrapper, US(T("2026-11-26T12:00:00Z"), prunedList));
+  assert.ok(c.holidayLedger!.entries.some((e) => holidayKey(e) === holidayKey(entry)));
+  // The commit tick, 27 Nov 00:50Z, with the latest (pruned) read: the loop's prediction, and the evidence buildPlan commits.
+  const latest = US(T("2026-11-27T00:40:00Z"), prunedList);
+  const now = T("2026-11-27T00:50:00Z");
+  const reopenMs = nextCapReturnMs(latest.limits, closureVenueSchedule(latest, c.holidayLedger), now)!;
+  assert.equal(reopenMs, T("2026-11-27T01:00:00Z"));
+  const settleAfterS = Math.floor(reopenMs / 1000);
+  const ev = venueEvidenceFor(c, latest, now, settleAfterS);
+  assert.equal(ev.kind, "ok", JSON.stringify(ev));
+  if (ev.kind !== "ok") return;
+  assert.deepEqual(ev.evidence.holidaysKept!.map(holidayKey), [holidayKey(entry)]);
+  // What every verifier re-derives from the committed bytes: walked from the cut, the committed schedule gives settleAfter.
+  assert.equal(nextCapReturnMs(ev.evidence.limitsPerPeriod, { mic: ev.evidence.mic, schedule: ev.evidence.schedule } as ExchangeSchedule, ev.evidence.cutAtMs), settleAfterS * 1000);
+  // ...where the latest list alone (HEAD) would have walked to 26 Nov 01:00Z and the row would not reproduce.
+  assert.equal(nextCapReturnMs(latest.limits, latest.sched, cut), T("2026-11-26T01:00:00Z"));
+  // And through the repo verifier: a round built with this evidence reproduces from the cut, with no fallback.
+  const i = inputsFromBundle(loadBundle(ROOTS.us9Nov));
+  Object.assign(i.closures[0], { cutAtMs: cut, settleAfterS, venue: ev.evidence });
+  i.evaluatedAtMs = now;
+  const v = verifyMarkBundleOffline(JSON.parse(JSON.stringify(buildMarkRound(i).bundle)));
+  assert.deepEqual(v.failures, []);
+  assert.ok(!v.notes.some((n) => n.includes("reopen re-derived from the commit instant")), v.notes.join(" | "));
+  const strict = verifyMarkBundleOffline(JSON.parse(JSON.stringify(buildMarkRound(i).bundle)), { era: "swap-evidence" });
+  assert.ok(!strict.failures.some((f) => /reopen|venue|cut time|predicted reopen|holidaysKept|open at the cut/.test(f)), strict.failures.join(" | "));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W4b (the commitPass loop and buildPlan).
+// ---------------------------------------------------------------------------------------------
+import { mock } from "node:test";
+import { mkdirSync, readdirSync } from "node:fs";
+import { commitTiming, closureId } from "./main.ts";
+import { RECESS, RECESS_ROOT_OF, recessRows, slot0Of } from "./fixtures/markFixtures.test.ts";
+import type { RecessSymbol } from "./fixtures/markFixtures.test.ts";
+
+test("W4b: venue checks run before any network call in buildPlan", () => {
+  const bp = fnBody(SRC(), "export async function buildPlan(");
+  const ve = bp.indexOf("venueEvidenceFor(");
+  assert.ok(ve > 0 && ve < bp.indexOf("fillForCommit("));
+  assert.doesNotMatch(bp.slice(0, ve), /await /, "nothing is awaited before the venue checks");
+  assert.match(bp, /const ve = venueEvidenceFor\(c, venue, nowMs, settleAfterS\);/);
+  assert.match(bp, /if \(ve\.kind === "defer"\) \{\n\s*if \(ve\.reopenMs !== null\) c\.reopenMs = ve\.reopenMs;/);
+  assert.match(bp, /venue: ve\.evidence,/, "the committed venue evidence is venueEvidenceFor's");
+});
+
+test("W4b: strict self-check before evidence is persisted", () => {
+  const src = SRC();
+  const bp = fnBody(src, "export async function buildPlan(");
+  const order = ["fillForCommit(", "assembleSwapEvidence(", "verifyMarkBundleOffline(", "persistOnce(", "publisher.enqueue("].map((n) => [n, bp.indexOf(n)] as const);
+  for (const [n, i] of order) assert.ok(i > 0, `${n} in buildPlan`);
+  for (let k = 1; k < order.length; k++) assert.ok(order[k - 1][1] < order[k][1], `${order[k - 1][0]} before ${order[k][0]}`);
+  assert.match(bp, /verifyMarkBundleOffline\(JSON\.parse\(JSON\.stringify\(round\.bundle\)\), \{ era: "swap-evidence" \}\)/);
+  assert.match(bp, /if \(!check\.ok\) \{[^]*?return undefined;/);
+  for (const gone of ["swapsInRange(", "fetchClosingWindow(", "blockHashOf(", "readSwapFile("]) assert.equal(src.includes(gone), false, gone);
+  // The fill is bounded, and a closure file that cannot be read is treated as uncovered, never as an empty pool.
+  assert.match(bp, /maxChunks: 20,\n\s*deadlineMs: Math\.min\(10_000, Math\.max\(2_000, CFG\.tickMs - \(Date\.now\(\) - t\.tickStartMs\) - 5_000\)\)/);
+  assert.match(bp, /let ranges: Array<\[number, number\]> = \[\];\n\s*try \{\n\s*const file = store\.read\(c, pinnedBlock\);/);
+});
+
+test("W4b: the plan is on disk before the first attempt", () => {
+  const src = SRC();
+  const cp = fnBody(src, "async function commitPass(");
+  const set = cp.indexOf("c.plan = built;");
+  const save = cp.indexOf("saveState(state)", set);
+  const send = cp.indexOf("sendCommit(", save);
+  assert.ok(set > 0 && save > set && send > save);
+  assert.equal(cp.split("buildPlan(").length - 1, 1);
+  assert.match(cp, /if \(!c\.plan\) \{\n\s*const built = await buildPlan\(/, "buildPlan( only inside if (!c.plan)");
+  const sc = fnBody(src, "export async function sendCommit(");
+  assert.ok(sc.includes("commitAttempt("));
+  assert.ok(!sc.includes("broadcastAndWait("));
+});
+
+test("W4b: closures are planned earliest reopen first, each with its own clock and try", () => {
+  const cp = fnBody(SRC(), "async function commitPass(");
+  const sort = cp.indexOf(".sort(");
+  const loop = cp.indexOf("for (const w of order) {");
+  assert.ok(sort > 0 && loop > sort, ".sort( precedes the loop");
+  const body = cp.slice(loop);
+  assert.match(body, /^for \(const w of order\) \{\n\s*const c = state\.open\[w\];\n\s*try \{/, "the loop body is one try");
+  assert.ok(body.indexOf("Date.now()") > 0, "a clock per closure");
+  assert.match(body, /\} catch \(e\) \{\n\s*log\("plan-error"[^\n]*\n\s*raise\(2, `keeper:plan-error:\$\{c\.symbol\}`/);
+  assert.match(cp, /const due = \(c: Closure\) => \(c\.plan \? c\.plan\.settleAfterS \* 1000 : c\.reopenMs \?\? Number\.POSITIVE_INFINITY\);/);
+  assert.match(cp, /const toReopenS = Math\.floor\(\(due\(c\) - nowMs\) \/ 1000\);/);
+});
+
+test("W4b: alarms are never awaited in commitPass or buildPlan", () => {
+  for (const fn of ["async function commitPass(", "export async function buildPlan("]) {
+    const body = fnBody(SRC(), fn);
+    assert.doesNotMatch(body, /await raise\(|await alarms\./, fn);
+  }
+});
+
+test("W4b: the must-commit point and the last chance, per closure", () => {
+  const cfg = { tickMs: 30_000, commitFloorS: 120 };
+  // Default 30 s ticks: stop waiting for data at T-390 s; the last tick that can still send is above T-150 s.
+  assert.deepEqual(commitTiming(390, 0, cfg), { nextTickS: 30, mustCommit: false, lastChance: false });
+  assert.deepEqual(commitTiming(389, 0, cfg), { nextTickS: 30, mustCommit: true, lastChance: false });
+  assert.equal(commitTiming(150, 0, cfg).lastChance, false);
+  assert.equal(commitTiming(149, 0, cfg).lastChance, true);
+  // A slow previous tick moves both earlier.
+  assert.equal(commitTiming(414, 45, cfg).nextTickS, 55);
+  assert.equal(commitTiming(414, 45, cfg).mustCommit, true);
+  assert.equal(commitTiming(415, 45, cfg).mustCommit, false);
+  const cp = fnBody(SRC(), "async function commitPass(");
+  assert.match(cp, /const \{ mustCommit, lastChance \} = commitTiming\(toReopenS, t\.lastTickS, CFG\);/);
+  assert.match(cp, /await buildPlan\(c, a, venue, assets, poolSnap, read\.priceE18, digest, \{ \.\.\.t, nowMs, mustCommit \}\)/);
+  // The main loop hands the tick its own start and the previous tick's duration.
+  const main = fnBody(SRC(), "async function main()");
+  assert.match(main, /await tick\(state, assets, venues, client, sender, health, digest, \{ tickStartMs: tickStart, lastTickS \}\);/);
+  assert.match(main, /lastTickS = \(Date\.now\(\) - tickStart\) \/ 1000;/);
+});
+
+test("W4b: the only refusals in buildPlan are the schedule's and D2's; a degraded row pages and is committed", () => {
+  const bp = fnBody(SRC(), "export async function buildPlan(");
+  assert.equal(bp.split('.kind === "refuse"').length - 1, 2, "venueEvidenceFor's (I10/I11) and assembleSwapEvidence's (D2)");
+  assert.match(bp, /raise\(1, `keeper:closing-window-incomplete:\$\{c\.symbol\}`/);
+  assert.match(bp, /raise\(ev\.degraded\.includes\("closure-inconsistent"\) \? 1 : 2, `keeper:swap-coverage-incomplete:\$\{c\.symbol\}`/);
+  // Block-time drift pages and never stops the plan.
+  const drift = bp.slice(bp.indexOf("const driftS"), bp.indexOf("// 5."));
+  assert.match(drift, /raise\(1, `keeper:block-time-drift:\$\{c\.symbol\}`/);
+  assert.doesNotMatch(drift, /return/);
+});
+
+/**
+ * End to end, no network: a second instance of main.ts (its own CFG: a temp DATA_DIR, shadow, SIGNAL=off, RPCS at a
+ * closed local port) runs the real buildPlan on the 13 Nov 2026 HK recess: the archived round's pinned read, venue,
+ * registry and mids, and the real Swap logs of the closing window and the closure written to the closure file.
+ */
+async function recessHarness() {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-w4b-"));
+  mkdirSync(join(dir, "marks"), { recursive: true });
+  mkdirSync(join(dir, "closures"), { recursive: true });
+  const params = leafValue(loadBundle(RECESS_ROOT_OF.wXIAOx), LeafKind.PARAMS, subjectOf("params"));
+  const vars: Record<string, string> = {
+    DATA_DIR: dir, MODE: "shadow", SIGNAL: "off", RPCS: "http://127.0.0.1:9", SCORECARD: params.scorecard, CLOCK: params.clock,
+    CHAIN_ID: String(params.chainId), HC_URL: "", HC_ALARM_URL: "",
+  };
+  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  let m: typeof import("./main.ts");
+  try { m = await import(new URL("./main.ts?w4b-e2e", import.meta.url).href); }
+  finally { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
+
+  const setup = (sym: RecessSymbol, o: { rows?: (r: ReturnType<typeof recessRows>) => ReturnType<typeof recessRows>; ranges?: Array<[number, number]>; cutRead?: boolean } = {}) => {
+    const b = loadBundle(RECESS_ROOT_OF[sym]);
+    const p = leafValue(b, LeafKind.PARAMS, subjectOf("params"));
+    const chain = leafValue(b, LeafKind.CHAIN_CALL);
+    const registry = leafValue(b, LeafKind.REGISTRY, subjectOf("registry"));
+    const claim = leafValue(b, LeafKind.CLAIM);
+    const w = String(claim.wrapper).toLowerCase();
+    const mi = leafValue(b, LeafKind.CA_SNAPSHOT, subjectOf(`markinput:${w}`));
+    const swaps = leafValue(b, LeafKind.FETCH_LOG, subjectOf(`swaps:${w}`));
+    const v = leafValue(b, LeafKind.HTTP_EXCHANGE, subjectOf(`venue:${w}`)) as VenueEvidence;
+    const assets = registry.pools.map((x: Record<string, unknown>) => ({ ...x, raw: "0x0000000000000000000000000000000000000000", rawSymbol: String(x.symbol).replace(/^w/, "") }));
+    const a = assets.find((x: { symbol: string }) => x.symbol === sym);
+    const venue = {
+      mic: v.mic, assetUrl: v.assetUrl, assetBodyHash: v.assetBodyHash, exchangeUrl: v.exchangeUrl, exchangeBodyHash: v.exchangeBodyHash,
+      limits: v.limitsPerPeriod, atMs: p.evaluatedAtMs - 60_000,
+      sched: { mic: v.mic, timezone: v.schedule.timezone, isOpen: false, currentSession: null, nextChangeAt: null, schedule: v.schedule } as unknown as ExchangeSchedule,
+    };
+    const rows = (o.rows ?? ((r) => r))(recessRows(sym));
+    writeFileSync(join(dir, "closures", `${w}-${swaps.cutBlock}.jsonl`),
+      rows.map((r) => JSON.stringify({ b: r.blockNumber, i: r.logIndex, q: r.equityAbs.toString(), p: r.priceE18.toString() }) + "\n").join(""));
+    const hash = "0x" + "ab".repeat(32);
+    const cutRead = o.cutRead ? { blockNumber: swaps.cutBlock, blockHash: hash, blockTimestamp: Math.floor(swaps.cutAtMs / 1000), slot0: slot0Of(b, sym) } : null;
+    const c = {
+      wrapper: claim.wrapper, symbol: sym, cutAtMs: swaps.cutAtMs, cutBlock: swaps.cutBlock,
+      midAtCutE18: mi.midAtCutE18, preCutMidE18: mi.lastPrintE18, witnessedCut: true, reopenMs: swaps.settleAfterS * 1000, swapCount: 0,
+      cutBlockHash: cutRead ? hash : null, cutRead, cutSuspect: false,
+      coverage: { ranges: o.ranges ?? [[RECESS.closingFrom, RECESS.pinnedBlock]], rows: rows.length },
+      refusals: undefined as number | undefined,
+    };
+    const poolSnap = { block: { ...chain.block, rpc: "http://127.0.0.1:9" }, results: chain.calls };
+    const t = (mustCommit: boolean) => ({ heads: [chain.block.number], chainNowS: chain.block.timestamp, lastTickS: 0, tickStartMs: Date.now(), nowMs: p.evaluatedAtMs, mustCommit });
+    const plan = (mustCommit = false) => m.buildPlan(c as never, a, venue as never, assets, poolSnap as never, BigInt(mi.midNowE18), String(p.codeDigest), t(mustCommit));
+    return { c, plan, settleAfterS: swaps.settleAfterS as number };
+  };
+  const bundleOf = (root: string) => JSON.parse(readFileSync(join(dir, "marks", `${root}.json`), "utf8"));
+  const marks = () => readdirSync(join(dir, "marks")).length;
+  return { setup, bundleOf, marks, done: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test("W4b: end to end, buildPlan on the real 13 Nov recess builds a plan whose bundle reproduces strictly (N below its read block)", async () => {
+  const events: Array<Record<string, unknown>> = [];
+  const quiet = mock.method(console, "log", (line: string) => { try { events.push(JSON.parse(line)); } catch { /* not ours */ } });
+  const h = await recessHarness();
+  const N = RECESS.pinnedBlock - 1;
+  try {
+    // wXIAOx: 9 closing swaps, 14 closure swaps, full coverage, no cut read (a closure opened by the old build).
+    const x = h.setup("wXIAOx");
+    const plan = await x.plan();
+    assert.ok(plan, JSON.stringify(events.filter((e) => /refused|deferred|self-check/.test(String(e.event)))));
+    assert.equal(plan.settleAfterS, x.settleAfterS);
+    assert.equal(plan.markE18, "3701436175140696810");
+    assert.equal(plan.bandBps, 37);
+    assert.equal(plan.id, closureId(x.c.wrapper, x.settleAfterS, plan.root));
+    const v = verifyMarkBundleOffline(h.bundleOf(plan.root), { swapEvidenceFromBlock: N });
+    assert.equal(v.era, "swap-evidence", "N is below the read block: the strict era");
+    assert.deepEqual(v.failures, []);
+    assert.equal(v.ok, true);
+    assert.equal(v.evidenceComplete, true);
+    assert.deepEqual(v.notes, ["the cut mid is not bound to a committed pool read (closure opened before this keeper build)"]);
+    const built = events.find((e) => e.event === "mark-built")!;
+    assert.deepEqual([built.closingSwaps, built.swaps, built.complete, built.closingComplete, built.degraded], [9, 14, true, true, []]);
+    // The same bytes under N above the read block are a pre-fix row, still ok.
+    assert.equal(verifyMarkBundleOffline(h.bundleOf(plan.root), { swapEvidenceFromBlock: RECESS.pinnedBlock + 1 }).era, "pre-swap-fix");
+
+    // wMEITx: nothing traded; its cut read is committed and binds midAtCut (S8): no note at all.
+    const y = h.setup("wMEITx", { cutRead: true });
+    const py = await y.plan();
+    assert.ok(py);
+    const vy = verifyMarkBundleOffline(h.bundleOf(py.root), { swapEvidenceFromBlock: N });
+    assert.deepEqual([vy.ok, vy.failures, vy.notes, vy.evidenceComplete], [true, [], [], true]);
+
+    // A tail gap before the must-commit point: the fill asks the (closed) RPC, cannot serve it, and the plan defers.
+    const before = h.marks();
+    const g = h.setup("wXIAOx", { ranges: [[RECESS.closingFrom, RECESS.pinnedBlock - 5]] });
+    assert.equal(await g.plan(false), undefined);
+    assert.equal(h.marks(), before, "nothing persisted");
+    assert.ok(events.some((e) => e.event === "plan-deferred" && String(e.reason).includes("gaps remain")));
+    // At the must-commit point the same gap is committed honestly: complete false, the gap named, sev-2 page.
+    const pg = await g.plan(true);
+    assert.ok(pg);
+    const vg = verifyMarkBundleOffline(h.bundleOf(pg.root), { swapEvidenceFromBlock: N });
+    assert.deepEqual([vg.ok, vg.failures, vg.evidenceComplete], [true, [], false]);
+    assert.equal(pg.markE18, plan.markE18, "the mark does not depend on the gap");
+    assert.ok(events.some((e) => e.event === "alarm" && e.key === "keeper:swap-coverage-incomplete:wXIAOx" && e.sev === 2));
+
+    // D2: no closure swap recorded while the price moved, at the must-commit point: refused, nothing persisted.
+    const d2 = h.setup("wXIAOx", { rows: (r) => r.filter((s) => s.blockNumber <= RECESS.cutBlock) });
+    const n = h.marks();
+    assert.equal(await d2.plan(true), undefined);
+    assert.equal(h.marks(), n);
+    assert.equal(d2.c.refusals, 1);
+    assert.ok(events.some((e) => e.event === "mark-refused" && e.key === "keeper:swap-evidence-inconsistent:wXIAOx"));
+  } finally {
+    quiet.mock.restore();
+    h.done();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Deploy 2: W3 (retention, disk, memory) wired into main.ts.
+// ---------------------------------------------------------------------------------------------
+
+test("W3: boot reports orphans and deletes nothing", () => {
+  const main = fnBody(SRC(), "async function main()");
+  const load = main.indexOf("const state = loadState();");
+  const firstTick = main.indexOf("tick(", load);
+  assert.ok(load > 0 && firstTick > load);
+  const boot = main.slice(load, firstTick);
+  assert.match(boot, /const orphans = orphanReport\(CFG\.dataDir, state\);/);
+  assert.match(boot, /log\("closure-file-orphans", \{ files: orphans\.files, bytes: orphans\.bytes \}\)/);
+  assert.doesNotMatch(boot, /rmSync\(|unlinkSync\(|store\.remove\(|removeSwapFile\(/);
+  // orphanReport is orphanClosureFiles plus sizes (retention.ts).
+  const retention = readFileSync(fileURLToPath(new URL("./retention.ts", import.meta.url)), "utf8");
+  assert.match(fnBody(retention, "export function orphanReport("), /const files = orphanClosureFiles\(dataDir, state\);/);
+});
+
+test("W3: settled and expired rows delete their swap file", async () => {
+  const src = SRC();
+  assert.match(fnBody(src, "function settleRow("), /recordSettled\(state, c, how\);\n\s*removeSwapFile\(c, remove\);/);
+  assert.match(fnBody(src, "function expireRow("), /recordExpired\(state, c, reason, atMs\);\n\s*removeSwapFile\(c, remove\);/);
+  const rm = fnBody(src, "function removeSwapFile(");
+  assert.match(rm, /remove: RemoveFile = \(x\) => store\.remove\(x\)/);
+  assert.match(rm, /if \(!c\.wrapper \|\| !c\.cutBlock\) return;\n\s*try \{ remove\(/);
+
+  const W = "0x41333Df9E7639188BBfca5522dC4844398Af9f9E";
+  let status = "0x1";
+  let revert: string | null = null;
+  const run = async (row: Record<string, unknown>, chainNowS: number, over: Record<string, unknown> = {}) => {
+    // A fresh outbox per case: each case's first attempt reuses the id settle:<root>:1.
+    const h = chainHarness({ receipt: () => ({ status, blockNumber: "0x46efbbe", gasUsed: "0x1cd97" }), revert: () => revert });
+    const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [row], recent: [], expired: [] } as never as { pending: unknown[] };
+    const t = settleDeps(h.sender, chainNowS, over);
+    try { await settleRows(state as never, t.d); } finally { h.cleanup(); }
+    return { state, t };
+  };
+  const readyAt = ROW151_SETTLE_AFTER + 300;
+  // Settled by our transaction: the file goes.
+  let r = await run(pendingRow151(), readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed], [0, [{ wrapper: W, cutBlock: 74_370_000 }]]);
+  // A status-0 settle keeps the row, and its file.
+  status = "0x0";
+  r = await run(pendingRow151(), readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [1, 0]);
+  // Settled by someone else (AlreadySettled): the file goes.
+  revert = scorecardErrors.encodeErrorResult("AlreadySettled", [ROW151_ID]);
+  r = await run(pendingRow151(), readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [0, 1]);
+  revert = null;
+  // Expired at the window's end: the file goes.
+  r = await run(pendingRow151(), readyAt + 21_600 - 59);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [0, 1]);
+  // A row revived from `recent` without a file name: nothing to delete, never a throw.
+  status = "0x1";
+  r = await run({ ...pendingRow151(), wrapper: "", cutBlock: 0 }, readyAt);
+  assert.deepEqual([r.state.pending.length, r.t.removed.length], [0, 0]);
+  // A delete that throws (EIO) never undoes the settle.
+  r = await run(pendingRow151(), readyAt, { removeFile: () => { throw new Error("EIO: i/o error, unlink"); } });
+  assert.equal(r.state.pending.length, 0);
+  assert.equal(r.t.health.settledTotal, 1);
+});
+
+test("W3: disk and memory reach /healthz every tick, and a filling disk pages", () => {
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const save = tick.indexOf("try { saveState(state); }");
+  const disk = tick.indexOf("observeDisk(state, health);");
+  assert.ok(save > 0 && disk > save && disk < tick.indexOf("alarms.flush("), "after the end-of-tick write, before the flush");
+  const od = fnBody(src, "function observeDisk(");
+  assert.match(od, /const du = diskMonitor\.read\(\);/);
+  assert.match(od, /health\.disk = \{ \.\.\.du, orphans: diskWatch\.orphans \};/);
+  assert.match(od, /health\.mem = memUsage\(\);/);
+  assert.match(od, /const alarm = diskAlarm\(du\.freeMb\);\n\s*if \(alarm\) raise\(\.\.\.alarm\);/);
+  assert.match(od, /^function observeDisk[^]*try \{[^]*\} catch \(e\) \{ log\("disk-check-error"/);
+  assert.match(src, /const diskMonitor = createDiskMonitor\(CFG\.dataDir\);/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Review of the transaction path (nov/review/tx.md): F1, F2, F3, F5.
+// ---------------------------------------------------------------------------------------------
+
+test("W5 review F1: an UnknownClosure reached through a failed first endpoint keeps the row owed and pages", async () => {
+  // nov/review/tx/f1-unknownclosure-fallback.ts: Sender.call moves to the next endpoint on ANY error and throws the
+  // last one's, so endpoint 0 timing out and a stale endpoint 1 is enough to read UnknownClosure for a live row.
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-f1-"));
+  const unknown = scorecardErrors.encodeErrorResult("UnknownClosure", [ROW151_ID]);
+  const rpc: RpcFn = async (url, method, params) => {
+    if (method === "eth_call") {
+      if (url === "https://a") throw Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+      throw Object.assign(new Error("execution reverted"), { data: unknown });
+    }
+    if (method === "eth_sendRawTransaction") return Transaction.from(params[0] as string).hash;
+    throw new Error(`not reached: ${method}`);
+  };
+  const sender = new Sender({ wallet: new Wallet("0x" + "4c".repeat(32)), rpcs: ["https://a", "https://b"], chainId: 196,
+    dbPath: join(dir, "outbox.sqlite"), rpc, errorInterface: scorecardErrors });
+  const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [pendingRow151()], recent: [], expired: [] } as never as { pending: unknown[]; expired: unknown[] };
+  const t = settleDeps(sender, ROW151_SETTLE_AFTER + 300 + 60);
+  try { await settleRows(state as never, t.d); } finally { rmSync(dir, { recursive: true, force: true }); }
+  assert.equal(state.pending.length, 1, "kept: one endpoint's word never expires a row");
+  assert.equal(state.expired.length, 0);
+  assert.deepEqual(t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:commit-lost:${ROW151_ID}`]], "but a person is paged");
+  assert.deepEqual(t.removed, [], "and its file is kept");
+});
+
+test("W5 review F3: a row with a settle in flight is expired only on a settlements(id) read past the deadline", async () => {
+  const deadline = ROW151_SETTLE_AFTER + 300 + 21_600;
+  const mk = (attempts: number) => ({ lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [{ ...pendingRow151(), settleAttempts: attempts }], recent: [], expired: [] } as never as {
+    pending: unknown[]; expired: Array<{ reason: string }>; recent: Array<{ id: string }>;
+  });
+  const run = async (attempts: number, chainNowS: number, read: boolean | null) => {
+    const s = mk(attempts);
+    const t = settleDeps(null, chainNowS, { settledRead: () => read });
+    await settleRows(s as never, t.d);
+    return { s, t };
+  };
+  // Never sent: the window rule alone expires it, as before.
+  let r = await run(0, deadline - 59, null);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length], [0, 1]);
+  // Sent at deadline - 61 and maybe still in flight: no read, or a read before the deadline -> kept, no page.
+  for (const [now, read] of [[deadline - 59, null], [deadline - 59, false], [deadline, false], [deadline + 1, null]] as const) {
+    r = await run(1, now, read);
+    assert.deepEqual([r.s.pending.length, r.s.expired.length, r.t.alarms.length], [1, 0, 0], `${now - deadline} ${read}`);
+  }
+  // The in-flight settle mined: settled, not expired.
+  r = await run(1, deadline - 59, true);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length, r.s.recent.length], [0, 0, 1]);
+  // A read past the deadline that shows it unsettled: now it is final.
+  r = await run(1, deadline + 1, false);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length], [0, 1]);
+  assert.deepEqual(r.t.alarms.map((a) => a.slice(0, 2)), [[1, `keeper:settle-expired:${ROW151_ID}`]]);
+  // Reads failing for an hour past the deadline: expired anyway (nothing can mine after it), still paged.
+  r = await run(1, deadline + 3_601, null);
+  assert.deepEqual([r.s.pending.length, r.s.expired.length], [0, 1]);
+});
+
+test("W5 review F2: a closure whose plan was sent is never abandoned (or its file deleted) until reconcile has read commitments(plan.id)", () => {
+  const plan = { id: "0x" + "AB".repeat(32), attempts: 2 };
+  const absent = (atBlock: number, ...ids: string[]) => ({ atBlock, ids: new Set(ids.map((x) => x.toLowerCase())) });
+  const t0 = 1_000_000;
+  // Never sent: abandoned as before.
+  assert.equal(abandonDecision(undefined, absent(-1), 100, undefined, t0), "abandon");
+  assert.equal(abandonDecision({ ...plan, attempts: 0 }, absent(-1), 100, undefined, t0), "abandon");
+  // Sent, and reconcile has not read it at this block (skipped, timed out, or an older block): held, file kept.
+  assert.equal(abandonDecision(plan, absent(-1), 100, undefined, t0), "hold");
+  assert.equal(abandonDecision(plan, absent(99, plan.id), 100, t0, t0 + 60_000), "hold", "a read at another block does not count");
+  // Read absent at this very block (capacity is back at it, so nothing can commit after it): abandoned, file deleted.
+  assert.equal(abandonDecision(plan, absent(100, plan.id), 100, t0, t0 + 30_000), "abandon");
+  // No read for the whole hold: abandoned with the file KEPT (and a sev-1).
+  assert.equal(abandonDecision(plan, absent(-1), 100, t0, t0 + ABANDON_HOLD_MAX_MS - 1), "hold");
+  assert.equal(abandonDecision(plan, absent(-1), 100, t0, t0 + ABANDON_HOLD_MAX_MS), "abandon-keep-file");
+  // Wiring: the abandon branch asks first, deletes the file only on a plain "abandon".
+  const src = SRC();
+  const tick = fnBody(src, "async function tick(");
+  const branch = tick.slice(tick.indexOf("else if (open) {"), tick.indexOf("delete state.open[w];", tick.indexOf('log("closure-abandoned"')));
+  assert.match(branch, /const decision = abandonStep\(open, block\.number, nowMs\);\n\s*if \(decision === "hold"\) continue;\n\s*log\("closure-abandoned"/);
+  assert.match(branch, /if \(decision === "abandon"\) \{\n\s*try \{ store\.remove\(open\); \}/);
+  assert.equal(branch.split("store.remove(").length - 1, 1);
+  // Reconcile adopts a plan found on chain, and records what it read absent, before the per-asset loop runs.
+  const step = fnBody(src, "async function reconcileStep(");
+  assert.match(step, /adoptPlan: \(c\) => adoptPlan\(c, nowMs, health\),/);
+  assert.match(step, /onchainWatch\.planAbsent = \{ atBlock: block\.number, ids: new Set\(corr\.planNotOnChain/);
+  assert.ok(tick.indexOf("await reconcileStep(") < tick.indexOf("for (const a of assets) {\n    const w = a.wrapper;"));
+});
+
+test("W5 review F5: an earlier attempt that mined is booked as ours, with its hash and block, from the outbox", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "curb-keeper-f5-"));
+  const dbPath = join(dir, "outbox.sqlite");
+  const rpc: RpcFn = async (_u, method, params) => {
+    switch (method) {
+      case "eth_call": return "0x";
+      case "eth_estimateGas": return "0x1cd97";
+      case "eth_getBlockByNumber": return { baseFeePerGas: "0x1312d00" };
+      case "eth_getTransactionCount": return "0x7";
+      case "eth_sendRawTransaction": return Transaction.from(params[0] as string).hash;
+      case "eth_getTransactionReceipt": return { status: "0x1", blockNumber: "0x46efbbe", gasUsed: "0x1cd97" };
+      default: throw new Error(method);
+    }
+  };
+  try {
+    const sender = new Sender({ wallet: new Wallet("0x" + "4c".repeat(32)), rpcs: ["https://a"], chainId: 196, dbPath, rpc, now: () => 1, sleep: async () => {} });
+    const root = "0x" + "51".repeat(32);
+    const p = await sender.prepare(SCORECARD_ADDR, "0x" + "c3cc18b3" + "22".repeat(32), { id: `settle:${root}:1`, kind: "settle", targetMs: 0 });
+    await sender.broadcastAndWait(p);
+    assert.deepEqual(outboxMinedIn(dbPath, `settle:${root}:`), { hash: p.hash, block: 74_382_270 });
+    assert.equal(outboxMinedIn(dbPath, `settle:${"0x" + "52".repeat(32)}:`), null);
+    assert.equal(outboxMinedIn(dbPath, `commit:${root}:`), null);
+    assert.equal(outboxMinedIn(join(dir, "missing.sqlite"), `settle:${root}:`), null, "never throws");
+    // settleRows books an AlreadySettled row as ours when our earlier attempt mined (a crash before its save).
+    const revert = scorecardErrors.encodeErrorResult("AlreadySettled", [ROW151_ID]);
+    const h = chainHarness({ receipt: () => null, revert: () => revert });
+    const state = { lastScannedBlock: 0, lastPrint: {}, open: {}, pending: [{ ...pendingRow151(), settleAttempts: 1 }], recent: [], expired: [] } as never as { pending: unknown[]; recent: Array<{ tx: string; block?: number; by?: string }> };
+    const t = settleDeps(h.sender, ROW151_SETTLE_AFTER + 360, { minedEarlier: (prefix: string) => outboxMinedIn(dbPath, prefix) });
+    try { await settleRows(state as never, t.d); } finally { h.cleanup(); }
+    assert.deepEqual(state.recent.map((r) => [r.tx, r.block, r.by]), [[p.hash, 74_382_270, "keeper"]]);
+    assert.equal(t.health.settledTotal, 1);
+    assert.deepEqual(t.events, ["settled"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// --- review fixes (16 Nov): the measured tick for the cut check (F3); the cut instant into the assembly (F1) -------
+
+import { cutCheckTickMs } from "./main.ts";
+import { cutReadLagOk } from "./swapEvidence.ts";
+import { poolAbi } from "./sources/pools.ts";
+
+test("W7: the cut check allows the tick this keeper actually observed, so one slow tick still re-anchors (F3)", () => {
+  assert.equal(cutCheckTickMs(1_000_000, null, 30_000), 30_000, "first tick after boot: the configured tick");
+  assert.equal(cutCheckTickMs(1_000_000, 1_000_000 - 20_000, 30_000), 30_000, "never less than the configured tick");
+  assert.equal(cutCheckTickMs(1_000_000, 1_000_000 - 65_000, 30_000), 65_000);
+  const tick = fnBody(SRC(), "async function tick(");
+  assert.match(tick, /const cutTickMs = cutCheckTickMs\(nowMs, cutWatch\.lastNowMs, CFG\.tickMs\);\n\s*cutWatch\.lastNowMs = nowMs;/);
+  assert.ok(tick.indexOf("cutWatch.lastNowMs = nowMs;") < tick.indexOf("checkCut(fresh,"), "measured before the per-asset loop");
+  assert.equal(tick.split("venue.limits, sched, nowMs, cutTickMs)").length - 1, 2, "both cut checks use it");
+  assert.doesNotMatch(tick, /checkCut\([^)]*CFG\.tickMs\)/);
+  // The reviewer's case: a blip from 03:52Z merging into the lunch cut; ticks every 30 s to 03:54:30Z, then one 65 s tick.
+  const hk = HK();
+  const blip = () => { const c = opened("wXIAOx", T("2026-11-13T03:52:00Z"), hk); runTicks(c, hk, T("2026-11-13T03:54:30Z")); return c; };
+  const at = T("2026-11-13T03:55:35Z");
+  const fixed = blip(), old = blip();
+  assert.equal(fixed.cutSuspect, true);
+  onCutCheck(fixed, checkCut(fixed, hk.limits, closureVenueSchedule(hk, fixed.holidayLedger), at, cutCheckTickMs(at, T("2026-11-13T03:54:30Z"), TICK)), anchorAt(at, 75_000_215));
+  assert.equal(fixed.cutAtMs, at, "re-anchored at the slow tick");
+  assert.equal(fixed.cutSuspect, false);
+  onCutCheck(old, checkCut(old, hk.limits, closureVenueSchedule(hk, old.holidayLedger), at, TICK), anchorAt(at, 75_000_215));
+  assert.equal(old.cutSuspect, "unanchorable", "with the configured tick alone the row was lost");
+});
+
+test("W7: a recut's cut read is this tick's, so the keeper's own S22 holds on every re-anchored row (F1)", () => {
+  const hk = HK();
+  const c = opened("wXIAOx", T("2026-11-13T03:52:00Z"), hk);
+  runTicks(c, hk, T("2026-11-13T03:54:30Z"));
+  const now = T("2026-11-13T03:55:00.700Z");
+  const pool = "0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417";
+  const slot0 = poolAbi.encodeFunctionResult("slot0", [1n << 96n, 0, 0, 1, 1, 0, true]);
+  const anchor: CutAnchor = {
+    nowMs: now, block: { number: 75_773_080, hash: "0x" + "cc".repeat(32) }, midE18: 1n, pool,
+    poolSnap: { block: { number: 75_773_080, hash: "0x" + "cc".repeat(32), timestamp: Math.floor(now / 1000) - 1, rpc: "" },
+      results: [{ label: `slot0:${pool}`, target: pool, callData: "0x3850c7bd", success: true, returnData: slot0 }] },
+  };
+  onCutCheck(c, checkCut(c, hk.limits, closureVenueSchedule(hk, c.holidayLedger), now, TICK), anchor);
+  assert.ok(c.cutRead, "recut");
+  assert.equal(c.cutRead!.blockNumber, c.cutBlock);
+  assert.ok(cutReadLagOk(c.cutAtMs, c.cutRead!.blockTimestamp));
+});
+
+test("W4b/F1: buildPlan hands the cut instant to the assembly, which drops a cut read that does not fit it", () => {
+  assert.match(fnBody(SRC(), "export async function buildPlan("), /assembleSwapEvidence\(\{\n\s*symbol: c\.symbol, pool: getAddress\(a\.pool\), cutBlock: c\.cutBlock, cutAtMs: c\.cutAtMs,/);
 });

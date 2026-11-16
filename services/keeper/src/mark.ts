@@ -18,16 +18,19 @@
  *
  *     mark = lastPrint x (1 + LAMBDA x drift),  LAMBDA = 0.5
  *
- * When the pool does not trade at all through a closure -- the likely case for a thin Hong Kong
- * book at 3am -- there is no drift, the mark equals the last print, and the row says so. It then
- * ties the baseline rather than beating it. That is the honest outcome, and `skill()` counts strict
- * wins only, so a tie is not a win. A method that pretended to information it did not have is
- * exactly what the Scorecard exists to expose.
+ * When the pool does not trade at all through a closure there is no drift, the mark equals the last
+ * print, and the row says so. It then ties the baseline rather than beating it. That is the honest
+ * outcome, and `skill()` counts strict wins only, so a tie is not a win. A method that pretended to
+ * information it did not have is exactly what the Scorecard exists to expose. (Measured, the pools
+ * trade in most closures: in 215 of the first 233 rows the pool's own price moved between the cut
+ * and the commit, which a V3 pool does only on a swap.)
  *
  * curb.scorecard.mark/2 (D-11: fifteen rows, fifteen ties)
  * --------------------------------------------------------
- * The pools did not trade in a single closure, so mark/1 could only ever tie. mark/2 adds a signal
- * from markets that DO trade while HKEX is shut, and moves the last print by it:
+ * Every mark/1 row tied. The keeper recorded no swaps in any closure (a decoding defect, DECISIONS
+ * D-15: every Swap log failed to decode until deploy 2), so the drift term never ran, although the
+ * pools did trade. mark/2 adds a signal from markets that trade while HKEX is shut, and moves the
+ * last print by it:
  *
  *     mark = lastPrint x (1 + BETA x r),   r = mean of the legs that exist,   BETA = 0.79
  *

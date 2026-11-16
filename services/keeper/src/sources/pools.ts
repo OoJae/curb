@@ -28,6 +28,9 @@ export const poolAbi = new Interface([
   "event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)",
 ]);
 
+/** keccak256("Swap(address,address,int256,int256,uint160,uint128,int24)"): the only topic0 a Swap row may come from. */
+export const SWAP_TOPIC0 = poolAbi.getEvent("Swap")!.topicHash;
+
 export const erc20Abi = new Interface(["function decimals() view returns (uint8)"]);
 
 export interface PoolSpec {
@@ -132,19 +135,69 @@ export interface SwapRow {
   priceE18: bigint;
 }
 
+/** One log as eth_getLogs returns it. `topics` is required: the decoder checks topics[0] against the event. */
+export interface RawSwapLog {
+  address: string;
+  topics: string[];
+  data: string;
+  blockNumber: string;
+  logIndex: string;
+}
+
+/**
+ * What a scan saw. A log that will not decode is counted and named here, never dropped in silence: from
+ * 21 Sep to 14 Nov 2026 every Swap log failed to decode (an empty topics array made ethers refuse the
+ * fragment), a bare `catch {}` hid it, and 233 rows were committed saying the pools had not traded.
+ */
+export interface SwapScanStats {
+  /** Logs the node returned for a registered pool. */
+  logs: number;
+  /** Of those, how many became a SwapRow. */
+  decoded: number;
+  undecodable: Array<{ pool: string; blockNumber: string; logIndex: string; error: string }>;
+  /** Logs returned for an address that is not one of the requested pools: dropped, never a row. */
+  unmatched: number;
+}
+
+export const newSwapScanStats = (): SwapScanStats => ({ logs: 0, decoded: 0, undecodable: [], unmatched: 0 });
+
+/** Decode one Swap log into a row. Null when it will not decode, with the failure recorded in `stats`. */
+export function decodeSwapLog(l: RawSwapLog, spec: PoolSpec, stats?: SwapScanStats): SwapRow | null {
+  if (stats) stats.logs++;
+  try {
+    // The log's OWN topics: ethers checks topics[0] against the Swap topic and refuses anything else.
+    const d = poolAbi.decodeEventLog("Swap", l.data, l.topics);
+    const equity = spec.equityIsToken0 ? BigInt(d[2]) : BigInt(d[3]);
+    const row: SwapRow = {
+      blockNumber: Number(l.blockNumber),
+      logIndex: Number(l.logIndex),
+      equityAbs: equity < 0n ? -equity : equity,
+      priceE18: priceFromSqrt(BigInt(d[4]), spec),
+    };
+    if (stats) stats.decoded++;
+    return row;
+  } catch (e) {
+    stats?.undecodable.push({
+      pool: String(l.address), blockNumber: String(l.blockNumber), logIndex: String(l.logIndex),
+      error: (e instanceof Error ? e.message : String(e)).slice(0, 200),
+    });
+    return null;
+  }
+}
+
 /**
  * Swap events over a block range, decoded into (size, price) pairs for a volume-weighted average.
- * Pages in 100-block windows: the public RPC refuses anything wider, and a node that has not yet
- * indexed a block answers with an empty list rather than an error, so a chunk is only accepted from
- * an endpoint whose head has reached its end.
+ * Pages in 100-block windows: the public RPC refuses anything wider. dRPC answers an empty list for
+ * blocks it has not indexed; rpc.xlayer.tech answers an error. A chunk is only accepted from an
+ * endpoint whose head has reached its end.
  */
-export async function swapsInRange(rpcs: string[], spec: PoolSpec, fromBlock: number, toBlock: number): Promise<SwapRow[]> {
-  const topic = poolAbi.getEvent("Swap")!.topicHash;
+export async function swapsInRange(rpcs: string[], spec: PoolSpec, fromBlock: number, toBlock: number, stats?: SwapScanStats): Promise<SwapRow[]> {
+  const topic = SWAP_TOPIC0;
   const out: SwapRow[] = [];
   const heads = await Promise.all(rpcs.map((u) => rpcAny<string>([u], "eth_blockNumber", []).then((h) => Number(BigInt(h)), () => -1)));
   for (let b = fromBlock; b <= toBlock; b += LOG_RANGE) {
     const end = Math.min(b + LOG_RANGE - 1, toBlock);
-    let logs: { blockNumber: string; logIndex: string; data: string }[] | null = null;
+    let logs: RawSwapLog[] | null = null;
     for (const [i, url] of rpcs.entries()) {
       if (heads[i] < end) continue;
       try {
@@ -154,18 +207,8 @@ export async function swapsInRange(rpcs: string[], spec: PoolSpec, fromBlock: nu
     }
     if (!logs) throw new Error(`no RPC could serve Swap logs for ${b}..${end}`);
     for (const l of logs) {
-      try {
-        const d = poolAbi.decodeEventLog("Swap", l.data, []);
-        const amount0 = BigInt(d[2]);
-        const amount1 = BigInt(d[3]);
-        const equity = spec.equityIsToken0 ? amount0 : amount1;
-        out.push({
-          blockNumber: Number(l.blockNumber),
-          logIndex: Number(l.logIndex),
-          equityAbs: equity < 0n ? -equity : equity,
-          priceE18: priceFromSqrt(BigInt(d[4]), spec),
-        });
-      } catch { /* a malformed log is evidence of nothing; skip it */ }
+      const row = decodeSwapLog(l, spec, stats);
+      if (row) out.push(row);
     }
   }
   return out;
@@ -184,8 +227,8 @@ export function vwap(rows: SwapRow[]): bigint | null {
 }
 
 /** Swap logs for several pools in one pass, keyed by pool address. One query per 100-block chunk. */
-export async function scanSwaps(rpcs: string[], specs: PoolSpec[], fromBlock: number, toBlock: number): Promise<Map<string, SwapRow[]>> {
-  const topic = poolAbi.getEvent("Swap")!.topicHash;
+export async function scanSwaps(rpcs: string[], specs: PoolSpec[], fromBlock: number, toBlock: number, stats?: SwapScanStats): Promise<Map<string, SwapRow[]>> {
+  const topic = SWAP_TOPIC0;
   const byPool = new Map<string, SwapRow[]>();
   const spec = new Map(specs.map((s) => [getAddress(s.pool).toLowerCase(), s]));
   for (const s of specs) byPool.set(getAddress(s.pool), []);
@@ -194,7 +237,7 @@ export async function scanSwaps(rpcs: string[], specs: PoolSpec[], fromBlock: nu
   const heads = await Promise.all(rpcs.map((u) => rpcAny<string>([u], "eth_blockNumber", []).then((h) => Number(BigInt(h)), () => -1)));
   for (let b = fromBlock; b <= toBlock; b += LOG_RANGE) {
     const end = Math.min(b + LOG_RANGE - 1, toBlock);
-    let logs: { address: string; blockNumber: string; logIndex: string; data: string }[] | null = null;
+    let logs: RawSwapLog[] | null = null;
     for (const [i, url] of rpcs.entries()) {
       if (heads[i] < end) continue;
       try {
@@ -210,17 +253,9 @@ export async function scanSwaps(rpcs: string[], specs: PoolSpec[], fromBlock: nu
     if (!logs) throw new Error(`no RPC could serve Swap logs for ${b}..${end}`);
     for (const l of logs) {
       const s = spec.get(String(l.address).toLowerCase());
-      if (!s) continue;
-      try {
-        const d = poolAbi.decodeEventLog("Swap", l.data, []);
-        const equity = s.equityIsToken0 ? BigInt(d[2]) : BigInt(d[3]);
-        byPool.get(getAddress(s.pool))!.push({
-          blockNumber: Number(l.blockNumber),
-          logIndex: Number(l.logIndex),
-          equityAbs: equity < 0n ? -equity : equity,
-          priceE18: priceFromSqrt(BigInt(d[4]), s),
-        });
-      } catch { /* skip a malformed log */ }
+      if (!s) { if (stats) stats.unmatched++; continue; }
+      const row = decodeSwapLog(l, s, stats);
+      if (row) byPool.get(getAddress(s.pool))!.push(row);
     }
   }
   return byPool;

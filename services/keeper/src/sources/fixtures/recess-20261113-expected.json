@@ -1,0 +1,89 @@
+{
+ "wXIAOx": {
+  "root": "0x06a92e8238992e4d2ed25fac5b4a6ac243e6bbadc8dd99cced80fbe16ca71b75",
+  "cutBlock": 75773120,
+  "pinnedBlock": 75776392,
+  "closingCount": 9,
+  "closureCount": 14,
+  "closingLast": [
+   75773077,
+   68
+  ],
+  "closureLast": [
+   75776054,
+   74
+  ],
+  "lastPrintE18": "3705883235022724078",
+  "closingVwapE18": "3708098822676793257",
+  "midAtCutE18": "3705883235022724078",
+  "midNowE18": "3696914780433983591",
+  "driftBps": -24,
+  "markE18": "3701436175140696810",
+  "bandBps": 37,
+  "committed": {
+   "markE18": "3705883235022724078",
+   "bandBps": 25,
+   "lastPrintE18": "3705883235022724078",
+   "flags": [
+    "no-drift",
+    "recess-no-edge",
+    "no-closing-vwap"
+   ]
+  }
+ },
+ "wTCENTx": {
+  "root": "0x63d4a265a784b0a76f922bb1632fbd7f5b5334ba7003fd97653848e9a05adc61",
+  "cutBlock": 75773120,
+  "pinnedBlock": 75776392,
+  "closingCount": 2,
+  "closureCount": 0,
+  "closingLast": [
+   75773120,
+   35
+  ],
+  "closureLast": null,
+  "lastPrintE18": "49931913585409677182",
+  "closingVwapE18": "49931922021995547562",
+  "midAtCutE18": "49931913585409677182",
+  "midNowE18": "49931913585409677182",
+  "driftBps": 0,
+  "markE18": "49931913585409677182",
+  "bandBps": 25,
+  "committed": {
+   "markE18": "49931913576968873057",
+   "bandBps": 25,
+   "lastPrintE18": "49931913576968873057",
+   "flags": [
+    "no-drift",
+    "recess-no-edge",
+    "no-closing-vwap"
+   ]
+  }
+ },
+ "wMEITx": {
+  "root": "0xf48e2f2681fef245a8e42ef1e587931001c161bf77bff2507c8706a924b563cb",
+  "cutBlock": 75773120,
+  "pinnedBlock": 75776392,
+  "closingCount": 0,
+  "closureCount": 0,
+  "closingLast": null,
+  "closureLast": null,
+  "lastPrintE18": "9101334608495175937",
+  "closingVwapE18": null,
+  "midAtCutE18": "9101334608495175937",
+  "midNowE18": "9101334608495175937",
+  "driftBps": 0,
+  "markE18": "9101334608495175937",
+  "bandBps": 25,
+  "committed": {
+   "markE18": "9101334608495175937",
+   "bandBps": 25,
+   "lastPrintE18": "9101334608495175937",
+   "flags": [
+    "no-drift",
+    "recess-no-edge",
+    "no-closing-vwap"
+   ]
+  }
+ }
+}

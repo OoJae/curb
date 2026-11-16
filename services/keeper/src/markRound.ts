@@ -20,6 +20,10 @@ import type { PoolSpec, SwapRow } from "./sources/pools.ts";
 import { nextCapReturnMs } from "./reopen.ts";
 import type { PeriodLimits } from "./reopen.ts";
 import type { ExchangeSchedule } from "./regime.ts";
+import {
+  PRE_FIX_READ_RANGES, SWAP_EVIDENCE_FROM_BLOCK, checkSwapEvidence, eraOf, holidayFallbackNote, preFixNotes,
+} from "./swapEvidence.ts";
+import type { EvidenceEra, SwapEvidenceFields } from "./swapEvidence.ts";
 
 export const MARK_BUNDLE_SCHEMA = "curb.scorecard.markbundle/1";
 
@@ -42,6 +46,16 @@ export interface VenueEvidence {
   limitsPerPeriod: PeriodLimits;
   schedule: ExchangeSchedule["schedule"];
   predictedReopenMs: number;
+  /**
+   * Deploy 2 (venueTime.ts): holiday entries this closure's ledger kept although the issuer's latest list no
+   * longer has them. They are inside `schedule.holidays`; this says which ones did not come from the latest
+   * body, so `exchangeBodyHash` (which names that body) stays honest. Absent on older rows.
+   */
+  holidaysKept?: Array<{ startsAt: string; endsAt: string; kind: string; firstSeenMs: number; lastSeenMs: number }>;
+  /** When the latest venue body was read. */
+  latestReadAtMs?: number;
+  /** When this closure's holiday ledger started (later than the cut for a closure open at a keeper start). */
+  holidayLedgerSinceMs?: number;
 }
 
 export interface MarkInputs {
@@ -68,6 +82,11 @@ export interface MarkInputs {
     closureSwaps: SwapRow[];
     /** The schedule evidence behind `settleAfterS`. Omitted only in tests. */
     venue?: VenueEvidence;
+    /**
+     * Deploy 2: the scan ranges, gaps, counts, digest and cut read behind the two swap lists (swapEvidence.ts,
+     * built by evidence.ts). Absent, the swaps leaf is exactly the pre-fix shape.
+     */
+    swapEvidence?: SwapEvidenceFields;
     /**
      * mark/2: the cross-market responses, exact bytes, and every fetch attempt including failures. The
      * signal in `input` is ignored and re-derived from these, so a round can never commit a signal that
@@ -245,6 +264,7 @@ export function buildMarkRound(r: MarkInputs): BuiltMarkRound {
       cutAtMs: c.cutAtMs,
       cutBlock: c.cutBlock,
       settleAfterS: c.settleAfterS,
+      ...(c.swapEvidence ?? {}),
       closingSwaps: swapJson(c.closingSwaps),
       closureSwaps: swapJson(c.closureSwaps),
     });
@@ -300,10 +320,6 @@ export interface VerifyResult {
 }
 
 /**
- * Offline check of a published mark bundle: rebuild the root from the leaves, check every preimage,
- * and re-run the committed method on the committed inputs. No network, no trust in the keeper.
- */
-/**
  * A bundle fetched over HTTP is untrusted input: check its shape before anything reads it.
  *
  * Deliberately NOT `isBundleShaped` from the attestor -- that one requires `blobs`, which a mark
@@ -320,8 +336,70 @@ export function isMarkBundleShaped(b: unknown): b is MarkBundle {
     && Array.isArray(x.marks);
 }
 
-export function verifyMarkBundleOffline(bundle: MarkBundle): VerifyResult {
-  if (!isMarkBundleShaped(bundle)) return { ok: false, root: "", failures: ["bundle is malformed"] };
+export interface VerifyOptions {
+  /**
+   * The era to check under. Omitted: decided from the bundle's own pinned chain read, failing closed (no single
+   * CHAIN_CALL leaf with a safe-integer block -> strict, with the note `era unknown`). The keeper's self-check
+   * passes "swap-evidence"; `checkMarkRound` passes the era it binds to the commit block.
+   */
+  era?: EvidenceEra;
+  /** Replaces SWAP_EVIDENCE_FROM_BLOCK when the era is decided here, and in note texts (tests, curb-verify). */
+  swapEvidenceFromBlock?: number;
+}
+
+export interface OfflineVerifyResult extends VerifyResult {
+  /** EVIDENCE notes: what the row's evidence does and does not record. Never a failure. */
+  notes: string[];
+  era: EvidenceEra;
+  /** Strict rows: true iff every checked claim's swaps leaf is complete and closingComplete. Pre-fix rows: null. */
+  evidenceComplete: boolean | null;
+}
+
+/**
+ * The bundle's pinned chain read: how many CHAIN_CALL leaves it has, and, when there is exactly one whose preimage
+ * hashes to its leaf, that leaf and its block number (null unless a safe integer). Total.
+ */
+export function pinnedReadOf(bundle: unknown): { count: number; block: number | null; leaf: Record<string, unknown> | null } {
+  try {
+    if (!isMarkBundleShaped(bundle)) return { count: 0, block: null, leaf: null };
+    const leaves = [...loadTree(bundle.tree as never).entries()].map(([, v]: [number, Leaf]) => v);
+    const calls = leaves.filter(([k]) => Number(k) === LeafKind.CHAIN_CALL);
+    if (calls.length !== 1) return { count: calls.length, block: null, leaf: null };
+    const s = bundle.json[calls[0][2]];
+    if (typeof s !== "string") return { count: 1, block: null, leaf: null };
+    const v = JSON.parse(s);
+    if (hashJson(v) !== calls[0][2] || !v || typeof v !== "object") return { count: 1, block: null, leaf: null };
+    const n = (v as { block?: { number?: unknown } }).block?.number;
+    return { count: 1, block: typeof n === "number" && Number.isSafeInteger(n) ? n : null, leaf: v };
+  } catch {
+    return { count: 0, block: null, leaf: null };
+  }
+}
+
+/**
+ * Offline check of a published mark bundle: rebuild the root from the leaves, check every preimage,
+ * and re-run the committed method on the committed inputs. No network, no trust in the keeper.
+ *
+ * Deploy 2 adds the swap evidence, by era (swapEvidence.ts). A row read in the swap-evidence era must commit
+ * scan ranges, and its mark input must be exactly what its committed swap lists, cut read and pinned pool read
+ * imply (S1-S21; a failure is a failure). A pre-fix row is described, never failed (E0-E5), and only there may
+ * the reopen be re-derived from the commit instant when the cut-walk misses (E6). `ok` is still
+ * `failures.length === 0`: notes never change it.
+ */
+export function verifyMarkBundleOffline(bundle: MarkBundle, opts: VerifyOptions = {}): OfflineVerifyResult {
+  const from = opts.swapEvidenceFromBlock ?? SWAP_EVIDENCE_FROM_BLOCK;
+  const notes: string[] = [];
+  const read = pinnedReadOf(bundle);
+  let era: EvidenceEra;
+  if (opts.era) era = opts.era;
+  else if (read.block !== null) era = eraOf(read.block, from, PRE_FIX_READ_RANGES);
+  else {
+    era = "swap-evidence";
+    if (isMarkBundleShaped(bundle)) notes.push("era unknown: checked as swap-evidence");
+  }
+  const done = (r: VerifyResult, evidenceComplete: boolean | null = null): OfflineVerifyResult => ({ ...r, notes, era, evidenceComplete });
+
+  if (!isMarkBundleShaped(bundle)) return done({ ok: false, root: "", failures: ["bundle is malformed"] });
 
   const failures: string[] = [];
   let root = "";
@@ -331,7 +409,7 @@ export function verifyMarkBundleOffline(bundle: MarkBundle): VerifyResult {
     root = tree.root;
     leaves = [...tree.entries()].map(([, v]: [number, Leaf]) => v);
   } catch (e) {
-    return { ok: false, root, failures: [`tree dump does not load: ${String(e)}`] };
+    return done({ ok: false, root, failures: [`tree dump does not load: ${String(e)}`] });
   }
   if (root.toLowerCase() !== String(bundle.inputRoot).toLowerCase()) {
     failures.push(`tree root ${root} != committed inputRoot ${bundle.inputRoot}`);
@@ -343,11 +421,20 @@ export function verifyMarkBundleOffline(bundle: MarkBundle): VerifyResult {
     if (hashJson(JSON.parse(s)) !== h) { failures.push(`preimage hash mismatch for ${h}`); return null; }
     return JSON.parse(s);
   };
+  /** A preimage that hashes to its leaf, or null; records nothing (the pass over every leaf below does). */
+  const peek = (h: string): unknown => {
+    try {
+      const s = bundle.json[h];
+      if (typeof s !== "string") return null;
+      const v = JSON.parse(s);
+      return hashJson(v) === h ? v : null;
+    } catch { return null; }
+  };
 
   const params = leaves.find(([k, s]) => Number(k) === LeafKind.PARAMS && s === subjectOf("params"));
   const p = params ? byHash(params[2]) : null;
-  if (!p) return { ok: false, root, failures: [...failures, "bundle has no PARAMS leaf"] };
-  if (!MARK_METHODS[p.method]) return { ok: false, root, failures: [...failures, `unknown mark method ${p.method}`] };
+  if (!p) return done({ ok: false, root, failures: [...failures, "bundle has no PARAMS leaf"] });
+  if (!MARK_METHODS[p.method]) return done({ ok: false, root, failures: [...failures, `unknown mark method ${p.method}`] });
   // The weights, windows and proxies are part of the method id: a bundle naming a method must commit them.
   for (const [k, v] of Object.entries(methodParams(p.method))) {
     if (jcs(p[k] ?? null) !== jcs(v)) failures.push(`committed PARAMS.${k}=${jcs(p[k] ?? null)} is not what ${p.method} specifies (${jcs(v)})`);
@@ -369,6 +456,13 @@ export function verifyMarkBundleOffline(bundle: MarkBundle): VerifyResult {
   }
 
   for (const [kind, , h] of leaves) if (Number(kind) !== LeafKind.PARAMS) byHash(h);
+
+  // What the swap-evidence checks read besides each claim's own leaves.
+  const registryLeaf = leaves.find(([k, s]) => Number(k) === LeafKind.REGISTRY && s === subjectOf("registry"));
+  const registry = registryLeaf ? peek(registryLeaf[2]) : null;
+  const chainCalls = leaves.filter(([k]) => Number(k) === LeafKind.CHAIN_CALL).map(([, , h]) => peek(h));
+  const claimCount = leaves.filter(([k]) => Number(k) === LeafKind.CLAIM).length;
+  const evidenceComplete: boolean[] = [];
 
   // Re-derive every claim from its committed input.
   const committedRows: MarkRow[] = [];
@@ -399,18 +493,39 @@ export function verifyMarkBundleOffline(bundle: MarkBundle): VerifyResult {
     const mine = jcs(toRow(row.wrapper, row.symbol, row.settleAfterS, again));
     if (mine !== jcs(row)) failures.push(`mark mismatch for ${row.symbol}: re-derived ${mine} vs committed ${jcs(row)}`);
 
+    const w = row.wrapper.toLowerCase();
+    const claimNotes: string[] = [];
     // The graded instant, re-derived rather than trusted.
-    const venueLeaf = leaves.find(([k, s2]) => Number(k) === LeafKind.HTTP_EXCHANGE && s2 === subjectOf(`venue:${row.wrapper.toLowerCase()}`));
-    if (venueLeaf) {
-      const v = byHash(venueLeaf[2]) as VenueEvidence | null;
-      if (v) {
-        const predicted = nextCapReturnMs(v.limitsPerPeriod, { mic: v.mic, schedule: v.schedule } as ExchangeSchedule, v.cutAtMs);
-        if (predicted === null) failures.push(`reopen for ${row.symbol} does not re-derive: the committed schedule never restores capacity`);
-        else if (Math.floor(predicted / 1000) !== row.settleAfterS) {
-          failures.push(`reopen mismatch for ${row.symbol}: schedule gives ${Math.floor(predicted / 1000)}, row settles after ${row.settleAfterS}`);
-        }
+    const venueLeaf = leaves.find(([k, s2]) => Number(k) === LeafKind.HTTP_EXCHANGE && s2 === subjectOf(`venue:${w}`));
+    const v = venueLeaf ? byHash(venueLeaf[2]) as VenueEvidence | null : null;
+    if (v) {
+      const predicted = nextCapReturnMs(v.limitsPerPeriod, { mic: v.mic, schedule: v.schedule } as ExchangeSchedule, v.cutAtMs);
+      if (predicted === null) failures.push(`reopen for ${row.symbol} does not re-derive: the committed schedule never restores capacity`);
+      else if (Math.floor(predicted / 1000) !== row.settleAfterS) {
+        // Pre-fix rows only: how the old keeper computed it, from the commit instant (E6). Never in strict mode.
+        const fallback = era === "pre-swap-fix" ? holidayFallbackNote(v, predicted, Number(p.evaluatedAtMs), row.settleAfterS) : null;
+        if (fallback) claimNotes.push(fallback);
+        else failures.push(`reopen mismatch for ${row.symbol}: schedule gives ${Math.floor(predicted / 1000)}, row settles after ${row.settleAfterS}`);
       }
     }
+
+    // The swap evidence, by era.
+    const swapsLeaf = leaves.find(([k, s2]) => Number(k) === LeafKind.FETCH_LOG && s2 === subjectOf(`swaps:${w}`));
+    const swaps = swapsLeaf ? peek(swapsLeaf[2]) : null;
+    if (era === "swap-evidence") {
+      const r = checkSwapEvidence({
+        symbol: row.symbol, wrapper: row.wrapper, settleAfterS: row.settleAfterS, swaps, markinput: raw, venue: v,
+        registry, chainCalls, params: p, swapEvidenceFromBlock: from,
+      });
+      failures.push(...r.failures);
+      claimNotes.unshift(...r.notes);
+      evidenceComplete.push(r.complete === true && r.closingComplete === true);
+    } else {
+      claimNotes.unshift(...preFixNotes({ swaps, markinput: raw, readBlock: read.block, swapEvidenceFromBlock: from }));
+    }
+    // One claim per bundle is the norm; with several, each note says whose it is.
+    for (const n of claimNotes) notes.push(claimCount > 1 ? `${row.symbol}: ${n}` : n);
+
     void subject;
     committedRows.push(row);
   }
@@ -423,7 +538,10 @@ export function verifyMarkBundleOffline(bundle: MarkBundle): VerifyResult {
     failures.push("top-level marks do not match the committed CLAIM leaves");
   }
 
-  return { ok: failures.length === 0, root, failures };
+  return done(
+    { ok: failures.length === 0, root, failures },
+    era === "swap-evidence" && evidenceComplete.length > 0 ? evidenceComplete.every(Boolean) : null,
+  );
 }
 
 /**

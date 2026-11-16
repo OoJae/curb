@@ -10,8 +10,10 @@
  */
 import { LeafKind, loadTree, subjectOf } from "./tree.ts";
 import type { Leaf } from "./tree.ts";
-import { MARK_BUNDLE_SCHEMA, isMarkBundleShaped, verifyMarkBundleOffline } from "./markRound.ts";
+import { MARK_BUNDLE_SCHEMA, isMarkBundleShaped, pinnedReadOf, verifyMarkBundleOffline } from "./markRound.ts";
 import type { MarkBundle, MarkRow } from "./markRound.ts";
+import { PRE_FIX_READ_RANGES, SWAP_EVIDENCE_FROM_BLOCK, eraOf } from "./swapEvidence.ts";
+import type { EvidenceEra } from "./swapEvidence.ts";
 import { MARK_METHODS } from "./mark.ts";
 import { closureId, decodeCommitCalldata, methodDigestOf } from "./sources/scorecard.ts";
 import type { CommittedRow } from "./sources/scorecard.ts";
@@ -60,6 +62,16 @@ export interface MarkCheck {
   labelFailures: string[];
   warnings: string[];
   rows: MarkRow[];
+  /**
+   * What the row's swap evidence records (swapEvidence.ts). The era is that of the pinned chain read, bound to the
+   * commit block; `complete` is null for pre-fix rows; notes never change `reproduced`.
+   */
+  evidence: { era: EvidenceEra; complete: boolean | null; notes: string[] };
+}
+
+export interface CheckOptions {
+  /** Replaces SWAP_EVIDENCE_FROM_BLOCK (tests, and curb-verify's own tests). */
+  swapEvidenceFromBlock?: number;
 }
 
 export function checkMarkRound(
@@ -70,13 +82,15 @@ export function checkMarkRound(
   scorecard: string,
   committedAtS: number,
   settlement?: SettlementInfo,
+  opts?: CheckOptions,
 ): MarkCheck {
   const c: MarkCheck = {
     reproduced: false, labelsConsistent: false, baselinesChecked: false,
     method: "", evaluatedAtMs: null, closureId: "",
     failures: [], labelFailures: [], warnings: [], rows: [],
+    evidence: { era: "swap-evidence", complete: null, notes: [] },
   };
-  try { return checkMarkRoundUnsafe(c, bundle, onchain, tx, chainId, scorecard, committedAtS, settlement); }
+  try { return checkMarkRoundUnsafe(c, bundle, onchain, tx, chainId, scorecard, committedAtS, settlement, opts); }
   catch (e) {
     c.failures.push(`check threw: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
     c.reproduced = false;
@@ -86,7 +100,7 @@ export function checkMarkRound(
 
 function checkMarkRoundUnsafe(
   c: MarkCheck, raw: unknown, onchain: CommittedRow, tx: TxInfo | null,
-  chainId: number, scorecard: string, committedAtS: number, settlement?: SettlementInfo,
+  chainId: number, scorecard: string, committedAtS: number, settlement?: SettlementInfo, opts?: CheckOptions,
 ): MarkCheck {
   if (!isMarkBundleShaped(raw)) { c.failures.push("bundle is malformed"); return c; }
   const bundle = raw as MarkBundle;
@@ -128,8 +142,20 @@ function checkMarkRoundUnsafe(
     c.failures.push(`closure id ${onchain.id} does not equal keccak256(wrapper, settleAfter, inputRoot) = ${c.closureId}`);
   }
 
-  const offline = verifyMarkBundleOffline(bundle);
+  // The era of the row's evidence, decided here and bound to the commit block (below), never left to the bundle:
+  // the pinned chain read's block when there is exactly one usable read, else the commit block, which fails.
+  const fromBlock = opts?.swapEvidenceFromBlock ?? SWAP_EVIDENCE_FROM_BLOCK;
+  const read = pinnedReadOf(bundle);
+  let era: EvidenceEra;
+  if (read.block !== null) era = eraOf(read.block, fromBlock, PRE_FIX_READ_RANGES);
+  else {
+    era = eraOf(onchain.committedBlock, fromBlock, PRE_FIX_READ_RANGES);
+    c.failures.push(`the bundle has no single usable pinned chain read (${read.count} CHAIN_CALL leaves${read.count === 1 ? ", without a safe-integer block number" : ""})`);
+  }
+
+  const offline = verifyMarkBundleOffline(bundle, { era, swapEvidenceFromBlock: fromBlock });
   for (const f of offline.failures) (f.startsWith("top-level ") ? c.labelFailures : c.failures).push(f);
+  c.evidence = { era, complete: offline.evidenceComplete, notes: offline.notes };
 
   const leaves = leavesOf(bundle);
   const params = leafJson(bundle, leaves, LeafKind.PARAMS, subjectOf("params"));
@@ -186,17 +212,14 @@ function checkMarkRoundUnsafe(
     else if (-lag > LATE_EVAL_AFTER_COMMIT_MS) c.warnings.push(`evidence timestamped ${Math.round(-lag / 1000)}s after the commit`);
   }
 
-  // The chain read must precede the write. verifyMarkBundleOffline never looks at CHAIN_CALL.
-  const chainLeaf = leaves.find(([k]) => Number(k) === LeafKind.CHAIN_CALL);
-  if (chainLeaf) {
-    const snap = JSON.parse(bundle.json[chainLeaf[2]]) as { block?: { number?: number } };
-    const readBlock = Number(snap.block?.number);
-    if (Number.isFinite(readBlock)) {
-      const gap = onchain.committedBlock - readBlock;
-      if (gap < 0) c.failures.push(`the pinned chain read is at block ${readBlock}, AFTER the commit at ${onchain.committedBlock}`);
-      else if (gap > REPLAY_READ_TO_COMMIT_BLOCKS) c.failures.push(`the pinned chain read is ${gap} blocks before the commit`);
-      else if (gap > LATE_READ_TO_COMMIT_BLOCKS) c.warnings.push(`the pinned chain read is ${gap} blocks before the commit`);
-    }
+  // The chain read must precede the write, by at most 1,800 blocks. This is also what binds the era to the
+  // commit: a row is pre-fix only if its read block is below the cutover AND it was committed soon after it.
+  if (read.block !== null) {
+    const readBlock = read.block;
+    const gap = onchain.committedBlock - readBlock;
+    if (gap < 0) c.failures.push(`the pinned chain read is at block ${readBlock}, AFTER the commit at ${onchain.committedBlock}`);
+    else if (gap > REPLAY_READ_TO_COMMIT_BLOCKS) c.failures.push(`the pinned chain read is ${gap} blocks before the commit`);
+    else if (gap > LATE_READ_TO_COMMIT_BLOCKS) c.warnings.push(`the pinned chain read is ${gap} blocks before the commit`);
   }
 
   // The anti-backfill invariant. `Scorecard.commit` does NOT enforce it -- it only requires that

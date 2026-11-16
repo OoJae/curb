@@ -18,6 +18,8 @@
 #                                        never copied off, never overwritten (overwriting orphans the key)
 #   containers curb-attestor-b, curb-w0-observer, curb-keeper: restart=always, hard memory caps,
 #   no inbound ports except /healthz (and /witness) bound to 127.0.0.1.
+#   /var/lib/curb/logs/curb-keeper-<ts>.log.gz   the replaced keeper's log, saved before `docker rm -f` (newest 10)
+#   /var/lib/curb/keeper/keeper-state.predeploy-<ts>.json   its state, copied after it stopped (newest 5)
 #
 # It does not touch nginx, the firewall, or any other service on the box.
 set -euo pipefail
@@ -150,6 +152,9 @@ COMMIT_FLOOR_S=120
 SETTLE_DELAY_S=300
 TZ=UTC
 DATA_SUFFIX=${DATA_SUFFIX}
+# Swap-coverage backfill: eth_getLogs chunks per quiet tick, [0,60], 0 disables. 10 if the pre-deploy probe
+# shows any refusal at 1 req/s. Builds before deploy 2 ignore it.
+BACKFILL_CHUNKS_PER_TICK=20
 # mark/2's cross-market signal. This box is in the US, where Binance answers 451, so the perp leg goes
 # through curb-asp's byte-exact relay in Singapore (the upstream bytes are committed and re-fetchable).
 SIGNAL=on
@@ -191,8 +196,24 @@ docker run -d --name curb-attestor-b "${HARDEN[@]}" \
   curb-attestor:latest >/dev/null
 fi
 
+# The keeper's history lives only in its container log, which `docker rm -f` destroys. Save it on the box right
+# before the old container dies (after the build, so the saved log runs up to that moment), then copy the state
+# while no keeper writes it. Newest 10 logs and 5 state copies are kept. Neither save may stop the deploy once
+# the old container is gone: the keeper is the only settler, so a failed copy warns and the new one starts.
+# A state copy is for the restore rule of the deploy-2 runbook only (never restore one older than the last
+# commit or settle in the saved logs).
 if want keeper; then
+install -d -m 700 /var/lib/curb/logs
+if docker inspect curb-keeper >/dev/null 2>&1; then
+  docker logs curb-keeper 2>&1 | gzip -c > "/var/lib/curb/logs/curb-keeper-$(date -u +%Y%m%dT%H%M%SZ).log.gz" || echo "WARNING: could not save the keeper's log" >&2
+fi
 docker rm -f curb-keeper >/dev/null 2>&1 || true
+if [ -f /var/lib/curb/keeper/keeper-state.json ]; then
+  cp -p /var/lib/curb/keeper/keeper-state.json "/var/lib/curb/keeper/keeper-state.predeploy-$(date -u +%Y%m%dT%H%M%SZ).json" \
+    || echo "WARNING: could not back up keeper-state.json; starting the new keeper without a predeploy copy" >&2
+fi
+{ ls -1t /var/lib/curb/logs/curb-keeper-*.log.gz 2>/dev/null | tail -n +11 | xargs -r rm -f; } || true
+{ ls -1t /var/lib/curb/keeper/keeper-state.predeploy-*.json 2>/dev/null | tail -n +6 | xargs -r rm -f; } || true
 docker run -d --name curb-keeper "${HARDEN[@]}" \
   --memory 384m --memory-swap 384m --cpus 1 \
   --env-file /etc/curb/keeper.env --env-file /etc/curb/keeper.alerts.env --env-file /etc/curb/keeper.secret.env \
