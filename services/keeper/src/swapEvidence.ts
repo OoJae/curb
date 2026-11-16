@@ -24,12 +24,12 @@ export const SWAP_EVIDENCE_VERSION = "curb.scorecard.swaps/2";
 /**
  * The first block whose pinned chain read is held to the swap-evidence rules.
  *
- * PLACEHOLDER in the keeper release commit; set once by the verifier commit that follows deploy 2 (spec
- * 12.4b), to the chain head at the moment the new keeper was started with the old one gone. The keeper
- * never reads it: its own self-check passes the era explicitly. While it is the placeholder every row is
- * pre-fix to a verifier, and nothing is pushed or published in that state.
+ * A placeholder in the keeper release commit (f65ff53); set once, by the verifier commit that followed
+ * deploy 2, to the chain head read at 16 Nov 2026 05:40Z, after the new keeper had started (05:37:45Z) and
+ * the old one was gone. Every pre-fix read is below it and every read by the fixed keeper is above it. The
+ * keeper never reads it: its own self-check passes the era explicitly.
  */
-export const SWAP_EVIDENCE_FROM_BLOCK: number = Number.MAX_SAFE_INTEGER;
+export const SWAP_EVIDENCE_FROM_BLOCK: number = 76_038_603;
 
 /**
  * Read-block intervals at or after SWAP_EVIDENCE_FROM_BLOCK that were nonetheless written by a pre-fix
