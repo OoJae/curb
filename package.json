@@ -1,6 +1,6 @@
 {
   "name": "curb-verify",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Re-derive a Curb number instead of trusting it: check any MarketClock round or Scorecard mark on X Layer against the evidence it was published with.",
   "//": "This is also the repository root. Infrastructure config lives in .railway/railway.ts (devDependency railway). The published package is the verifier alone: see files.",
   "keywords": ["curb", "x-layer", "verifier", "attestation", "merkle", "tokenized-equities"],

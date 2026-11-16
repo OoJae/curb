@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXIT } from "./render.ts";
 import {
-  CLOCK, FIRST_ROUND_BLOCK, SCORECARD, SCORECARD_FROM_BLOCK, checkUrl, mapLimit, parseRange, verifyTx, worstExit, writesInRange,
+  CLOCK, FIRST_ROUND_BLOCK, SCORECARD, SCORECARD_FROM_BLOCK, checkUrl, mapLimit, parseRange, priceSourcesAbi, verifyTx, worstExit, writesInRange,
 } from "./tx.ts";
 import type { Deps, Evidence } from "./tx.ts";
 import { buildMarkRound } from "../../../services/keeper/src/markRound.ts";
@@ -31,7 +31,13 @@ interface Chain {
   logs?: Array<{ address: string; topics: string[]; data: string }>;
   timestamp: number;
   settlements?: string;
+  /** What `eth_getBlockByNumber("latest")` answers; defaults to `timestamp`. A string makes the read fail. */
+  latestTimestamp?: number | "fail";
+  /** The answer to Scorecard.priceSources(wrapper); a string is returned as raw data, "fail" throws. */
+  priceSource?: [string, boolean, number, number, number] | string;
 }
+
+const PRICE_SOURCES = priceSourcesAbi.getFunction("priceSources")!.selector;
 
 function deps(chain: Chain | null, served: Record<string, string>, calls: string[] = []): Deps {
   return {
@@ -49,8 +55,21 @@ function deps(chain: Chain | null, served: Record<string, string>, calls: string
           logs: (chain.logs ?? []).map((l) => ({ ...l, blockNumber: hex(chain.tx.blockNumber), transactionHash: chain.tx.hash })),
         } as T;
       }
-      if (method === "eth_getBlockByNumber") return { timestamp: hex(chain!.timestamp) } as T;
-      if (method === "eth_call") return chain!.settlements as T;
+      if (method === "eth_getBlockByNumber") {
+        if (params[0] !== "latest") return { timestamp: hex(chain!.timestamp) } as T;
+        if (chain!.latestTimestamp === "fail") throw new Error("latest block unavailable");
+        return { timestamp: hex(chain!.latestTimestamp ?? chain!.timestamp) } as T;
+      }
+      if (method === "eth_call") {
+        const data = String((params[0] as { data: string }).data);
+        if (data.startsWith(PRICE_SOURCES)) {
+          const p = chain!.priceSource;
+          if (p === "fail") throw new Error("eth_call failed");
+          if (typeof p === "string") return p as T;
+          return priceSourcesAbi.encodeFunctionResult("priceSources", p ?? [POOL, true, 120, 18, 6]) as T;
+        }
+        return chain!.settlements as T;
+      }
       throw new Error(`unexpected ${method}`);
     },
     async evidence(key: string): Promise<Evidence> {
@@ -222,7 +241,12 @@ test("tx: a Scorecard commit is checked against its mark bundle with checkMarkRo
   assert.equal(v.kind, "mark");
   assert.equal(v.inputRoot, round.root.toLowerCase());
   assert.ok(v.fields.some(([k, x]) => k === "row" && x.startsWith("wTCENTx  mark 54.5400  band 125 bps")), JSON.stringify(v.fields));
-  assert.ok(v.fields.some(([k, x]) => k === "settled" && x === "not yet"));
+  assert.ok(v.fields.some(([k, x]) => k === "settled" && x.startsWith("not yet")), JSON.stringify(v.fields));
+  // A row read at block 71,299,970 is pre-fix: its swap lists are not checked, and the output says so.
+  assert.ok(v.fields.some(([k, x]) => k === "swaps" && x === "not recorded (pre-fix keeper)"), JSON.stringify(v.fields));
+  assert.equal(v.check!.evidence!.era, "pre-swap-fix");
+  assert.ok(v.check!.evidence!.notes[0].startsWith("pre-fix row"));
+  assert.deepEqual(v.check!.warnings, []);
 });
 
 test("tx: a commit that writes a different mark than its bundle derives is NOT reproduced", async () => {
@@ -349,4 +373,122 @@ test("published layout: installed under node_modules/, the bin launcher runs whe
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// deploy 2: the settle window, the price source, and strict swap evidence
+// ---------------------------------------------------------------------------------------------
+
+const field = (v: { fields: Array<[string, string]> }, k: string) => v.fields.find(([x]) => x === k)?.[1];
+const DEADLINE = "2026-09-22T11:05:00Z";   // settleAfter 05:00:00Z + SETTLE_DELAY 300 s + SETTLE_WINDOW 6 h
+
+test("tx: an open unsettled row says until when", async () => {
+  const { round, chain, hash, key } = markRow();
+  const v = await verifyTx(hash, deps(chain, { [key]: JSON.stringify(round.bundle) }));
+  assert.equal(field(v, "settled"), `not yet (window open until ${DEADLINE})`);
+  assert.equal(v.exit, EXIT.VERIFIED);
+});
+
+test("tx: an expired unsettled row says so (row 151: TooLate, never graded)", async () => {
+  const { round, chain, hash, key } = markRow();
+  chain.latestTimestamp = REOPEN_S + 300 + 21_600 + 1;
+  const v = await verifyTx(hash, deps(chain, { [key]: JSON.stringify(round.bundle) }));
+  assert.equal(field(v, "settled"), `not settled; settle window closed ${DEADLINE} (TooLate: this row can no longer be graded)`);
+  assert.equal(v.exit, EXIT.VERIFIED, "the row still reproduces; it was never graded");
+  // At the deadline second itself the contract still accepts a settle.
+  chain.latestTimestamp = REOPEN_S + 300 + 21_600;
+  assert.match(field(await verifyTx(hash, deps(chain, { [key]: JSON.stringify(round.bundle) })), "settled")!, /^not yet/);
+});
+
+test("tx: a failed latest-block read keeps the cautious 'not yet'", async () => {
+  const { round, chain, hash, key } = markRow();
+  chain.latestTimestamp = "fail";
+  const v = await verifyTx(hash, deps(chain, { [key]: JSON.stringify(round.bundle) }));
+  assert.equal(field(v, "settled"), "not yet");
+  assert.equal(v.exit, EXIT.VERIFIED);
+});
+
+test("tx: a REGISTRY that disagrees with priceSources fails", async () => {
+  const { round, chain, hash, key } = markRow();
+  chain.priceSource = ["0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417", true, 120, 18, 6];
+  const v = await verifyTx(hash, deps(chain, { [key]: JSON.stringify(round.bundle) }));
+  assert.equal(v.exit, EXIT.NOT_REPRODUCED);
+  assert.match(v.check!.failures.join(), /REGISTRY entry for wTCENTx \(pool, equityIsToken0, decimals\) is not Scorecard\.priceSources/);
+  chain.priceSource = [POOL, false, 120, 18, 6];
+  assert.equal((await verifyTx(hash, deps(chain, { [key]: JSON.stringify(round.bundle) }))).exit, EXIT.NOT_REPRODUCED, "the side matters as much as the pool");
+});
+
+test("tx: an unreadable or empty priceSources is a warning, never a failure", async () => {
+  for (const p of ["fail", "0x", ["0x0000000000000000000000000000000000000000", false, 0, 0, 0]] as const) {
+    const { round, chain, hash, key } = markRow();
+    chain.priceSource = p as Chain["priceSource"];
+    const v = await verifyTx(hash, deps(chain, { [key]: JSON.stringify(round.bundle) }));
+    assert.equal(v.exit, EXIT.VERIFIED, JSON.stringify(p));
+    assert.ok(v.check!.warnings.some((w) => w.includes("priceSources")), JSON.stringify(v.check!.warnings));
+  }
+});
+
+import { assembleSwapEvidence } from "../../../services/keeper/src/evidence.ts";
+import { RECESS, RECESS_ROOT_OF, inputsFromBundle, loadBundle, recessRows } from "../../../services/keeper/src/fixtures/markFixtures.test.ts";
+
+/** The 13 Nov wXIAOx recess round rebuilt with assembled swap evidence (spec W4a.2), committed 20 blocks after its read. */
+function strictRow() {
+  const XIAO = "0x076CF393E701839FC7a5832D2c68AaFA235682AE";
+  const MARK2 = "curb.scorecard.mark/2";
+  const i = inputsFromBundle(loadBundle(RECESS_ROOT_OF.wXIAOx));
+  const c = i.closures[0];
+  const ev = assembleSwapEvidence({
+    symbol: "wXIAOx", pool: "0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417", cutBlock: RECESS.cutBlock, cutBlockHash: null, cutRead: null,
+    pinnedBlock: RECESS.pinnedBlock, closingWindowMs: 900_000, rows: recessRows("wXIAOx"), ranges: [[RECESS.closingFrom, RECESS.pinnedBlock]],
+    midAtCutE18: c.input.midAtCutE18, midNowE18: c.input.midNowE18, preCutMidE18: c.input.lastPrintE18, mustCommit: false,
+  });
+  if (ev.kind !== "commit") throw new Error(`fixture did not assemble: ${ev.kind}`);
+  c.input = { ...c.input, ...ev.input };
+  c.closingSwaps = ev.closingSwaps;
+  c.closureSwaps = ev.closureSwaps;
+  c.swapEvidence = ev.swapEvidence;
+  const round = buildMarkRound(i);
+  const m = round.marks[0].mark;
+  const block = RECESS.pinnedBlock + 20;
+  const id = closureId(XIAO, c.settleAfterS, round.root);
+  const hash = "0x" + "dd".repeat(32);
+  const input = scorecardAbi.encodeFunctionData("commit", [{
+    wrapper: XIAO, committedAt: 0, committedBlock: 0, settleAfter: c.settleAfterS, mark: m.markE18, bandBps: m.bandBps,
+    inputRoot: round.root, methodDigest: methodDigestOf(MARK2), lastPrint: m.lastPrintE18, closingVwap: m.closingVwapE18, staleOracle: 0n,
+  }]);
+  const log = scorecardAbi.encodeEventLog("ClosureCommitted", [id, XIAO, m.markE18, m.bandBps, c.settleAfterS, block, round.root, methodDigestOf(MARK2)]);
+  const chain: Chain = {
+    tx: { hash, from: "0xd3d9bf9ff2a80aa13d9c0299fadc9775343a1af6", to: SCORECARD.toLowerCase(), blockNumber: block, input },
+    logs: [{ address: SCORECARD.toLowerCase(), topics: log.topics, data: log.data }],
+    timestamp: Math.floor(i.evaluatedAtMs / 1000) + 12,
+    settlements: scorecardAbi.encodeFunctionResult("settlements", [0, 0, 0, 0, 0, 0, 0, 0, false]),
+    priceSource: ["0xdc7f2F41B48cD4F482D8C900Ac2fA1B5aD058417", true, 120, 18, 6],
+  };
+  return { round, chain, hash, key: `marks/${round.root.toLowerCase()}.json` };
+}
+
+test("tx: a strict row reproduces and shows what its swap evidence covers", async () => {
+  const { round, chain, hash, key } = strictRow();
+  const d = { ...deps(chain, { [key]: JSON.stringify(round.bundle) }), swapEvidenceFromBlock: RECESS.pinnedBlock - 100 };
+  const v = await verifyTx(hash, d);
+  assert.equal(v.exit, EXIT.VERIFIED, JSON.stringify(v.check?.failures));
+  assert.equal(field(v, "swaps"), "closing 9 in 75772220..75773120, closure 14 in 75773121..75776392");
+  assert.equal(field(v, "flags"), "recess-no-edge");
+  assert.equal(field(v, "drift"), "-24 bp");
+  assert.equal(v.check!.evidence!.era, "swap-evidence");
+  assert.equal(v.check!.evidence!.complete, true);
+  assert.deepEqual(v.check!.evidence!.notes, ["the cut mid is not bound to a committed pool read (closure opened before this keeper build)"]);
+  // The same row with the cutover above its read block is pre-fix to this verifier, and still exit 0.
+  const p = await verifyTx(hash, { ...deps(chain, { [key]: JSON.stringify(round.bundle) }), swapEvidenceFromBlock: RECESS.pinnedBlock + 1 });
+  assert.equal(p.exit, EXIT.VERIFIED);
+  assert.equal(field(p, "swaps"), "not recorded (pre-fix keeper)");
+});
+
+test("tx: a strict row whose evidence does not back its input is NOT reproduced", async () => {
+  const { round, chain, hash, key } = strictRow();
+  const b = JSON.parse(JSON.stringify(round.bundle));
+  const h = Object.keys(b.json).find((k) => b.json[k].includes('"evidence":"curb.scorecard.swaps/2"'))!;
+  b.json[h] = b.json[h].replace('"closingComplete":true', '"closingComplete":false');   // the leaf no longer hashes
+  const v = await verifyTx(hash, { ...deps(chain, { [key]: JSON.stringify(b) }), swapEvidenceFromBlock: RECESS.pinnedBlock - 100 });
+  assert.equal(v.exit, EXIT.NOT_REPRODUCED);
 });
