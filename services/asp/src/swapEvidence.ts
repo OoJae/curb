@@ -5,12 +5,11 @@
  * read carries swapsDuringClosure 0 and empty swap lists, and has closingVwap == lastPrint on chain, whatever the
  * pool did. The chain cannot tell those rows apart from later ones, so this service is told where they end.
  *
- * This is the keeper's SWAP_EVIDENCE_FROM_BLOCK (services/keeper/src/swapEvidence.ts), copied by hand. Set it to the
- * same block, which is fixed right after deploy 2, before this service is next deployed. Until then it holds the
- * placeholder Number.MAX_SAFE_INTEGER: served text then names the pre-fix rows by the fix instead of by block, which
- * stays true across the deploy, and counts no rows, because it cannot tell which rows are which.
+ * This is the keeper's SWAP_EVIDENCE_FROM_BLOCK (services/keeper/src/swapEvidence.ts), copied by hand: the chain head
+ * read at 16 Nov 2026 05:40Z, after the fixed keeper had started. Number.MAX_SAFE_INTEGER, its value before that,
+ * still means "not set": served text then names the pre-fix rows by the fix instead of by block and counts none.
  */
-export const SWAP_EVIDENCE_FROM_BLOCK: number = Number.MAX_SAFE_INTEGER;
+export const SWAP_EVIDENCE_FROM_BLOCK: number = 76_038_603;
 
 export const swapEvidenceSet = (from: number = SWAP_EVIDENCE_FROM_BLOCK): boolean => from !== Number.MAX_SAFE_INTEGER;
 

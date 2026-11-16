@@ -94,7 +94,7 @@ function headline(skill: SkillTally, pending: number): { line: string; note: str
   const vwapSame =
     skill.beatClosingVwap === wins && skill.tiesClosingVwap === ties && skill.lossesClosingVwap === losses;
   const vs = vwapSame
-    ? 'Against the last print. The closing-VWAP baseline holds the last print in every row committed before block ⟨N⟩ (D-15), so it gives the same count.'
+    ? 'Against the last print. The closing-VWAP baseline holds the last print in every row committed before block 76,038,603 (D-15), so it gives the same count.'
     : `Against the last print. Against the closing VWAP: ${plural(skill.beatClosingVwap, 'win', 'wins')}, ${plural(skill.tiesClosingVwap, 'tie', 'ties')}, ${plural(skill.lossesClosingVwap, 'loss', 'losses')}.`;
   return { line, note: `${vs}${waiting}` };
 }
@@ -455,7 +455,7 @@ function renderBand(tallies: MethodTally[]): void {
   }
   if (board) {
     const wf = board.band.backtest.walkForward;
-    line += `${line ? ' ' : ''}Measured p68 ≈ ${Math.round(wf.p68ErrorBp)} bp: in the walk-forward backtest, 68% of mark/2's errors were within ${Math.round(wf.p68ErrorBp)} bp, and its band (median ${fmtInt(wf.medianBandBps)} bp) held ${fmtInt(wf.covered)} of ${fmtInt(wf.n)} closures. mark/2's band is 25 bp plus half the move it applied: the signal's where the signal applies, otherwise the pool's drift, which was recorded as zero in every row before block ⟨N⟩ (D-15), so those rows committed the 25 bp floor. It is not sized to a measured error.`;
+    line += `${line ? ' ' : ''}Measured p68 ≈ ${Math.round(wf.p68ErrorBp)} bp: in the walk-forward backtest, 68% of mark/2's errors were within ${Math.round(wf.p68ErrorBp)} bp, and its band (median ${fmtInt(wf.medianBandBps)} bp) held ${fmtInt(wf.covered)} of ${fmtInt(wf.n)} closures. mark/2's band is 25 bp plus half the move it applied: the signal's where the signal applies, otherwise the pool's drift, which was recorded as zero in every row before block 76,038,603 (D-15), so those rows committed the 25 bp floor. It is not sized to a measured error.`;
   }
   el.textContent = line || ' ';
 }

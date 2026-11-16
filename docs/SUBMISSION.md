@@ -4,12 +4,12 @@ Ready to paste. The form closes **25 Sep 2026 23:59 UTC**, and the finale is in 
 Facts are as of **25 Sep 2026, ~18:30Z** unless dated otherwise. Every field is filled; the checklist at the end
 is ticked. Every link below is a full URL, so it still works when pasted into the form.
 
-> **Erratum, ⟨DATE⟩ (after submission; the answers below are as submitted on 25 Sep).** Under "Declaration notes",
+> **Erratum, 16 Nov 2026 (after submission; the answers below are as submitted on 25 Sep).** Under "Declaration notes",
 > two reasons are wrong. The 15 `curb.scorecard.mark/1` rows did not tie "by construction", and the three lunch-recess
 > `curb.scorecard.mark/2` rows did not tie because "the method gives the recess no weight". Both methods move the last
 > print by half the pool's drift when no cross-market signal applies. The marks equalled the last print because the
-> keeper failed to decode the pools' Swap logs and counted no swaps in any closure, from the first row until ⟨DATE⟩.
-> For the same reason the "closing VWAP" baseline in every row before block ⟨N⟩ is the last print. The tallies quoted
+> keeper failed to decode the pools' Swap logs and counted no swaps in any closure, from the first row until 16 Nov 2026.
+> For the same reason the "closing VWAP" baseline in every row before block 76,038,603 is the last print. The tallies quoted
 > here, (18, 0, 0) and (21, 0, 0), are the contract's and stand. Record:
 > https://github.com/OoJae/curb/blob/main/docs/DECISIONS.md (D-15).
 

@@ -2,7 +2,7 @@
 
 **Status: POSTED 25 Sept 2026 ~15:40Z** to https://governance.aave.com as a [Discussion] in Risk > General by user OoJae; held for moderator approval (new account, pending post 1406). The posted body is this file from "## Summary" to the CC0 line, fetched from the public repo at commit f3e9fc7.
 
-**Erratum, ⟨DATE⟩.** Finding 3 gives two wrong reasons: "a mark that is the last print by construction" and "it gives
+**Erratum, 16 Nov 2026.** Finding 3 gives two wrong reasons: "a mark that is the last print by construction" and "it gives
 the recess no weight". The marks equalled the last print because Curb's keeper decoded no pool Swap logs, so it
 applied no drift; and "0 beat the closing VWAP" was the same comparison as "0 beat the last print", because before
 the fix the closing-VWAP baseline is the last print in every row (docs/DECISIONS.md D-15). The swap counts in the
@@ -216,7 +216,7 @@ Copyright and related rights waived via [CC0](https://creativecommons.org/public
 2. Done 25 Sept ~14:50Z: `main` pushed and https://github.com/OoJae/curb made public; every repo link returns 200
    logged out.
 3. Done: `docs/DECISIONS.md` D-11 carries a public erratum (the pools do trade while shut), and D-13 was corrected.
-   The keeper's `no-drift` flag is to be investigated after the finale. Investigated ⟨DATE⟩: the flag was a keeper
+   The keeper's `no-drift` flag is to be investigated after the finale. Investigated 16 Nov 2026: the flag was a keeper
    defect, not a quiet pool (docs/DECISIONS.md D-15).
 4. Post from your own governance.aave.com account as a **[Discussion]** in **Risk > General** (not an ARFC: under
    Governance Framework v2 an ARFC is a binding-vote stage opened by approved authors, and new listings come from

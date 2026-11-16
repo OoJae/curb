@@ -72,7 +72,8 @@ test("shaped like the live record on 24 Sep: twelve settled ties, zero wins, and
   // Errors as read from Scorecard v2 at block 71,450,876 (mark = last print = closing VWAP in every row).
   const live = [0, 7, 3, 53, 73, 30, 5, 71, 12, 31, 15, 64];
   const snap = snapshot(live.map((e, i) => row({ wrapper: i % 3 === 1 ? OTHER : TCENT, settlement: s(e, e, e) })));
-  const a = buildRecord({ snapshot: snap, chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW });
+  // The "block not set" path (MAX_SAFE_INTEGER); the set path, now the module default, is tested below with FROM.
+  const a = buildRecord({ snapshot: snap, chainId: 196, symbols: SYMBOLS, filter: null, limit: 50, nowMs: NOW, swapEvidenceFromBlock: Number.MAX_SAFE_INTEGER });
   assert.deepEqual(a.skill, { settled: 12, beatLastPrint: 0, beatClosingVwap: 0 });
   assert.match(a.note, /12 of the 12 settled rows tie the last print exactly\./);
   assert.match(a.note, /Under curb\.scorecard\.mark\/1 the mark is the last print moved by half of what the pool did between the cut and the commit\./);

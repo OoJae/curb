@@ -293,7 +293,7 @@ async function main(): Promise<void> {
       rows: [...rows].reverse(),
     },
     band: {
-      rule: "bandBps = min(2000, max(25, 25 + floor(|move| / 2))), move in bp: mark/2's r when its signal is applied, otherwise the pool's drift as the keeper recorded it (0 in every row before block ⟨N⟩, because it counted no swaps: DECISIONS D-15). Covered: curbErrorBps <= bandBps.",
+      rule: "bandBps = min(2000, max(25, 25 + floor(|move| / 2))), move in bp: mark/2's r when its signal is applied, otherwise the pool's drift as the keeper recorded it (0 in every row before block 76,038,603, because it counted no swaps: DECISIONS D-15). Covered: curbErrorBps <= bandBps.",
       committed: { minBps: all.band.minBps, maxBps: all.band.maxBps, covered: all.band.covered, settled: all.band.settled },
       backtest: {
         walkForward: { covered: wf.band.mark2Band.covered, n: wf.band.n, medianBandBps: wf.band.mark2Band.bandBp.p50, p68ErrorBp: wf.groups.pooled.mark2.absErrorBp.p68 },

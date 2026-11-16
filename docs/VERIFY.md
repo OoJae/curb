@@ -114,7 +114,7 @@ For a **mark** (`checkMarkRound`):
   (one `eth_call` at `latest`). A mismatch fails the row (`REGISTRY entry for <symbol> (pool, equityIsToken0,
   decimals) is not Scorecard.priceSources: …`). A read that fails, or answers no pool, is only a `warn`
   line, because the comparison could not be made;
-- for a row whose evidence was read from block ⟨N⟩ on, the swap evidence itself: the committed swap lists
+- for a row whose evidence was read from block 76,038,603 on, the swap evidence itself: the committed swap lists
   lie inside the committed block ranges, the last print, the closing VWAP and the swap count follow from
   them, the last closing swap is the pool price at the cut, the last closure swap is the pool price at the
   commit (or, with no swaps, the price did not move), the committed pool read at the cut prices to the
@@ -124,10 +124,10 @@ For a **mark** (`checkMarkRound`):
 **Not checked:** the chain reads a bundle commits to (block hash and raw return data) are covered by
 the root, but they are not re-queried against an archive node. The issuer's API responses are not
 re-fetched either, because that API only serves the present. What gets re-run is the copy the bundle
-committed to. The pools' Swap logs are not re-fetched either: from block ⟨N⟩ the committed lists are
+committed to. The pools' Swap logs are not re-fetched either: from block 76,038,603 the committed lists are
 checked against the committed ranges and pool prices, but a log the keeper never saw would be missed by
-both. Before block ⟨N⟩ the swap lists were not checked at all, only the method re-run on the committed
-inputs, and that is the gap a keeper defect went through: every row committed before block ⟨N⟩ has empty
+both. Before block 76,038,603 the swap lists were not checked at all, only the method re-run on the committed
+inputs, and that is the gap a keeper defect went through: every row committed before block 76,038,603 has empty
 swap lists and a swap count of 0 whatever the pool did ([DECISIONS D-15](DECISIONS.md)). The verifier
 prints `EVIDENCE` lines saying so on each of those rows, and still prints `REPRODUCED`, because the mark
 does follow from what was committed.
@@ -142,18 +142,18 @@ most 1,800 blocks before the commit). A bundle with no usable chain read is chec
 
 Each note is printed on one line, as `  EVIDENCE <note>`; the examples below are those lines verbatim,
 with `<…>` for the values. `tx` also prints, for every mark, `flags`, `drift <d> bp` and a `swaps` field:
-`not recorded (pre-fix keeper)` before block ⟨N⟩, and from it `closing <a> in <from>..<to>, closure <b> in
+`not recorded (pre-fix keeper)` before block 76,038,603, and from it `closing <a> in <from>..<to>, closure <b> in
 <from>..<to>`, followed where they apply by `, gaps <from>..<to> …`, `, closing window not committed` or
 `, truncated (<n> total)`. `bundle` prints an `era` field, `<era> (offline: the era is bound to the commit block
 only by 'tx')`, and a bundle with no usable chain read gets the note `era unknown: checked as swap-evidence`.
 `range` adds `(<k> from evidence known to omit pool swaps: rows read before block <N>)` to its summary, and lists
 every row whose reopen re-derived from the commit instant.
 
-**Rows read before block ⟨N⟩** (every row committed until ⟨DATE⟩). The keeper that wrote them decoded no pool
+**Rows read before block 76,038,603** (every row committed until 16 Nov 2026). The keeper that wrote them decoded no pool
 Swap logs, so every such row gets this line:
 
 ```
-  EVIDENCE pre-fix row (evidence read at block <b>, before block ⟨N⟩): the keeper build that wrote it decoded no pool Swap logs (DECISIONS D-15). Its swap lists are empty whether or not the pool traded; no-drift, no-closing-vwap and closingVwap = lastPrint record what that keeper saw, not what the pool did.
+  EVIDENCE pre-fix row (evidence read at block <b>, before block 76,038,603): the keeper build that wrote it decoded no pool Swap logs (DECISIONS D-15). Its swap lists are empty whether or not the pool traded; no-drift, no-closing-vwap and closingVwap = lastPrint record what that keeper saw, not what the pool did.
 ```
 
 A build in which the era's first block is not yet set (a pre-release build: `selftest` prints `era cutover:
@@ -180,7 +180,7 @@ figure that does not follow from its lists (`committed swapsDuringClosure=<n> bu
 lines above applies, its closing line is `  REPRODUCED  (pre-fix row: its swap lists were not checked -- see
 EVIDENCE above)`. No row is ever re-marked, so these lines are permanent.
 
-**Rows read from block ⟨N⟩** are checked strictly (above). The keeper commits a degraded row rather than none
+**Rows read from block 76,038,603** are checked strictly (above). The keeper commits a degraded row rather than none
 when it cannot finish a scan before its deadline, and says so; each case gets a line:
 
 ```
@@ -201,7 +201,7 @@ an earlier keeper build; the chain's clock and block count drifted apart between
 **The six holiday rows.** The three Hong Kong rows of the 30 Sep to 2 Oct closure and the three of the 16 Oct
 to 20 Oct closure commit the issuer's holiday list as it stood at the commit, after the issuer had dropped the
 holiday the closure spanned (1 Oct, 19 Oct). Walked from the cut, that schedule reopens a day early, so the
-reopen check alone fails. For rows read before block ⟨N⟩ the verifier then walks the same committed schedule
+reopen check alone fails. For rows read before block 76,038,603 the verifier then walks the same committed schedule
 from the commit instant, which is how the keeper computed the reopen, and accepts the row only if that gives
 the committed `settleAfter`:
 
@@ -214,7 +214,7 @@ the committed `settleAfter`:
 
 The line says only what the bytes show. They cannot prove the market stayed shut from the cut to the commit;
 the cause for these six rows, and the change that keeps a closure's holidays in the schedule it commits, are
-in [DECISIONS](DECISIONS.md) D-16. Rows read from block ⟨N⟩ never get this fallback.
+in [DECISIONS](DECISIONS.md) D-16. Rows read from block 76,038,603 never get this fallback.
 
 **A row that can never be graded.** For an unsettled row whose settle window has closed, `tx` prints the
 `settled` field as `not settled; settle window closed <deadline> (TooLate: this row can no longer be graded)`;

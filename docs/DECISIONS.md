@@ -488,7 +488,7 @@ fall out of `sessionAt()`, so a Friday close predicts Monday and 30 Sep predicts
 > The keeper predicted 2 Oct from 30 Sep, and 20 Oct from 16 Oct, correctly. But each bundle committed the holiday list
 > as it stood ten minutes before the reopen, after the issuer had dropped the holiday the closure spanned, so a
 > verifier walking that schedule from the cut "gets a different instant" for six rows that are not wrong, and
-> `curb-verify` 0.1.0 prints `NOT REPRODUCED` for them. From block ⟨N⟩ the committed schedule keeps every holiday seen
+> `curb-verify` 0.1.0 prints `NOT REPRODUCED` for them. From block 76,038,603 the committed schedule keeps every holiday seen
 > during the closure.
 
 **A closure whose start was not witnessed is not marked.** After a restart the keeper has no observed
@@ -566,7 +566,7 @@ every existing row keeping the method that produced it. No row is ever re-marked
 > keeper is not changed while the first mark/2 rows are being recorded). The reopen range is 0 to 105 bp,
 > not 30 to 105.
 
-> **Erratum, ⟨DATE⟩ (the open item above, closed in D-15).** The `no-drift` flag was not detecting anything. The
+> **Erratum, 16 Nov 2026 (the open item above, closed in D-15).** The `no-drift` flag was not detecting anything. The
 > keeper failed to decode every pool `Swap` log, so it counted zero swaps in every closure and applied no drift.
 > Four statements in this entry are wrong, not one. (1) 22 Sept: "Not one swap occurred in any of the three pools
 > during the 55-minute recess, nor in the 15 minutes before the cut". The pools printed 15 swaps in that recess
@@ -670,9 +670,9 @@ as such.
 mark/1 is the last print by construction (the pools do trade while shut; see the D-11 erratum), yet the reopens moved 0–105 bp.
 Beating the last print needs information from outside the pool.
 
-> **Erratum, ⟨DATE⟩ (D-15).** "mark/1 is the last print by construction" is wrong, and so is "The mark stays the last
+> **Erratum, 16 Nov 2026 (D-15).** "mark/1 is the last print by construction" is wrong, and so is "The mark stays the last
 > print" for the lunch recess below. mark/1 moves the last print by half the pool's drift, and a recess row under mark/2
-> is mark/1's mark. In every row before block ⟨N⟩ the keeper recorded a drift of zero because it decoded no swaps, so
+> is mark/1's mark. In every row before block 76,038,603 the keeper recorded a drift of zero because it decoded no swaps, so
 > the premise above ("needs information from outside the pool") was never tested. The β fit and the walk-forward use no
 > pool data and are unaffected.
 
@@ -704,9 +704,9 @@ Beating the last print needs information from outside the pool.
   Meituan 32 vs 19), and halving the weight was still worse. The perp's move is still committed as
   evidence.
 
-  > **Erratum, ⟨DATE⟩ (D-15).** Weight 0 on the signal leaves mark/1's rule, which moves the last print by half the
+  > **Erratum, 16 Nov 2026 (D-15).** Weight 0 on the signal leaves mark/1's rule, which moves the last print by half the
   > pool's drift. A recess row stayed at the last print only because the keeper recorded the drift as zero. From block
-  > ⟨N⟩ recess rows move with the pool.
+  > 76,038,603 recess rows move with the pool.
 - **wNVDAx / wAAPLx:** no proxy (`no-proxy`); mark/1 behaviour.
 - **Nothing available:** `no-signal`, and the mark equals mark/1's.
 - **β** was fitted on 118 overnight and weekend closures (22 Jul – 22 Sep, ending *before* the D-11 rows),
@@ -788,9 +788,9 @@ rows prove nothing either way, and the walk-forward lost 32 of its 87 closures. 
 **Nothing in the keeper changes.** mark/2, its β and its band stay as D-13 set them while the first
 out-of-sample mark/2 rows accrue. Any change will get a new method id, and no row is ever re-marked.
 
-> **Note, ⟨DATE⟩ (D-15).** The keeper changed on ⟨DATE⟩ to fix swap decoding. The method id is unchanged: mark/2,
+> **Note, 16 Nov 2026 (D-15).** The keeper changed on 16 Nov 2026 to fix swap decoding. The method id is unchanged: mark/2,
 > its β and its band are as D-13 set them, `computeMark` is the same function, and every earlier row re-derives under
-> it. What changed is that its inputs are now true, so from block ⟨N⟩ the drift term acts in lunch-recess and US
+> it. What changed is that its inputs are now true, so from block 76,038,603 the drift term acts in lunch-recess and US
 > rows. "The 25 bp band on the first 15 rows held 8 of 15" above is right; each of those bands was the 25 bp floor,
 > because the drift was recorded as 0.
 
@@ -804,10 +804,10 @@ both records and the sha256 of every input. It refuses to write unless its recou
 
 ---
 
-## D-15 — Erratum: the keeper decoded no swaps, so every row before block ⟨N⟩ carries no drift, no closing VWAP and no swap evidence (⟨DATE⟩)
+## D-15 — Erratum: the keeper decoded no swaps, so every row before block 76,038,603 carries no drift, no closing VWAP and no swap evidence (16 Nov 2026)
 
-**Status: CORRECTED on ⟨DATE⟩ at ⟨DEPLOY_TIME⟩ (keeper code digest `⟨DIGEST⟩`, release commit `⟨RELEASE_COMMIT⟩`);
-the fixed keeper's evidence starts at block ⟨N⟩. The ⟨ROWS_PRE⟩ rows committed before it stay on chain unchanged and
+**Status: CORRECTED on 16 Nov 2026 at 05:37Z (keeper code digest `sha256:d9b02a669c736ef3184fbe1419d828560bba52d5c891f1f63770a342b3ec44d7`, release commit `f65ff53`);
+the fixed keeper's evidence starts at block 76,038,603. The 241 rows committed before it stay on chain unchanged and
 are documented here.**
 
 **What was wrong.** `services/keeper/src/sources/pools.ts` decoded every pool `Swap` log with
@@ -819,7 +819,7 @@ No test fed a log through either function.
 
 **What that did to a row.** Three inputs of a mark come from swaps, and so does one leaf of its evidence.
 
-| | what the method says | what every row before block ⟨N⟩ got |
+| | what the method says | what every row before block 76,038,603 got |
 |---|---|---|
 | swaps during the closure | if the pool traded, move the last print by half its drift from the cut to the commit | a count of 0, so the flag `no-drift` and a drift of 0, whatever the pool did |
 | last print | the pool price after the last swap at or before the cut | the pool price the keeper last read before the cut (it reads every 30 s) |
@@ -827,7 +827,7 @@ No test fed a log through either function.
 | evidence | the swaps behind all three, in the bundle's `swaps:<wrapper>` leaf | two empty lists |
 
 **How far it reached.** Checked on 14 Nov 2026 against all 233 rows then on chain, their 233 archived bundles, and
-Scorecard storage at block 75,902,478. The rows committed after that and before block ⟨N⟩ came from the same decoding
+Scorecard storage at block 75,902,478. The rows committed after that and before block 76,038,603 came from the same decoding
 code and are affected in the same way.
 
 - **Every row.** 233 of 233 (15 under `mark/1`, 218 under `mark/2`; commit blocks 71,283,582 to 75,776,412; keeper
@@ -930,13 +930,13 @@ chain held 1,418 swaps on one pool in four hours. Run over blocks 75,772,400 to 
 swallowed all of them. Its output, `no-drift` and `no-closing-vwap`, read as an honest finding about a quiet pool, and
 D-11 took it as one. The fact-check of 25 Sept proved the pools traded, and the flag was parked until after the
 finale. The verifier re-runs the method on the committed inputs and never compares them with the committed swap
-lists, so 233 empty lists verified. The cost was every row from 22 Sept to ⟨DATE⟩ (⟨ROWS_PRE⟩ rows) with incomplete
+lists, so 233 empty lists verified. The cost was every row from 22 Sept to 16 Nov 2026 (241 rows) with incomplete
 evidence, 131 of the first 233 marked without the pool's move, a second baseline that was a copy of the first, and a
 wrong reason for the ties repeated in the README, on the site, in the API, in the submission and in the Aave post. It
 is now disclosed.
 
-**How it is fixed without rewriting history.** Release commit `⟨RELEASE_COMMIT⟩`, deployed ⟨DATE⟩ at ⟨DEPLOY_TIME⟩
-with code digest `⟨DIGEST⟩`; the old keeper was stopped before the new one started, and block ⟨N⟩ is the chain head
+**How it is fixed without rewriting history.** Release commit `f65ff53`, deployed 16 Nov 2026 at 05:37Z
+with code digest `sha256:d9b02a669c736ef3184fbe1419d828560bba52d5c891f1f63770a342b3ec44d7`; the old keeper was stopped before the new one started, and block 76,038,603 is the chain head
 read right after the deploy, before the new keeper had built any mark.
 
 - **Decoding.** Each log is decoded with its own topics. A log no endpoint can decode is never dropped in silence: its
@@ -969,7 +969,7 @@ read right after the deploy, before the new keeper had built any mark.
     build (a closure already open at a deploy). The cut price is then the keeper's own reading, as before.
   - One case is refused instead of degraded: no swap recorded and a pool price that moved. A V3 pool's price moves
     only on a swap, so that row would knowingly leave out a move; the keeper commits nothing for that closure and
-    pages. It is exactly the shape of every row before block ⟨N⟩.
+    pages. It is exactly the shape of every row before block 76,038,603.
 - **A cut the schedule does not confirm is not committed as it stands.** Host A sometimes writes a zero cap for a
   minute or so when one issuer fetch fails. If such a blip opens a closure, or runs into a real cut, the keeper now
   checks the cut against the venue schedule. If the schedule itself shuts within two keeper ticks of when the keeper
@@ -982,21 +982,21 @@ read right after the deploy, before the new keeper had built any mark.
 
 First row read by the fixed keeper: ⟨FIRST_ROW⟩.
 
-**The rule for rows committed before block ⟨N⟩.** No row is re-marked and no bundle is rewritten: the archive is
+**The rule for rows committed before block 76,038,603.** No row is re-marked and no bundle is rewritten: the archive is
 write-once and the roots are on chain. The verifier in this repository decides a row's era from the block of the chain
-read its bundle commits, bound to the commit block. For a row read before block ⟨N⟩ it still prints `REPRODUCED` when
+read its bundle commits, bound to the commit block. For a row read before block 76,038,603 it still prints `REPRODUCED` when
 the mark follows from its committed inputs, and adds notes that never change the exit code: that the build which wrote
 it decoded no Swap logs, so its empty lists, `no-drift`, `no-closing-vwap` and `closingVwap = lastPrint` record what
 that keeper saw, not what the pool did; where the bundle's own pool prices moved while it lists no swaps, by how much;
 and where its last print is the keeper's last reading before the cut rather than the price at the cut block, by how
-much. For a row read from block ⟨N⟩ the swap evidence is checked strictly: the last print, the closing VWAP and the
+much. For a row read from block 76,038,603 the swap evidence is checked strictly: the last print, the closing VWAP and the
 swap count must follow from the committed lists, the lists must agree with the committed pool prices, and anything
 else is `NOT REPRODUCED`. `curb-verify` prints the notes as `EVIDENCE` lines. The npm package gets all of this in
 0.2.0; until then `npx -y curb-verify` (0.1.0) prints none of it: it re-derives new rows' marks from inputs that are
 now true, and treats old rows as it always did.
 
 /scorecard, the paid API and the MCP tool say the same against those rows (each is deployed separately from the
-keeper). From block ⟨N⟩ an empty swap list in a complete bundle means the pool did not trade.
+keeper). From block 76,038,603 an empty swap list in a complete bundle means the pool did not trade.
 
 **Reproduce.** The swap counts above: `eth_getLogs` for the Swap topic
 `0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67` on the pools in `Scorecard.priceSources`, in
@@ -1008,7 +1008,7 @@ whose `swaps:<wrapper>` leaves are empty and whose `markinput` leaves carry `mid
 
 ## D-16 — Six holiday rows that the published verifier cannot re-derive (⟨DATE_D16⟩)
 
-**Status: FIXED for rows read from block ⟨N⟩ (deploy 2, ⟨DATE⟩). The six rows stay on chain unchanged. Their marks,
+**Status: FIXED for rows read from block 76,038,603 (deploy 2, 16 Nov 2026). The six rows stay on chain unchanged. Their marks,
 reopen times and grades are right; their evidence does not show the holiday that justifies the reopen time.**
 
 **What happened.** The keeper predicts a row's reopen by walking the venue schedule forward from the present, every
@@ -1061,7 +1061,7 @@ One risk is accepted with the 24-hour margin: an entry the issuer withdraws on t
 cancelled hours ahead, say) is kept, the predicted reopen is a day late, capacity returns first, and that closure gets
 no row. The keeper pages it as `closure-missed`.
 
-**What the verifier says now about the six.** For rows read before block ⟨N⟩ only, when the walk from the cut misses
+**What the verifier says now about the six.** For rows read before block 76,038,603 only, when the walk from the cut misses
 the committed reopen, the verifier in this repository walks the same committed schedule from the commit instant,
 which is how the keeper computed the reopen. It accepts the row if, and only if, the walk from the cut lands before
 the commit and the walk from the commit gives the committed reopen, and it prints `REPRODUCED` with a note that never
@@ -1075,15 +1075,15 @@ The note is worded to say only what the bytes show. The rule cannot prove the ma
 commit: a keeper that was down across a reopen would write exactly such a row, and the rule would accept it. That is
 why the cause for these six is stated here, from the issuer's lists, and not by the tool. Over the 233 bundles archived
 by 14 Nov the rule fires on exactly these six roots. Before the repository is pushed and before npm 0.2.0, the set of
-rows that get this note must be exactly these six; the run over every row before block ⟨N⟩ gave: ⟨E6_GATE⟩. Rows read
-from block ⟨N⟩ never get the fallback. `npx -y curb-verify` (0.1.0) keeps printing `NOT REPRODUCED` for the six until
+rows that get this note must be exactly these six; the run over every row before block 76,038,603 gave: exactly these six, with all 241 rows reproducing (16 Nov 2026, with the block set). Rows read
+from block 76,038,603 never get the fallback. `npx -y curb-verify` (0.1.0) keeps printing `NOT REPRODUCED` for the six until
 0.2.0 is published.
 
 ---
 
 ## D-17 — One row was never graded: a reverted settle was counted as settled (28 Oct 2026, disclosed ⟨DATE_D16⟩)
 
-**Status: FIXED from deploy 2 (⟨DATE⟩): the keeper reads the status of every transaction it sends. Row 151 can never
+**Status: FIXED from deploy 2 (16 Nov 2026): the keeper reads the status of every transaction it sends. Row 151 can never
 be graded. It stays on chain, committed and unsettled, and `skill()` counts 232 settled of the 233 rows committed by
 14 Nov.**
 
