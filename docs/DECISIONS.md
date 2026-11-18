@@ -484,7 +484,7 @@ the same instant or catches us.
 closure, weekends and holidays, plus the US names' own closures. Holidays need no special case: they
 fall out of `sessionAt()`, so a Friday close predicts Monday and 30 Sep predicts 2 Oct.
 
-> **Note, ⟨DATE_D16⟩ (D-16).** "Holidays need no special case" was true of the prediction and not of the evidence.
+> **Note, 18 Nov 2026 (D-16).** "Holidays need no special case" was true of the prediction and not of the evidence.
 > The keeper predicted 2 Oct from 30 Sep, and 20 Oct from 16 Oct, correctly. But each bundle committed the holiday list
 > as it stood ten minutes before the reopen, after the issuer had dropped the holiday the closure spanned, so a
 > verifier walking that schedule from the cut "gets a different instant" for six rows that are not wrong, and
@@ -980,7 +980,11 @@ read right after the deploy, before the new keeper had built any mark.
 - The same release reads the receipt status of every transaction it sends, and keeps every holiday seen during a
   closure in the schedule it commits. Each of those has its own entry.
 
-First row read by the fixed keeper: ⟨FIRST_ROW⟩.
+First row read by the fixed keeper: row 241, wTCENTx, the 16→17 Nov overnight closure (cut 16 Nov 07:55:49Z, block
+76,046,712), committed 17 Nov at 01:20:13Z in block 76,109,377 (tx `0xc4006bac…f0fd`) with 5 swaps in the closing window
+and 163 during the closure, settled at 01:35:12Z. The verifier in this repository prints `REPRODUCED` for it and for the
+eleven rows after it (to row 252, settled 18 Nov 05:05Z), all read in the swap-evidence era; `curb-verify@0.1.0` prints
+`REPRODUCED` for rows 241 and 250.
 
 **The rule for rows committed before block 76,038,603.** No row is re-marked and no bundle is rewritten: the archive is
 write-once and the roots are on chain. The verifier in this repository decides a row's era from the block of the chain
@@ -1006,7 +1010,7 @@ whose `swaps:<wrapper>` leaves are empty and whose `markinput` leaves carry `mid
 
 ---
 
-## D-16 — Six holiday rows that the published verifier cannot re-derive (⟨DATE_D16⟩)
+## D-16 — Six holiday rows that the published verifier cannot re-derive (18 Nov 2026)
 
 **Status: FIXED for rows read from block 76,038,603 (deploy 2, 16 Nov 2026). The six rows stay on chain unchanged. Their marks,
 reopen times and grades are right; their evidence does not show the holiday that justifies the reopen time.**
@@ -1081,7 +1085,7 @@ from block 76,038,603 never get the fallback. `npx -y curb-verify` (0.1.0) keeps
 
 ---
 
-## D-17 — One row was never graded: a reverted settle was counted as settled (28 Oct 2026, disclosed ⟨DATE_D16⟩)
+## D-17 — One row was never graded: a reverted settle was counted as settled (28 Oct 2026, disclosed 18 Nov 2026)
 
 **Status: FIXED from deploy 2 (16 Nov 2026): the keeper reads the status of every transaction it sends. Row 151 can never
 be graded. It stays on chain, committed and unsettled, and `skill()` counts 232 settled of the 233 rows committed by

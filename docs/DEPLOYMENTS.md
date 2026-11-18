@@ -552,9 +552,6 @@ median, against 0.06 to 0.2 s from the VPS.
 `/var/lib/curb/logs/curb-keeper-20261116T053742Z.log.gz` (and copied off the box) and its state to
 `/var/lib/curb/keeper/keeper-state.predeploy-20261116T053743Z.json` before the new one started.
 
-**Next on the new build:** the first closure is the HK afternoon cut at 07:55Z today; the first rows are the HK
-overnight rows on Tue 17 Nov 01:20Z, then the lunch recess at 04:50Z, the first with pool drift in the mark.
-
 **The public text, the same morning,** before any post-fix row exists (both from `8b4743b`):
 
 - `curb-asp`, 06:03Z, `railway up services/asp --path-as-root --service curb-asp --ci` (deployment `86b62aad`;
@@ -571,6 +568,26 @@ overnight rows on Tue 17 Nov 01:20Z, then the lunch recess at 04:50Z, the first 
   Reopen Price Accuracy Record (before that block its second baseline repeats the first). Both endpoints passed
   OKX's callability check first, at their listed prices; names, prices and endpoints are unchanged. The text is
   in `script/asp/services.json`.
+
+**The first rows on the new build.** The HK afternoon cut at 07:55:49Z on 16 Nov was the first closure it opened:
+all three assets with the cut block hash and the pool read, none suspect. Its rows were committed on Tue 17 Nov at
+01:20Z (rows 241 to 243: 163, 158 and 39 swaps during the closure, 5, 10 and 0 in the closing window) and settled at
+01:35Z. By 18 Nov 05:05Z twelve rows (241 to 252, the HK overnight and lunch rows of 17 and 18 Nov) were committed
+and settled, every one `complete`, with no gaps. The verifier in this repository prints `REPRODUCED` for all twelve,
+and `curb-verify@0.1.0` for rows 241 and 250. `skill()` reads (252, 49, 50): 253 rows committed, row 151 never
+graded (D-17). The US closures in those two days were all shorter than the 30-minute floor, so they made no rows.
+
+**Seen since, neither caused by this deploy:**
+
+- 13 phantom closures on the US names (capacity at zero while the venue schedule said open). 11 came from 09:20Z to
+  09:44Z on 16 Nov, when host A's issuer fetch returned `source-unavailable` on and off for 23 minutes and host A
+  sent 20 rounds flipping AAPLx and NVDAx between shut and open; the others were single blips at 17:22Z on 16 Nov
+  and 08:05Z on 17 Nov. The keeper abandoned each one before its commit point and paged it at sev-2, as D-15
+  describes, and no row came from one. For those minutes the MarketClock on chain showed the asset shut.
+- Yahoo answered `429` to every ADR, FX and primary fetch, from `query1` and `query2` alike, at both overnight
+  commits (17 and 18 Nov 01:20Z), so those six rows carry `adr-missing` and were signalled from the perp alone. The
+  archive shows the same on eight earlier dates since 5 Oct. The same fetch from the keeper's container got `200` at
+  05:30Z on 18 Nov.
 
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
