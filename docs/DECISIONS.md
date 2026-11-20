@@ -995,8 +995,8 @@ that keeper saw, not what the pool did; where the bundle's own pool prices moved
 and where its last print is the keeper's last reading before the cut rather than the price at the cut block, by how
 much. For a row read from block 76,038,603 the swap evidence is checked strictly: the last print, the closing VWAP and the
 swap count must follow from the committed lists, the lists must agree with the committed pool prices, and anything
-else is `NOT REPRODUCED`. `curb-verify` prints the notes as `EVIDENCE` lines. The npm package gets all of this in
-0.2.0; until then `npx -y curb-verify` (0.1.0) prints none of it: it re-derives new rows' marks from inputs that are
+else is `NOT REPRODUCED`. `curb-verify` prints the notes as `EVIDENCE` lines. The npm package has all of this from
+0.2.0 (published 20 Nov 2026). The earlier 0.1.0 prints none of it: it re-derives new rows' marks from inputs that are
 now true, and treats old rows as it always did.
 
 /scorecard, the paid API and the MCP tool say the same against those rows (each is deployed separately from the
@@ -1080,8 +1080,8 @@ commit: a keeper that was down across a reopen would write exactly such a row, a
 why the cause for these six is stated here, from the issuer's lists, and not by the tool. Over the 233 bundles archived
 by 14 Nov the rule fires on exactly these six roots. Before the repository is pushed and before npm 0.2.0, the set of
 rows that get this note must be exactly these six; the run over every row before block 76,038,603 gave: exactly these six, with all 241 rows reproducing (16 Nov 2026, with the block set). Rows read
-from block 76,038,603 never get the fallback. `npx -y curb-verify` (0.1.0) keeps printing `NOT REPRODUCED` for the six until
-0.2.0 is published.
+from block 76,038,603 never get the fallback. `curb-verify` 0.1.0 prints `NOT REPRODUCED` for the six. 0.2.0,
+on npm since 20 Nov 2026, prints `REPRODUCED` with the note; checked that day on row 41 with `npx -y curb-verify@0.2.0`.
 
 ---
 
@@ -1126,5 +1126,5 @@ retry inside the window removes the loss.
 
 **What the verifier says.** `curb-verify tx` on the commit transaction of such a row prints, as its `settled`
 field, `not settled; settle window closed <deadline> (TooLate: this row can no longer be graded)`; for row 151 the
-deadline is `2026-10-28T07:35:00Z` (in this repository from the `curb-verify` 0.2.0 change, on npm once 0.2.0 is
-published). No row is re-committed or re-marked; row 151 keeps its mark and has no grade.
+deadline is `2026-10-28T07:35:00Z` (from `curb-verify` 0.2.0, on npm since 20 Nov 2026;
+checked that day). No row is re-committed or re-marked; row 151 keeps its mark and has no grade.

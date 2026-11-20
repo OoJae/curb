@@ -589,6 +589,13 @@ graded (D-17). The US closures in those two days were all shorter than the 30-mi
   archive shows the same on eight earlier dates since 5 Oct. The same fetch from the keeper's container got `200` at
   05:30Z on 18 Nov.
 
+**`curb-verify` 0.2.0 on npm, 20 Nov 2026.** Published by the user (`npm publish` from `main`, tag `latest`,
+shasum `76b9c20b494940b980ba5ec266e2a51f807f6612`, 66 files, the same tarball tested before publishing). Checked from
+npm the same day: row 243 (a post-fix row) prints `REPRODUCED`, row 41 (a D-16 holiday row, `NOT REPRODUCED` under
+0.1.0) prints `REPRODUCED` with the commit-instant note, and row 151 prints its `TooLate` settled line (D-17). By then
+all 24 rows read from block 76,038,603 (rows 241 to 264, to the 20 Nov 04:50Z lunch rows) reproduced with the
+verifier in this repository.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below

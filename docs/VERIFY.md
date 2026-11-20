@@ -222,10 +222,10 @@ for row 151 of 28 Oct
 ([DECISIONS](DECISIONS.md) D-17) the deadline is `2026-10-28T07:35:00Z`. While the window is open it prints
 `not yet (window open until <deadline>)`, and if the latest block cannot be read, `not yet`.
 
-**What npm gives you today.** `curb-verify` 0.1.0 on npm (25 Sep 2026) predates all of this. It prints no
-`EVIDENCE` lines, it prints `NOT REPRODUCED` for the six holiday rows, and on a new row it re-derives the mark
-without checking the swap evidence. Version 0.2.0 carries this behaviour. Until it is published, run
-`npx -y github:OoJae/curb ...` or a checkout (below) for the checks described here.
+**On npm.** `curb-verify` 0.2.0, published on 20 Nov 2026, carries everything described here:
+`npx -y curb-verify tx <hash>`. The earlier 0.1.0 (25 Sep 2026) predates it: it prints no `EVIDENCE` lines, it
+prints `NOT REPRODUCED` for the six holiday rows, and on a new row it re-derives the mark without checking the swap
+evidence. Pin `curb-verify@0.2.0` if a cached 0.1.0 answers instead.
 
 ## Running from a checkout instead of npm
 
