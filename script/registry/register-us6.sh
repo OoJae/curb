@@ -60,12 +60,20 @@ echo "This cannot be undone: a registered asset stays registered."
 read -r -p "Type REGISTER to send: " ok
 [ "$ok" = "REGISTER" ] || { echo "Not sent."; exit 1; }
 
-pw=()
-[ -n "${PWFILE:-}" ] && pw=(--password-file "$PWFILE")
+# macOS ships bash 3.2, where "${arr[@]}" of an empty array is an unbound-variable error under set -u,
+# so the optional password file is passed through a branch, not an array.
+send() {
+  if [ -n "${PWFILE:-}" ]; then
+    cast send --rpc-url "$RPC" --account "$ACCOUNT" --password-file "$PWFILE" --json "$CLOCK" \
+      'registerAsset(address,address,bytes4,uint8)' "$@"
+  else
+    cast send --rpc-url "$RPC" --account "$ACCOUNT" --json "$CLOCK" \
+      'registerAsset(address,address,bytes4,uint8)' "$@"
+  fi
+}
 for row in "${todo[@]}"; do
   read -r sym w raw m <<< "$row"
-  out=$(cast send --rpc-url "$RPC" --account "$ACCOUNT" "${pw[@]}" --json "$CLOCK" \
-        'registerAsset(address,address,bytes4,uint8)' "$w" "$raw" "$m" "$HOURS")
+  out=$(send "$w" "$raw" "$m" "$HOURS")
   st=$(printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("transactionHash"), int(d.get("blockNumber"),16))')
   echo "  $sym  $st"
   case "$st" in 0x1*|1*) ;; *) echo "$sym: transaction did not succeed; stopping."; exit 1;; esac
