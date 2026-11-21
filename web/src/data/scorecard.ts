@@ -127,6 +127,9 @@ async function multicallChunks(contracts: any[], blockNumber: bigint): Promise<a
  * `resolveTx: true` also fills commitTx/settleTx (cached rows cost nothing; each uncached one costs a
  * single-block getLogs, rate-limited). Pages can instead call resolveTxHashes() after first paint.
  */
+/** Scorecard's own cohort: the wrappers MarketClock carried when Scorecard v2 was deployed (wSHEINx has no pool). */
+const SCORECARD_ASSETS = ASSETS.filter((a) => !a.clockOnly);
+
 export async function getScorecard(opts: { resolveTx?: boolean } = {}): Promise<ScorecardView> {
   if (isMock()) return fixture("scorecard");
   const client = publicClient();
@@ -134,13 +137,13 @@ export async function getScorecard(opts: { resolveTx?: boolean } = {}): Promise<
   const headCalls: any[] = [
     { address: SCORECARD, abi: scorecardAbi, functionName: "closureCount" },
     { address: SCORECARD, abi: scorecardAbi, functionName: "skill" },
-    ...ASSETS.map((a) => ({ address: SCORECARD, abi: scorecardAbi, functionName: "priceNow", args: [a.wrapper] })),
+    ...SCORECARD_ASSETS.map((a) => ({ address: SCORECARD, abi: scorecardAbi, functionName: "priceNow", args: [a.wrapper] })),
   ];
   const head = (await client.multicall({ blockNumber, allowFailure: true, contracts: headCalls })) as { status: "success" | "failure"; result?: unknown; error?: unknown }[];
   if (head[0].status !== "success" || head[1].status !== "success") throw new Error("Scorecard: closureCount/skill unreadable");
   const count = Number(head[0].result as bigint);
   const [settledN, beatLast, beatVwap] = head[1].result as unknown as readonly [bigint, bigint, bigint];
-  const prices: PriceNow[] = ASSETS.map((a, i) => {
+  const prices: PriceNow[] = SCORECARD_ASSETS.map((a, i) => {
     const r = head[2 + i];
     return r.status === "success"
       ? { symbol: a.symbol, wrapper: a.wrapper, price: units(r.result as bigint), priceE18: (r.result as bigint).toString(), error: null }

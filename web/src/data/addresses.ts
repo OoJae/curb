@@ -75,6 +75,11 @@ export interface CohortAsset {
   mic: Mic;
   /** ReopenNote open-interest cap in whole shares (D-3); 0 = not note-eligible. */
   noteCapShares: number;
+  /**
+   * On MarketClock only: registered on 21 Nov 2026 because Morpho lends against them, never part of Scorecard's
+   * cohort, so the Scorecard page does not read a price for them.
+   */
+  clockOnly?: true;
 }
 
 export const ASSETS: readonly CohortAsset[] = [
@@ -84,6 +89,12 @@ export const ASSETS: readonly CohortAsset[] = [
   { symbol: "wMEITx", wrapper: "0xad1b65C8556957cf23d1B5e9accdc449b415fA97", pool: "0x54E89e9acaFb073e7fd8471312E753A661b470C7", mic: "XHKG", noteCapShares: 0 },
   { symbol: "wNVDAx", wrapper: "0xa8ddb5Cd96b5222AFe198316E9A57CAA642850D5", pool: "0x2a2B11730C2b6d99a58034A869dd810D7300a7b2", mic: "XNAS", noteCapShares: 220 },
   { symbol: "wAAPLx", wrapper: "0x943BF64D566c32A2Bcd41AC92FB63C111cC9De8f", pool: "0xc44bd9c8589026D28D1632d7b86b2Efb6cDc8fd2", mic: "XNAS", noteCapShares: 14 },
+  { symbol: "wSPYx", wrapper: "0xE7E553Cd128F0011777323A0b44a7b96EA1CB540", pool: null, mic: "ARCX", noteCapShares: 0, clockOnly: true },
+  { symbol: "wQQQx", wrapper: "0x4C1AE29c159838fC1b224636E28E086EB69101f7", pool: null, mic: "XNAS", noteCapShares: 0, clockOnly: true },
+  { symbol: "wGOOGLx", wrapper: "0xf8c5308F80E459bb53d9EbE689854d9cBb2Caa6f", pool: null, mic: "XNAS", noteCapShares: 0, clockOnly: true },
+  { symbol: "wCRCLx", wrapper: "0xb11134F14d5B94DB60d4599DfdC3bF1bbA2150e8", pool: null, mic: "XNYS", noteCapShares: 0, clockOnly: true },
+  { symbol: "wSPCXx", wrapper: "0x8e2eeD8b8B5E13Ea7BF38e50d7821d2C57309072", pool: null, mic: "XNAS", noteCapShares: 0, clockOnly: true },
+  { symbol: "wTSLAx", wrapper: "0xc3FdBe3A68EE5dE461D30415a8165cf9Aefe1171", pool: null, mic: "XNAS", noteCapShares: 0, clockOnly: true },
 ];
 
 /** The asset the global chip, the hero and the theme follow. */

@@ -30,7 +30,8 @@ export const REGIME_NAMES: readonly RegimeName[] = ["UNKNOWN", "CLOSED", "OVERNI
  */
 export type Glyph = "open" | "shut" | "unknown";
 
-export type Mic = "XHKG" | "XNAS";
+/** XNYS (wCRCLx) and ARCX (wSPYx) joined on 21 Nov 2026; the issuer publishes them with XNAS's sessions and holidays. */
+export type Mic = "XHKG" | "XNAS" | "XNYS" | "ARCX";
 
 /** chain = read from X Layer; api = api.curb.markets; fixture = ?mock=1; override = ?regime=open|shut. */
 export type DataSource = "chain" | "api" | "fixture" | "override";

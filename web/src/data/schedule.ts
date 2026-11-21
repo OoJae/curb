@@ -115,8 +115,12 @@ export const NASDAQ: Venue = {
   },
 };
 
+/**
+ * Every US venue in the cohort runs on NASDAQ's table: the issuer's ARCX and XNYS schedules have exactly XNAS's
+ * sessions and holidays (compared on 21 Nov 2026, when wSPYx and wCRCLx were registered). Only XHKG differs.
+ */
 export function venueFor(mic: Mic): Venue {
-  return mic === "XNAS" ? NASDAQ : HKEX;
+  return mic === "XHKG" ? HKEX : NASDAQ;
 }
 
 // ---------------------------------------------------------------------------------------------

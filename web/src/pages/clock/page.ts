@@ -54,7 +54,7 @@ function hkt(ms: number): string {
   return `${venueClock(ms).label} HKT`;
 }
 
-// ── week strips: the HK week for every row, so all six share one time axis ─────────────────────
+// ── week strips: the HK week for every row, so all twelve share one time axis ─────────────────────
 
 const slotCache = new Map<string, SlotState[]>();
 
