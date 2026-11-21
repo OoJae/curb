@@ -596,6 +596,39 @@ npm the same day: row 243 (a post-fix row) prints `REPRODUCED`, row 41 (a D-16 h
 all 24 rows read from block 76,038,603 (rows 241 to 264, to the 20 Nov 04:50Z lunch rows) reproduced with the
 verifier in this repository.
 
+## MarketClock covers the six US names Morpho lends against — 21 Nov 2026
+
+Morpho's X Layer deployment (`0xeb00C490E888286357dC5B0a35D37D9260D11Ab5`) opened eight xStock/USDC markets on
+4–5 Nov, priced by Chainlink's 24/5 feeds; MarketClock covered two of their collateral tokens. The other six were
+registered from `curb-deployer` (the admin) with `script/registry/register-us6.sh`, which re-checks each row on chain
+and simulates it before sending. `registerAsset` is permanent: MarketClock has no way to remove an asset.
+
+| wrapper | raw (`asset()`) | MIC | tx | block |
+|---|---|---|---|---|
+| wSPYx `0xE7E553Cd…CB540` | `0x90A2a4c7…dD48` | ARCX | `0xe86ff2b0f60d346f6c329f1ef0be73b00e0e8d3567509d2faf4c52e25324537c` | 76,502,117 |
+| wQQQx `0x4C1AE29c…01f7` | `0xa753A739…50af` | XNAS | `0xd20e5c8e858c00f05b6c06a6033fc8391f37cead70d7fa61a07b69ee498bfda1` | 76,502,124 |
+| wGOOGLx `0xf8c5308F…Caa6f` | `0xe92f673C…803F` | XNAS | `0xc0ceaf20f0d09c66e2d1a8005a624bd3d1c420c42704d650be5342026cfd06c1` | 76,502,130 |
+| wCRCLx `0xb11134F1…50e8` | `0xfEbDEd1B…DeCEB` | XNYS | `0xddb1354144fc5cff7fedb9f531837143266417ffea3042e44fc81910afd85ae0` | 76,502,137 |
+| wSPCXx `0x8e2eeD8b…9072` | `0x68fa48B1…Ce28` | XNAS | `0x23c5c932526a3bc089b4f3efb1fb81c5eda6257beacf3ad92c592108e279e748` | 76,502,143 |
+| wTSLAx `0xc3FdBe3A…1171` | `0x8aD3c73F…7Cf0` | XNAS | `0x45ce781b04396cc2000bfb411412b27416f66dbe173146c427dac67065a030e5` | 76,502,149 |
+
+All `hoursMode` 1 (TwentyFourFive), as wNVDAx and wAAPLx. Each MIC is the issuer's own `trading.exchange.mic`; the
+issuer's ARCX and XNYS schedules have the same sessions and holidays as XNAS (checked that day). The attestor reads
+only the MIC from the registry and takes the hours from the issuer. About 76,900 gas each at 0.02 gwei.
+
+**Checked after:** host A logged `cohort-changed` 6 → 7 at 14:26:00Z and 7 → 12 at 14:27:03Z, and its round at
+14:27:10Z (`0x02d1aa09…d464`, block 76,502,194) carried all twelve claims, every one CLOSED for the weekend; host B
+followed the same cohort and witnessed that round. `regime()` reads CLOSED and `MarketClockStatus.marketStatus` 5 for
+the new wrappers, with the next transition at the Monday 01:00Z reopen, as for wNVDAx. The keeper is unaffected: it
+reads the registry at boot and marks only wrappers with a Scorecard price source, which the six do not have, so they
+get no Scorecard rows. curb-asp re-reads the registry every 10 minutes and lists them with `pool: null`.
+
+**Cost.** A heartbeat round now uses about 474,800 gas against 253,700 with six assets. At about 270 rounds a day
+host A's 0.133 OKB lasts to about 11 Jan 2027; it needs about 0.06 OKB to run to the end of January.
+
+**Not yet deployed:** curb-mcp (its input whitelist is fixed in `services/mcp/src/assets.ts`; updated in `eb4eef6`)
+and the site (`web/src/data/addresses.ts`).
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
