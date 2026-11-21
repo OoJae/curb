@@ -626,8 +626,11 @@ get no Scorecard rows. curb-asp re-reads the registry every 10 minutes and lists
 **Cost.** A heartbeat round now uses about 474,800 gas against 253,700 with six assets. At about 270 rounds a day
 host A's 0.133 OKB lasts to about 11 Jan 2027; it needs about 0.06 OKB to run to the end of January.
 
-**Not yet deployed:** curb-mcp (its input whitelist is fixed in `services/mcp/src/assets.ts`; updated in `eb4eef6`)
-and the site (`web/src/data/addresses.ts`).
+**Deployed the same day:** curb-mcp (`railway up . --path-as-root --service curb-mcp --ci` from `services/mcp`,
+Railway project `curb-mcp`, deployment `d0a7b8b0`; its input whitelist in `services/mcp/src/assets.ts`, `eb4eef6`).
+`curb_regime` with no symbol answered twelve assets on their own MICs. The site (`vercel --prod` from `web/`,
+deployment `curb-3i6sp9y8m`, from `a91da70`): /clock shows twelve rows; `venueFor` puts ARCX and XNYS on the US
+table instead of falling through to HKEX; the Scorecard page reads `priceNow` only for its own cohort.
 
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
