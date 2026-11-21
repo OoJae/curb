@@ -61,22 +61,31 @@ read -r -p "Type REGISTER to send: " ok
 [ "$ok" = "REGISTER" ] || { echo "Not sent."; exit 1; }
 
 # macOS ships bash 3.2, where "${arr[@]}" of an empty array is an unbound-variable error under set -u,
-# so the optional password file is passed through a branch, not an array.
+# so the optional password file is passed through a branch, not an array. cast's output is NOT captured:
+# with --json, cast 1.8 writes even its errors to stdout, which a $(...) would swallow. It prints straight to
+# the terminal, and success is decided by reading MarketClock afterwards, not by parsing cast.
 send() {
   if [ -n "${PWFILE:-}" ]; then
-    cast send --rpc-url "$RPC" --account "$ACCOUNT" --password-file "$PWFILE" --json "$CLOCK" \
+    cast send --rpc-url "$RPC" --account "$ACCOUNT" --password-file "$PWFILE" "$CLOCK" \
       'registerAsset(address,address,bytes4,uint8)' "$@"
   else
-    cast send --rpc-url "$RPC" --account "$ACCOUNT" --json "$CLOCK" \
+    cast send --rpc-url "$RPC" --account "$ACCOUNT" "$CLOCK" \
       'registerAsset(address,address,bytes4,uint8)' "$@"
   fi
 }
 for row in "${todo[@]}"; do
   read -r sym w raw m <<< "$row"
-  out=$(send "$w" "$raw" "$m" "$HOURS")
-  st=$(printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("status"), d.get("transactionHash"), int(d.get("blockNumber"),16))')
-  echo "  $sym  $st"
-  case "$st" in 0x1*|1*) ;; *) echo "$sym: transaction did not succeed; stopping."; exit 1;; esac
+  echo
+  echo "Sending $sym ..."
+  if ! send "$w" "$raw" "$m" "$HOURS"; then
+    echo "$sym: cast send failed (its message is above). Nothing after this was sent; rerun to retry."
+    exit 1
+  fi
+  if [ "$(cast call --rpc-url "$RPC" "$CLOCK" 'assets(address)(address,bytes4,uint8,bool)' "$w" | tail -1)" != "true" ]; then
+    echo "$sym: MarketClock does not show it registered after the send; stopping."
+    exit 1
+  fi
+  echo "$sym: registered (checked on MarketClock)"
 done
 
 after=$(cast call --rpc-url "$RPC" "$CLOCK" 'registeredCount()(uint256)')
