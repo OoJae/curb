@@ -124,7 +124,7 @@ test("a call that omits `arguments` works for the tools whose arguments are all 
   await s.ready;
   const regime = await (await rpc(s.base(), "tools/call", { name: "curb_regime" })).json() as { result: { isError?: boolean; content: { text: string }[]; structuredContent: { assets: unknown[] } } };
   assert.equal(regime.result.isError, undefined, regime.result.content[0].text);
-  assert.equal(regime.result.structuredContent.assets.length, 6);
+  assert.equal(regime.result.structuredContent.assets.length, 12);
   // No network here, so the terms come from the fallback, and the answer says so.
   const paid = await (await rpc(s.base(), "tools/call", { name: "curb_paid_services" })).json() as { result: { isError?: boolean; content: { text: string }[]; structuredContent: { termsSource: { read: string } } } };
   assert.equal(paid.result.isError, undefined, paid.result.content[0].text);

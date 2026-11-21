@@ -5,7 +5,7 @@
  *
  * Every tool is read-only and free. None of them signs, sends a transaction or pays; curb_paid_services
  * only describes how a wallet holder would. Arguments are checked twice: by the schema (shape and length),
- * then by assets.ts (the symbol must be one of the six), so nothing a caller types reaches an upstream.
+ * then by assets.ts (the symbol must be one of the twelve), so nothing a caller types reaches an upstream.
  *
  * A thrown error becomes an MCP tool error (isError) with its message, which the SDK does for us; `run` adds
  * a deadline, so a hung upstream answers "timed out" instead of holding the request open, and logs the
@@ -39,7 +39,8 @@ export interface ToolDeps extends NextReopenDeps {
 }
 
 const SYMBOL_HELP =
-  "One of wTCENTx, wXIAOx, wMEITx, wSHEINx (Hong Kong, XHKG) or wNVDAx, wAAPLx (US, XNAS). The issuer ticker (TCENTx) " +
+  "One of wTCENTx, wXIAOx, wMEITx, wSHEINx (Hong Kong, XHKG); wNVDAx, wAAPLx, wQQQx, wGOOGLx, wSPCXx, wTSLAx (US, " +
+  "XNAS); wCRCLx (US, XNYS); wSPYx (US, ARCX). The issuer ticker (TCENTx) " +
   "or the wrapper address also works, in any case.";
 const symbol = z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9]+$/, "letters and digits only").describe(SYMBOL_HELP);
 
@@ -71,7 +72,7 @@ export const TOOLS: readonly ToolSpec[] = [
       "primary market is shut the issuer's order cap is zero, creation and redemption stop, and the pool price is no longer " +
       "held to the underlying share. Returns status OPEN / SHUT / UNKNOWN, the regime code in words, the issuer's order cap " +
       "in USD, any corporate-action blackout, the next published schedule boundary, and when the attestor last read the " +
-      "issuer, all at one block. Omit symbol for all six assets.",
+      "issuer, all at one block. Omit symbol for all twelve assets.",
     inputSchema: { symbol: symbol.optional() },
     cacheS: 5,
     run: async (d, a) => readRegimes(d.chain, a.symbol === undefined ? ASSETS : [requireAsset(String(a.symbol))]),
@@ -176,7 +177,7 @@ export function buildServer(deps: ToolDeps, caches: Map<string, TtlCache<object>
     {
       instructions:
         "Curb reports whether a tokenized stock's home market is open (MarketClock), when it reopens, and how Curb's reopen " +
-        "marks were graded on chain (Scorecard), for six xStock wrappers on X Layer. Before trading, lending against or " +
+        "marks were graded on chain (Scorecard), for twelve xStock wrappers on X Layer. Before trading, lending against or " +
         "liquidating one of them, call curb_regime: SHUT means creation and redemption are off and the pool price is not " +
         "held to the underlying share, and UNKNOWN means MarketClock cannot vouch either way, so treat it as SHUT. Every " +
         "answer names the block or time it was read at.",

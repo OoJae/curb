@@ -113,7 +113,7 @@ export function landing(publicUrl: string) {
     name: "curb-mcp",
     description:
       "A Model Context Protocol server for Curb: whether a tokenized stock's home market is open, when it reopens, and how " +
-      "Curb's reopen marks were graded on chain, for six xStock wrappers on X Layer. Read-only, free, no key.",
+      "Curb's reopen marks were graded on chain, for twelve xStock wrappers on X Layer. Read-only, free, no key.",
     mcp: { url: `${publicUrl}/mcp`, transport: "streamable-http (stateless, JSON responses)", protocol: "Model Context Protocol" },
     connect: {
       claudeCode: `claude mcp add --transport http curb ${publicUrl}/mcp`,

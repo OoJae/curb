@@ -23,7 +23,7 @@ export class TtlCache<T> {
     const entry = { atMs: this.now(), p: load() };
     this.entries.set(key, entry);
     entry.p.catch(() => { if (this.entries.get(key) === entry) this.entries.delete(key); });
-    // Keys are drawn from a fixed table (six assets, bounded limits), so this only trims stale entries.
+    // Keys are drawn from a fixed table (twelve assets, bounded limits), so this only trims stale entries.
     if (this.entries.size > this.maxEntries) {
       for (const [k, v] of this.entries) if (this.now() - v.atMs >= this.ttlMs) this.entries.delete(k);
     }

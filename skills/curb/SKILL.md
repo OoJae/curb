@@ -1,6 +1,6 @@
 ---
 name: curb
-description: Check whether a tokenized stock's home market is open before acting on it. Use when trading, pricing, lending against, liquidating or settling an xStock wrapper on X Layer (wTCENTx, wXIAOx, wMEITx, wSHEINx, wNVDAx, wAAPLx, or their tickers TCENTx, NVDAx, ...), when asked whether Hong Kong or US primary markets are open for these tokens, when they reopen, how Curb's reopen marks were graded, what CurbCredit would lend, or how to buy Curb's closure calendar over x402 with onchainos and verify it.
+description: Check whether a tokenized stock's home market is open before acting on it. Use when trading, pricing, lending against, liquidating or settling an xStock wrapper on X Layer (wTCENTx, wXIAOx, wMEITx, wSHEINx, wNVDAx, wAAPLx, wSPYx, wQQQx, wGOOGLx, wCRCLx, wSPCXx, wTSLAx, or their tickers TCENTx, NVDAx, ...), when asked whether Hong Kong or US primary markets are open for these tokens, when they reopen, how Curb's reopen marks were graded, what CurbCredit would lend, or how to buy Curb's closure calendar over x402 with onchainos and verify it.
 ---
 
 # Curb
@@ -36,7 +36,7 @@ Without MCP, read the contract directly (examples at the end).
 
 ## Before you act on one of these tokens: `curb_regime`
 
-Call `curb_regime` with the symbol (or with none for all six) before a trade, a quote, a loan, a liquidation or
+Call `curb_regime` with the symbol (or with none for all twelve) before a trade, a quote, a loan, a liquidation or
 a settlement that depends on the token tracking its share.
 
 - **OPEN**: a known regime and a non-zero cap. Creation and redemption are available; arbitrage can hold the

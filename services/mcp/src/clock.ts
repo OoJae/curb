@@ -68,7 +68,8 @@ export interface StatusInput {
  */
 export function statusOf(i: StatusInput): { status: Status; primaryMarketOpen: boolean; explanation: string } {
   const r = describeRegime(i.regime);
-  const venue = i.mic === "XHKG" ? "Hong Kong (HKEX)" : i.mic === "XNAS" ? "the US (Nasdaq)" : i.mic;
+  const venue = i.mic === "XHKG" ? "Hong Kong (HKEX)" : i.mic === "XNAS" ? "the US (Nasdaq)"
+    : i.mic === "XNYS" ? "the US (NYSE)" : i.mic === "ARCX" ? "the US (NYSE Arca)" : i.mic;
   let status: Status;
   let explanation: string;
   if (r.name === "UNKNOWN" || r.name === "UNRECOGNISED") {
