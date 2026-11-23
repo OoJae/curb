@@ -7,6 +7,7 @@
  * the blocks named beside them (test/fork/ReplayHONx.t.sol pins the same ones).
  */
 import { test } from "node:test";
+import { core } from "./http/guidance.ts";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -558,7 +559,7 @@ test("before the first sweep: the routes say unavailable rather than 'no actions
 
   const off = await serve(null);
   try {
-    assert.deepEqual((await off.get("/v1/corporate-actions?symbol=HONx")).body, { error: "corporate-actions-not-configured" });
+    assert.deepEqual(core((await off.get("/v1/corporate-actions?symbol=HONx")).body), { error: "corporate-actions-not-configured" });
     assert.equal((await off.get("/healthz")).body.corporateActions, null);
   } finally { await off.close(); }
 });

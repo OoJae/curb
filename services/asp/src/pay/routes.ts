@@ -29,6 +29,8 @@ export interface PricedRoute {
   summary: string;
   description: string;
   query: string;
+  /** A request that works, with every parameter shown: the listing's reqExample and an error body's `example`. */
+  example: string;
 }
 
 export const PRICED_ROUTES: readonly PricedRoute[] = [
@@ -45,6 +47,7 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
       "issuer's published schedule and limits plus its observed cut to zero 5 minutes before each period ends. " +
       "Includes the current period and cap, and the hashes of the exact issuer responses used.",
     query: "symbol (optional, default wTCENTx; see /v1/assets), horizonDays (1-14, default 7)",
+    example: "/v1/closure-calendar?symbol=wTCENTx&horizonDays=7",
   },
   {
     key: "GET /v1/accuracy-record",
@@ -61,6 +64,7 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
       "up to limit, each with its mark, both baselines, the reopen price the contract read from the pool, and the three " +
       "errors in basis points.",
     query: "symbol (optional, e.g. wTCENTx; omit for every graded asset; see /v1/assets), limit (1-200, default 50)",
+    example: "/v1/accuracy-record?symbol=wTCENTx&limit=20",
   },
   {
     key: "GET /v1/discount-curve",
@@ -79,6 +83,7 @@ export const PRICED_ROUTES: readonly PricedRoute[] = [
       "traded in that window. Grouped into five duration buckets with counts, and order statistics only once a bucket " +
       "holds enough closures. No fitted curve: fit is always null.",
     query: "symbol (optional, e.g. wTCENTx; omit for every graded asset), minMinutes (30-10080, default 30; shorter closures are listed but left out of the buckets)",
+    example: "/v1/discount-curve?symbol=wTCENTx&minMinutes=30",
   },
 ];
 

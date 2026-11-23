@@ -4,6 +4,7 @@
  * fixed cohort. Nothing here touches the network.
  */
 import { test } from "node:test";
+import { core } from "./http/guidance.ts";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -380,7 +381,7 @@ test("verified, but the answer cannot be built: 503 and the payment is NEVER set
     h.broker.onVerify = () => h.advance(31 * 60_000);
     const r = await fetch(`${h.base}/v1/closure-calendar?symbol=wTCENTx`, { headers: { ...API, "PAYMENT-SIGNATURE": header } });
     assert.equal(r.status, 503);
-    assert.deepEqual(await r.json(), { error: "issuer-unavailable", lastGoodAsOfMs: T0 });
+    assert.deepEqual(core(await r.json()), { error: "issuer-unavailable", lastGoodAsOfMs: T0 });
     assert.ok(h.events.includes("verify"));
     assert.ok(!h.events.includes("settle"), "settle was never called");
     assert.equal(r.headers.get("x-curb-receipt"), null);
@@ -449,7 +450,7 @@ test("one payment buys one answer: the same header again is 409 with its receipt
     forged.payload.signature = "0x" + "77".repeat(65);
     const r = await fetch(`${h.base}/v1/closure-calendar?symbol=wTCENTx`, { headers: { ...API, "PAYMENT-SIGNATURE": Buffer.from(JSON.stringify(forged)).toString("base64") } });
     assert.equal(r.status, 409);
-    assert.deepEqual(Object.keys(await r.json()).sort(), ["detail", "error"]);
+    assert.deepEqual(Object.keys(await r.json()).sort(), ["detail", "docs", "error", "message"]);
     assert.deepEqual(h.events, ["supported", "verify", "build", "settle"], "one verify, one settle");
     assert.equal(h.receipts().length, 1);
   } finally { await h.close(); }
@@ -504,7 +505,7 @@ test("free refusals come before any challenge: bad input, unknown symbol, issuer
     let r = await get("/v1/closure-calendar?symbol=wNOPEx");
     assert.equal(r.status, 400);
     assert.equal(r.headers.get("payment-required"), null);
-    assert.deepEqual(await r.json(), { error: "unknown-symbol", symbol: "wNOPEx", valid: ["wTCENTx", "wSHEINx"] });
+    assert.deepEqual(core(await r.json()), { error: "unknown-symbol", symbol: "wNOPEx", valid: ["wTCENTx", "wSHEINx"] });
 
     // No symbol is the default asset, not a refusal: OKX's marketplace probes with no parameters.
     for (const q of ["", "?symbol=", "?symbol=wTCENTx&horizonDays="]) {
@@ -526,7 +527,7 @@ test("free refusals come before any challenge: bad input, unknown symbol, issuer
     r = await get("/v1/closure-calendar?symbol=wTCENTx");
     assert.equal(r.status, 503);
     assert.equal(r.headers.get("payment-required"), null);
-    assert.deepEqual(await r.json(), { error: "issuer-unavailable", lastGoodAsOfMs: T0 });
+    assert.deepEqual(core(await r.json()), { error: "issuer-unavailable", lastGoodAsOfMs: T0 });
     assert.deepEqual(h.events, ["supported"]);
   } finally { await h.close(); }
 });
@@ -563,7 +564,7 @@ test("missing credentials: every priced route is 503 payments-not-configured, th
     for (const r of PRICED_ROUTES) {
       const res = await fetch(`${h.base}${r.path}?symbol=wTCENTx`, { headers: { ...API, "PAYMENT-SIGNATURE": "e30=" } });
       assert.equal(res.status, 503, r.path);
-      assert.deepEqual(await res.json(), { error: "payments-not-configured" });
+      assert.deepEqual(core(await res.json()), { error: "payments-not-configured" });
       assert.equal(res.headers.get("payment-required"), null);
     }
     for (const path of ["/", "/healthz", "/v1/assets", "/.well-known/x402"]) {
@@ -677,7 +678,7 @@ test("every response carries HSTS, nosniff, no-referrer and a CSP fitted to its 
     h.state.cohort = undefined as unknown as Asset[];   // any unexpected throw inside a route
     const broken = await fetch(`${h.base}/v1/assets`);
     assert.equal(broken.status, 500);
-    assert.deepEqual(await broken.json(), { error: "internal" });
+    assert.deepEqual(core(await broken.json()), { error: "internal" });
     check(broken, "500");
   } finally { await h.close(); }
 });
@@ -802,13 +803,13 @@ test("the Scorecard routes refuse bad input for free, before any challenge", asy
       return r.json();
     };
     for (const bad of ["0", "201", "abc", "1.5", "-3"]) {
-      assert.deepEqual(await refusal(`/v1/accuracy-record?limit=${bad}`, 400), { error: "bad-limit", limit: bad, min: 1, max: 200 });
+      assert.deepEqual(core(await refusal(`/v1/accuracy-record?limit=${bad}`, 400)), { error: "bad-limit", limit: bad, min: 1, max: 200 });
     }
     for (const bad of ["29", "10081", "x"]) {
       assert.equal((await refusal(`/v1/discount-curve?minMinutes=${bad}`, 400)).error, "bad-min-minutes");
     }
     for (const path of ["/v1/accuracy-record", "/v1/discount-curve"]) {
-      assert.deepEqual(await refusal(`${path}?symbol=wNOPEx`, 400), { error: "unknown-symbol", symbol: "wNOPEx", valid: ["wTCENTx", "wSHEINx"] });
+      assert.deepEqual(core(await refusal(`${path}?symbol=wNOPEx`, 400)), { error: "unknown-symbol", symbol: "wNOPEx", valid: ["wTCENTx", "wSHEINx"] });
       const none = await refusal(`${path}?symbol=wSHEINx`, 400);
       assert.equal(none.error, "no-graded-record", "no price source: an empty record by construction is not sold");
       assert.deepEqual(none.graded, ["wTCENTx"]);
@@ -825,7 +826,7 @@ test("no readable record is a free 503; a record that goes dark while the Broker
     h.broker.onVerify = () => h.advance(31 * 60_000);   // past the 30-minute outage line by build time
     const r = await fetch(`${h.base}/v1/accuracy-record`, { headers: { ...API, "PAYMENT-SIGNATURE": header } });
     assert.equal(r.status, 503);
-    assert.deepEqual(await r.json(), { error: "record-unavailable", lastGoodAsOfBlock: 71_450_876, lastGoodReadAtMs: T0 });
+    assert.deepEqual(core(await r.json()), { error: "record-unavailable", lastGoodAsOfBlock: 71_450_876, lastGoodReadAtMs: T0 });
     assert.ok(h.events.includes("verify"));
     assert.ok(!h.events.includes("settle"), "settle was never called");
     assert.deepEqual(h.receipts(), []);
@@ -835,7 +836,7 @@ test("no readable record is a free 503; a record that goes dark while the Broker
       const res = await fetch(`${h.base}${path}`, { headers: API });
       assert.equal(res.status, 503, path);
       assert.equal(res.headers.get("payment-required"), null);
-      assert.deepEqual(await res.json(), { error: "record-unavailable", lastGoodAsOfBlock: null, lastGoodReadAtMs: null });
+      assert.deepEqual(core(await res.json()), { error: "record-unavailable", lastGoodAsOfBlock: null, lastGoodReadAtMs: null });
     }
     const health = await (await fetch(`${h.base}/healthz`)).json();
     assert.equal(health.scorecard.outage, true);
@@ -862,7 +863,7 @@ test("with no Scorecard configured, its routes stay listed and answer 503 not-ye
       const r = await fetch(`${h.base}${path}`, { headers: API });
       assert.equal(r.status, 503);
       assert.equal(r.headers.get("payment-required"), null, "no challenge for an answer that does not exist");
-      assert.deepEqual(await r.json(), { error: "not-yet-available", route: path });
+      assert.deepEqual(core(await r.json()), { error: "not-yet-available", route: path });
     }
     const wk = await (await fetch(`${h.base}/.well-known/x402`)).json();
     assert.deepEqual(wk.routes.map((r: { available: boolean }) => r.available), [true, false, false]);

@@ -19,6 +19,7 @@
  */
 import type { ServerResponse } from "node:http";
 import type { HTTPResponseInstructions } from "@okxweb3/x402-core/server";
+import { withGuidance } from "./guidance.ts";
 
 export const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
@@ -50,7 +51,8 @@ export function send(res: ServerResponse, status: number, body: string | Uint8Ar
 }
 
 export function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
-  send(res, status, JSON.stringify(body), { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
+  // An error body also says what to do about it (guidance.ts); a success body is sent as given.
+  send(res, status, JSON.stringify(withGuidance(status, body)), { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
 }
 
 /** Apply the SDK's instructions verbatim: its status, its headers (the challenge lives in PAYMENT-REQUIRED), its body. */

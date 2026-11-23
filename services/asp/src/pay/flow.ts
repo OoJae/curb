@@ -54,6 +54,7 @@ import type { PrecheckRefusal } from "./precheck.ts";
 import type { NodeHttpAdapter } from "../http/adapter.ts";
 import { applyInstructions, send, sendJson } from "../http/respond.ts";
 import type { Log } from "../log.ts";
+import { withRouteHelp } from "../http/guidance.ts";
 
 export interface PricedDeps {
   payments: Payments;
@@ -140,7 +141,7 @@ export async function servePriced(res: ServerResponse, adapter: NodeHttpAdapter,
 
   // 3. Free checks on the request itself.
   const accepted = h.accept(adapter, d.now());
-  if (!accepted.ok) return sendJson(res, accepted.status, accepted.body);
+  if (!accepted.ok) return sendJson(res, accepted.status, withRouteHelp(accepted.status, accepted.body, route));
   if (!p.ready) return sendJson(res, 503, { error: "payments-unavailable" });
 
   if (!presented) return challenge(res, sdkAdapter, d);

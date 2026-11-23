@@ -5,6 +5,7 @@
  * x402-core resource server, a stub Broker, and an in-memory USD₮0 for the chain's side of a payment.
  */
 import { test } from "node:test";
+import { core } from "./http/guidance.ts";
 import assert from "node:assert/strict";
 import { createServer, request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -422,7 +423,7 @@ test("FIXED: a Broker that never answers verify is a 503 at the verify deadline,
     assert.equal(r.status, 503);
     assert.ok(Date.now() - started < 2_000);
     assert.equal(r.headers.get("retry-after"), "10");
-    assert.deepEqual(await r.json(), { error: "broker-unavailable", stage: "verify", timedOut: true, detail: "the payment was not charged; retry" });
+    assert.deepEqual(core(await r.json()), { error: "broker-unavailable", stage: "verify", timedOut: true, detail: "the payment was not charged; retry" });
     assert.ok(!h.broker.events.includes("settle"));
     assert.deepEqual(h.receipts(), []);
     assert.equal(h.ledger.lookup(authorizationKey({ payer: BUYER, nonce: NONCE })).state, "free", "the payment can be presented again");
