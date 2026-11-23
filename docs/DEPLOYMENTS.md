@@ -658,8 +658,26 @@ switched back to "Account 2" after). curb-asp logged `paid`, receipt `0x62494edd
 `0x0dec59feb6201b13bc34b307b5d9ed1c72580c628008c4a87ca662ed90d00919`, block 76,693,720, status 1: 10000 USD₮0 units
 from `0x055b…7105` to curb-revenue `0x277c…6068`. It proves the rail, not demand.
 
-**Still to do before resubmitting:** `inputSchema` and `reqExample` on each A2MCP service (registered in Sept,
-before those fields existed) and error bodies that say what to change.
+**Error guidance, the same evening:** curb-asp `2960eeb`, `railway up services/asp --path-as-root --service curb-asp --ci`.
+Every JSON error body keeps its `error` code and fields and gains `message` (what was wrong, what to change, and
+whether anything was charged) and `docs`; a priced route's own parameter refusals also name the route's
+`parameters` and a working `example`. 166 tests in four timezones. Live: `?symbol=GME` and `?horizonDays=99` get the
+guidance, the bare call still 402s, `/healthz` payments ready.
+
+**The listing, updated and resubmitted.** OKX already stored a schema per service, but with no descriptions, the
+numeric parameters as strings, and no `symbol` on the accuracy record. From "Account 1", after `agent a2mcp invoke
+--verify` on each (callable; fee quotes 0.01, 0.05, 0.1 USDT) and `validate-listing` (pass, no findings), one
+`agent update` (tx `0xa82e9cc410a602216fd887490983cb726affd8239e1bc869483b59798384d8c9`) set, with names,
+descriptions, endpoints, prices and GET unchanged:
+
+| service | required | optional | reqExample |
+|---|---|---|---|
+| Closure Calendar (40892) | `symbol` string, `horizonDays` integer 1–14 | | `{"symbol":"wTCENTx","horizonDays":7}` |
+| Reopen Price Accuracy Record (40893) | `limit` integer 1–200 | `symbol` string (graded assets) | `{"limit":50}` |
+| Closure Discount by Duration (40894) | `symbol` string (graded assets), `minMinutes` integer 30–10080 | | `{"symbol":"wTCENTx","minMinutes":30}` |
+
+Each property carries a description with its allowed values and an example. `agent activate --preferred-language
+en-US` then resubmitted the agent: `submitApproval` success, and `get-my-agents` reads "Listing under review".
 
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
