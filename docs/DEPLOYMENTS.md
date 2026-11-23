@@ -632,6 +632,35 @@ Railway project `curb-mcp`, deployment `d0a7b8b0`; its input whitelist in `servi
 deployment `curb-3i6sp9y8m`, from `a91da70`): /clock shows twelve rows; `venueFor` puts ARCX and XNYS on the US
 table instead of falling through to HKEX; the Scorecard page reads `priceNow` only for its own cohort.
 
+## OKX.AI listing rejected: the Broker key's trial plan had expired — 23 Nov 2026
+
+On 23 Nov OKX.AI set agent #13869 to "Listing rejected" (not listed), with the same reason on all three services:
+a buyer paid and nothing was delivered; document each call parameter's name, type and an example; make the error
+messages guide the caller; resubmit. At 17:16Z six paid calls, two per route, had each failed in curb-asp with
+`verify-error … Broker verify failed: OKX verify failed: 401`; the buyer got `503 broker-unavailable` ("the payment
+was not charged") and nothing settled.
+
+**Cause.** The Onchain OS developer project behind curb-asp's key (dev portal, developer wallet `0xacaf…e490`,
+"Project 01") was on the Trade API **Trial plan, 60-day validity**, created about 22 Sept; it expired between the
+16 Nov boot (whose `/supported` handshake passed) and 23 Nov, and OKX disabled the project's API keys. The Broker
+then answered every signed call with HTTP 401, code `50125` "Your API key or regions have no access to current
+services" (a fake key from the same network gets `50114`, so the key was known and only its access was gone).
+`script/asp/okx-key-check.mjs` reproduces both calls and prints only OKX's verdict, never the key.
+
+**Fix.** The user moved the developer account to the **Startup** tier (no monthly fee; its API fee is a revenue
+share on trades routed through the Trade API, which Curb does not use) and accepted OKX's OnchainOS Technical
+Service Agreement. The same key works again: `/supported` 200, `/verify` reaches payment validation (`30001 invalid
+params` on an empty payment). No new key, no Railway change.
+
+**Checked end to end, 23 Nov 19:39Z:** a team-to-team $0.01 call, `onchainos payment quote` then `payment pay` on
+`/v1/closure-calendar?symbol=wTCENTx&horizonDays=7` from the Agentic Wallet `0x055b…7105` (CLI account "Account 1",
+switched back to "Account 2" after). curb-asp logged `paid`, receipt `0x62494edd…0254`; settlement
+`0x0dec59feb6201b13bc34b307b5d9ed1c72580c628008c4a87ca662ed90d00919`, block 76,693,720, status 1: 10000 USD₮0 units
+from `0x055b…7105` to curb-revenue `0x277c…6068`. It proves the rail, not demand.
+
+**Still to do before resubmitting:** `inputSchema` and `reqExample` on each A2MCP service (registered in Sept,
+before those fields existed) and error bodies that say what to change.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
