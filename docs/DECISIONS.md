@@ -1128,3 +1128,61 @@ retry inside the window removes the loss.
 field, `not settled; settle window closed <deadline> (TooLate: this row can no longer be graded)`; for row 151 the
 deadline is `2026-10-28T07:35:00Z` (from `curb-verify` 0.2.0, on npm since 20 Nov 2026;
 checked that day). No row is re-committed or re-marked; row 151 keeps its mark and has no grade.
+
+---
+
+## D-18 — One failed issuer fetch no longer writes an asset shut (26 Nov 2026)
+
+**Status: FIXED on both hosts, 26 Nov 2026. No derivation method changed; every round, before and after, re-derives
+under `derive/3` with the published verifiers.**
+
+**What happened.** The attestor fetches each asset's issuer object every tick with a 3 s limit and one retry. When
+both attempts for ONE asset ran out, that tick had no body for it; `derive()` reads "no body" as `CLOSED`, cap 0,
+flag `source-unavailable`; host A wrote the asset shut, and two ticks later (confirm-before-open holds one) wrote it
+open again. The asset's primary market had not shut. Measured from host A's log and published bundles, 19–26 Nov:
+
+- 79 rounds carried `source-unavailable`, 80 failed asset fetches in all, every one of them the 3 s request limit hit
+  twice in a row (`AbortError`, 3.000–3.004 s per attempt), with the other assets in the same tick answered normally;
+- they took an open asset to shut 74 times: 68 for one 30 s tick (shut for about a minute on chain) and 6 for one 5 s
+  tick inside a dense window (about 17 s); none lasted two ticks;
+- they rose through the week, spread over every asset: 3 such claims on Fri 20 Nov, with six assets, then 8, 23 and
+  43 on Mon–Wed 23–25 Nov, with twelve (the cohort doubled on 21 Nov). The keeper raised 32 `phantom-closure` alarms
+  in six days, against about one a day before. No Scorecard row came from one (D-15 refuses a cut the schedule does
+  not confirm), but a contract reading `primaryCapNow()` in that minute read 0.
+
+The record is conservative and was wrong: `source-unavailable` was true of the fetch and the closure it wrote was
+false 74 times out of 74.
+
+**The change (`services/attestor/src/carry.ts`).** `derive/3` has always accepted a body up to `LAST_KNOWN_GOOD_MS`
+(60 s) older than the round's `evaluatedAtMs`, and every round commits that window in its PARAMS leaf
+(`lastKnownGoodMs: 60000`). Nothing ever passed it such a body. Now, when this tick's fetch of an asset fails in
+transport (no answer, 429 or 5xx) and the issuer's most recent answer for it was a good one, that answer is used
+again, with its own fetch time, while it is inside the window. Three limits:
+
+- **Not near a scheduled change.** From 7 minutes before to 3 minutes after a boundary of the asset's own venue
+  schedule (the window the attestor already polls densely in), or when the body's own `nextChangeAt` is within 7
+  minutes or past, a failed fetch closes the asset exactly as before. The issuer cuts capacity 5 minutes before a
+  session ends; that is when an old answer is most likely to be wrong.
+- **Only "no news".** A 4xx, or a 200 whose body the shape check withholds, is an answer: it is not replaced, and it
+  ends the carry for that asset until the next good fetch.
+- **Only inside the window.** A second failed 30 s tick is past 60 s, so the asset closes then, as before.
+
+`CARRY_LAST_GOOD=false` turns it off without a code change.
+
+**What a verifier sees, and why no method version changed.** The derivation is untouched: same function, same
+committed parameters, same method id. The bundle carries the reused body under the asset's URL, and its FETCH_LOG
+leaf holds the reused fetch's own entry (`ok: true`, its original sequence number and times, older than the tick)
+followed by this tick's failed attempts. The offline verifier takes the latest successful fetch of each URL, which is
+that entry, and `derive/3` finds it fresh. Checked before the deploy: seven rounds built against the live issuer and
+chain with failures injected (timeouts, a 503, a 404, and a failure lasting past the window) all print `REPRODUCED`
+with `curb-verify` 0.2.0 from npm, and a carried one with 0.1.0. A reader who wants to know whether a round reused an
+answer looks for an asset URL whose last `ok` entry in the FETCH_LOG is followed by failed ones.
+
+**The cost.** A change the issuer makes away from every scheduled boundary (an unscheduled halt) during a tick whose
+fetch of that asset fails is written one tick later than it would have been: at most 60 s after the answer that was
+reused. A peer on the same venue and hours mode reporting the primary shut still closes it in the same round (D-9's
+cohort rule sees a reused answer as it sees any other).
+
+**What it does not fix.** An outage of the issuer's API for longer than the window still closes every asset it
+covers, which is the intended reading of "we cannot see the issuer". The 23-minute episode of 16 Nov
+(DEPLOYMENTS) was of that kind and would still be written.

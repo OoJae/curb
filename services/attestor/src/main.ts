@@ -36,6 +36,8 @@ import type { CohortEntry, RoundKind } from "./round.ts";
 import { toAttestBatchArgs } from "./derive.ts";
 import type { PriorObservation } from "./derive.ts";
 import { boundaries } from "./calendar.ts";
+import { carryLastGood, rememberGood } from "./carry.ts";
+import type { GoodFetch } from "./carry.ts";
 import type { ExchangeSchedule } from "./regime.ts";
 import { loadOrCreateKey } from "./tx/keys.ts";
 import { Sender, RevertedInSimulation, PendingUnresolved, normalizeDataSuffix, builderCodes } from "./tx/sender.ts";
@@ -70,6 +72,7 @@ export function loadConfig() {
   const rawMode = (env("MODE") ?? "shadow").trim();
   if (!(MODES as readonly string[]).includes(rawMode)) errors.push(`MODE must be one of ${MODES.join("|")}, got ${JSON.stringify(rawMode)}`);
   const zero = "0x0000000000000000000000000000000000000000";
+  const rawCarry = (env("CARRY_LAST_GOOD") ?? "true").trim().toLowerCase();
   const cfg = {
     chainId: Number(env("CHAIN_ID", "196")),
     clock: addr("CLOCK", env("CLOCK", "0x160Dc415902971a7a9B5ade7f43005b36FE5B09b")!, zero),
@@ -99,7 +102,13 @@ export function loadConfig() {
      * throws on the first round it tries to send.
      */
     dataSuffix: suffix("DATA_SUFFIX", env("DATA_SUFFIX", "")!),
+    /**
+     * D-18: reuse an asset's last good answer when its fetch fails in transport (carry.ts). On by default;
+     * CARRY_LAST_GOOD=false restores "a failed fetch closes the asset" without a code change.
+     */
+    carryLastGood: rawCarry !== "false",
   };
+  if (!["true", "false"].includes(rawCarry)) errors.push(`CARRY_LAST_GOOD must be true or false, got ${JSON.stringify(rawCarry)}`);
   if (!Number.isInteger(cfg.chainId)) errors.push("CHAIN_ID is not an integer");
   if (cfg.rpcs.length === 0) errors.push("RPCS is empty");
   if (!(cfg.heartbeatS > 0)) errors.push("HEARTBEAT_S must be positive");
@@ -202,6 +211,8 @@ interface Health {
   lastTakeover?: { root: string; tx: string; kind: RoundKind; reasons: string[]; atMs: number };
   /** ERC-8021 Builder Code attribution. The suffix is in every transaction's calldata, so it is public. */
   attribution: { on: boolean; dataSuffix: string | null; codes: string[] };
+  /** D-18: asset fetches answered from the last good body since boot (carry.ts). */
+  carry: { on: boolean; total: number; last?: { symbol: string; ageMs: number; error: string | null; atMs: number } };
 }
 
 /**
@@ -352,6 +363,7 @@ async function main() {
   const health: Health = {
     lastTickOkMs: 0, isAttestor: false, mode: CFG.mode, address,
     attribution: attributionHealth(sender),
+    carry: { on: CFG.carryLastGood, total: 0 },
   };
   startHttp(health);
 
@@ -360,6 +372,8 @@ async function main() {
   let lastSentMs = 0;
   let lastShadowFingerprint = "";
   const lastSchedules = new Map<string, ExchangeSchedule>();
+  /** D-18: each asset's newest good answer, so one failed fetch does not write the asset shut (carry.ts). */
+  const lastGood = new Map<string, GoodFetch>();
   let lastLivenessPingMs = 0;
   let lastCohortAttemptMs = 0;
   // A failed tick keeps the previous cadence: dropping to 30s inside a boundary window would miss the flip.
@@ -435,11 +449,25 @@ async function main() {
       // is burned OKB and would look like a funded attestor in /healthz.
       health.balanceWei = key ? decodeBalance(chain.results.at(-1)!) ?? undefined : undefined;
 
+      // D-18. An asset whose fetch failed in transport this tick is answered from its last good body, while
+      // that body is inside the method's last-known-good window and no scheduled change is near. The reused
+      // fetch's own log entry is committed with this tick's, so the round re-derives as it was built.
+      const tickLog = x.takeLog();
+      const carry = CFG.carryLastGood
+        ? carryLastGood({ cohort, assetEx, tickLog, lastGood, schedules: lastSchedules, evaluatedAtMs })
+        : { assetEx, fetchLog: tickLog, carried: [] };
+      rememberGood(lastGood, cohort, assetEx, tickLog);
+      for (const c of carry.carried) {
+        health.carry.total++;
+        health.carry.last = { ...c, atMs: evaluatedAtMs };
+        log("asset-carried", { symbol: c.symbol, ageMs: c.ageMs, error: c.error });
+      }
+
       const roundInputs = {
         chainId: CFG.chainId, clock: CFG.clock, targetMs: evaluatedAtMs, evaluatedAtMs,
         codeDigest: digest, cohort,
-        assetExchanges: new Map(cohort.map((c, i) => [c.symbol, assetEx[i]])),
-        scheduleExchanges, fetchLog: x.takeLog(), chain, prior,
+        assetExchanges: new Map(cohort.map((c, i) => [c.symbol, carry.assetEx[i]])),
+        scheduleExchanges, fetchLog: carry.fetchLog, chain, prior,
       };
       // Build once to learn the claims, decide, then build the round that is actually published WITH
       // its real kind. The kind is committed in the PARAMS leaf; an earlier version overwrote only the
