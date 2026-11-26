@@ -679,6 +679,37 @@ descriptions, endpoints, prices and GET unchanged:
 Each property carries a description with its allowed values and an example. `agent activate --preferred-language
 en-US` then resubmitted the agent: `submitApproval` success, and `get-my-agents` reads "Listing under review".
 
+## Both attestor hosts redeployed: one failed fetch no longer shuts an asset — 26 Nov 2026
+
+From `fa20068` (DECISIONS D-18). When one asset's issuer fetch hit the 3 s limit twice, host A wrote that asset
+shut and reopened it two ticks later: 74 false closures of an open asset in the week to 26 Nov. The attestor now
+reuses that asset's last good answer while it is inside `derive/3`'s committed 60 s window, and never within 7
+minutes before or 3 minutes after a scheduled change (`services/attestor/src/carry.ts`). No method version
+changed. Deployed while all twelve assets read CLOSED (the US holiday, and Hong Kong overnight), so neither restart
+could write a wrong open or close.
+
+| host | deployed | code digest | first check on the new build |
+|---|---|---|---|
+| host B | 17:39:13Z, `SERVICES=attestor-b bash script/hostb/deploy.sh` | `sha256:d1ffdf70…2876` | key loaded (`"created":false`), armed, witness cursor continued; witnessed host A's round in block 76,946,013 (still the old build), `reproduced: true` |
+| host A | 17:45:38Z (boot), `railway up services/attestor --path-as-root --service attestor-a --ci` (deployment `1a30f9c0`) | `sha256:d1ffdf70…2876` | key loaded, not created; first round evaluated 17:49:17Z, `0xb9f797770b620e23552310b60e305f3b3f48c70fe3cacbea22b5929c43475536`, block 76,946,324 |
+
+**The first round on the new build reused an answer.** AAPLx's fetch hit the limit twice in that tick
+(`asset-carried`, age 37.4 s). Its bundle's FETCH_LOG holds the reused fetch's entry (seq 105, ok, 37.4 s before
+the evaluation) and then the two failed attempts (seq 129 and 130, `AbortError`); the AAPLx claim is the reused
+body's own `period=closed cap=0` with no degraded flag, where the old build would have written
+`source-unavailable`. Host B witnessed it `reproduced: true`, labels consistent, its own reading in agreement, and
+`npx -y curb-verify@0.2.0 tx 0xb9f79777…5536` prints `REPRODUCED`.
+
+**Checked before the deploy:** 185 attestor tests in four timezones (12 new); seven rounds built against the live
+issuer and chain with failures injected (two timeouts, a 503, a 404, and a failure lasting past the window), each
+`REPRODUCED` by `curb-verify` 0.2.0 from npm, and a carried one by 0.1.0.
+
+**To watch for:** `asset-carried` in host A's log and `carry.total` on `/healthz` count the reuses. A
+`source-unavailable` claim should now appear only inside a dense window, after a second failed tick, or after a 4xx.
+
+**Rollback.** `CARRY_LAST_GOOD=false` on either host restores the old rule without a code change. Host B's previous
+image is `curb-attestor:prev-0811273bb2d3`; host A's previous deployment is `9f1bb97b`.
+
 ## Offchain services — Railway project `curb` — 14 Sept 2026
 
 Managed as code in `.railway/railway.ts` (`railway config plan` / `apply`). Region and restart policy below
